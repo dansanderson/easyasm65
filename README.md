@@ -239,32 +239,20 @@ loop:  ; beginning of the loop
 
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
 
+|-----|------|-----|------|-----|------|-----|------|
 | adc | adcq | and | andq | asl | aslq | asr | asrq |
-|-----|------|-----|------|-----|------|-----|------|
 | asw | aug | bbr# | bbs# | bcc | bcs | beq | bit |
-|-----|------|-----|------|-----|------|-----|------|
 | bitq | bmi | bne | bpl | bra | brk | bsr | bvc |
-|-----|------|-----|------|-----|------|-----|------|
 | bvs | clc | cld | cle | cli | clv | cmp | cmpq |
-|-----|------|-----|------|-----|------|-----|------|
 | cpx | cpy | cpz | dec | deq | dew | dex | dey |
-|-----|------|-----|------|-----|------|-----|------|
 | dez | eom | eor | eorq | inc | inq | inw | inx |
-|-----|------|-----|------|-----|------|-----|------|
 | iny | inz | jmp | jsr | lda | ldq | ldx | ldy |
-|-----|------|-----|------|-----|------|-----|------|
 | ldz | lsr | lsrq | map | neg | nop | ora | orq |
-|-----|------|-----|------|-----|------|-----|------|
 | pha | php | phw | phx | phy | phz | pla | plp |
-|-----|------|-----|------|-----|------|-----|------|
 | plx | ply | plz | rmb# | rol | rolq | ror | rorq |
-|-----|------|-----|------|-----|------|-----|------|
 | row | rti | rts | sbc | sbcq | sec | sed | see |
-|-----|------|-----|------|-----|------|-----|------|
 | sei | smb# | sta | stq | stx | sty | stz | tab |
-|-----|------|-----|------|-----|------|-----|------|
 | tax | tay | taz | tba | trb | tsb | tsx | tsy |
-|-----|------|-----|------|-----|------|-----|------|
 | txa | txs | tya | tys | tza |
 
 (For `bbr#`, `bbs#`, `rmb#`, and `smb#`, the `#` is a bit index 0 through 7, e.g. `smb3`.)
