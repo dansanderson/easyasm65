@@ -3,20 +3,14 @@
 EasyAsm 65 (or just "EasyAsm") is an on-device assembly language programming tool for the MEGA65 personal computer. It uses the MEGA65's operating system as part of a complete assembly language development workflow, and maintains a minimal memory footprint when not in use.
 
 Features:
-* None yet. :)
-
-Still to do for version 0.1:
 * Supports all 45GS02 CPU instruction types and addressing modes.
 * Supports a subset of the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/) syntax and features.
 * Maintains a minimal memory footprint when running your program or during editing, so you can use the full power of your computer.
 * Uses the built-in screen editor's Edit mode for editing assembly language source code.
 * Assembles to memory for testing, or to disk files for distribution.
-* Can produce a single-file bootstrap loader, even for programs that load into multiple segments of memory.
+* Can produce a single-file bootstrap loader.
+* Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
-
-Future possibilities:
-* Symbol list output
-* Multiple statements per line
 
 ## An important note
 
@@ -63,7 +57,7 @@ Save the source file to disk:
 DSAVE "SIMPLE.S"
 ```
 
-**Tip:** Use `.S` at the end of the source filename to indicate that it is assembly language source. In this case, I saved the source file as `SIMPLE.S`, so I can use the name `SIMPLE` for my program name.
+> **Tip:** Use `.S` at the end of the source filename to indicate that it is assembly language source. In this case, I saved the source file as `SIMPLE.S`, so I can use the name `SIMPLE` for my program name.
 
 Assemble and run the program:
 
@@ -197,7 +191,7 @@ SYS $1EXX
 A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 
 | | BASIC mode | Edit mode |
-+-+-+-+
+|-|-|-|
 | Prompt | `READY.` | `OK.` |
 | A line contains... | BASIC commands | Text |
 | File type for DLOAD and DSAVE | PRG | SEQ |
@@ -246,31 +240,31 @@ loop:  ; beginning of the loop
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
 
 | adc | adcq | and | andq | asl | aslq | asr | asrq |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | asw | aug | bbr# | bbs# | bcc | bcs | beq | bit |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | bitq | bmi | bne | bpl | bra | brk | bsr | bvc |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | bvs | clc | cld | cle | cli | clv | cmp | cmpq |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | cpx | cpy | cpz | dec | deq | dew | dex | dey |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | dez | eom | eor | eorq | inc | inq | inw | inx |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | iny | inz | jmp | jsr | lda | ldq | ldx | ldy |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | ldz | lsr | lsrq | map | neg | nop | ora | orq |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | pha | php | phw | phx | phy | phz | pla | plp |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | plx | ply | plz | rmb# | rol | rolq | ror | rorq |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | row | rti | rts | sbc | sbcq | sec | sed | see |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | sei | smb# | sta | stq | stx | sty | stz | tab |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | tax | tay | taz | tba | trb | tsb | tsx | tsy |
-+-----+------+-----+------+-----+------+-----+------+
+|-----|------|-----|------|-----|------|-----|------|
 | txa | txs | tya | tys | tza |
 
 (For `bbr#`, `bbs#`, `rmb#`, and `smb#`, the `#` is a bit index 0 through 7, e.g. `smb3`.)
@@ -352,7 +346,7 @@ An argument's value can be calculated using a mathematical expression. An expres
 EasyAsm supports the following operators, listed in precedence order:
 
 | Syntax | Definition |
-+-+-+
+|-|-|
 | `!v` | Bitwise complement |
 | `v ^ w` | To the power of |
 | `-v` | Negate |
@@ -626,6 +620,7 @@ EasyAsm does not currently have the following features that are present in the A
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
 * No octal literals
 * No way to set a "pseudo-PC"
+* Only one statement per line
 
 ### Features exclusive to EasyAsm
 
