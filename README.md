@@ -239,6 +239,7 @@ loop:  ; beginning of the loop
 
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
 
+| | | | | | | | |
 |-----|------|-----|------|-----|------|-----|------|
 | adc | adcq | and | andq | asl | aslq | asr | asrq |
 | asw | aug | bbr# | bbs# | bcc | bcs | beq | bit |
