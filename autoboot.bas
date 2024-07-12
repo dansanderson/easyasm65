@@ -9,3 +9,4 @@
 70 ht$=ht$+"sys $1e06 : rem: restore source  "+chr$(141)+chr$(141)
 80 key 15,ht$
 90 print "done";chr$(13);chr$(13);"easyasm is now in memory. press help for help.";chr$(13)
+100 new

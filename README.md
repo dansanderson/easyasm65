@@ -71,7 +71,7 @@ Roadmap:
 
 **Save your work to disk, early and often.**
 
-Writing a program for a microcomputer using the microcomputer itself comes with the inherent risk that a bug in your program will interfere with your programming environment. EasyAsm includes a feature to preserve your source code in memory while you are testing your program, but this cannot be guaranteed to work if the program does something unexpected.
+Writing a program for a microcomputer using the microcomputer itself comes with the inherent risk that a bug in your program will interfere with your programming environment. EasyAsm preserves your source code in memory while you are testing your program, but this cannot be guaranteed to work if the program does something unexpected.
 
 By design, EasyAsm does *not* force you to save your work to disk before testing your program. Please remember to do this yourself.
 
@@ -80,13 +80,15 @@ By design, EasyAsm does *not* force you to save your work to disk before testing
 * `RUN "EASYASM"` : install EasyAsm; erases program memory
 
 * `SYS $1E00` : assemble source code to memory, then run it
-* `SYS $1EXX` : assemble source code to disk, per `!to` directive
-* `SYS $1EXX` : restore source code after abnormal program exit
+* `SYS $1E03` : assemble source code to disk, per `!to` directive
+* `SYS $1E06` : restore source code after abnormal program exit
 
 * `EDIT ON` / `EDIT OFF` : enable/disable Edit mode; prompt is `OK.` when enabled
 * `DSAVE "..."` : save source file to disk; do this with Edit mode *enabled!*
 * `DSAVE "@..."` : save source file to disk, overwriting an existing file
 * `MONITOR` : start the Monitor from the `READY.`/`OK.` prompt
+
+Press the **Help** key to display a brief help message.
 
 ## Using EasyAsm
 
@@ -96,9 +98,7 @@ To activate EasyAsm, load and run the `EASYASM` program:
 RUN "EASYASM"
 ```
 
-EasyAsm installs itself in the MEGA65's memory, and returns to the `READY.` prompt.
-
-> TODO: Determine if EasyAsm can clear program memory automatically, or if the user needs to type `NEW`.
+EasyAsm installs itself in the MEGA65's upper memory, clears program memory, and returns to the `READY.` prompt.
 
 To create your assembly language source code, switch the MEGA65 to Edit mode:
 
@@ -141,10 +141,8 @@ LIST
 
 To assemble the program to disk:
 
-> TODO: Update this with the actual SYS address.
-
 ```
-SYS $1EXX
+SYS $1E03
 ```
 
 EasyAsm assembles the program again, finds no errors, then creates a new PRG file on disk. The `!TO` directive in the program tells EasyAsm that the PRG's filename is `SIMPLE`, and that EasyAsm should make the program "runnable."
@@ -199,10 +197,8 @@ Uh oh, that's not the program source file! EasyAsm did not see the program exit 
 
 When this happens—and it will happen often—use this command to tell EasyAsm to bring back the source file:
 
-> TODO: Update this with the actual SYS address.
-
 ```
-SYS $1EXX
+SYS $1E06
 ```
 
 ## Breaking to the Monitor
@@ -232,10 +228,8 @@ The Monitor can be especially useful for debugging an assembly language program 
 
 The Monitor is powerful, but sometimes tricky to use. For example, it is not always possible to resume a paused program, and you may have to exit the Monitor with the `X` command. In this case, you must ask EasyAsm to restore the program source file, as we did after interrupting the program with Run/Stop-Restore.
 
-> TODO: Update this with the actual SYS address.
-
 ```
-SYS $1EXX
+SYS $1E06
 ```
 
 ## Edit mode tips and tricks
@@ -281,11 +275,11 @@ EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
 1. When you load and run `EASYASM` at the start of a session, it overwrites program memory with its installer code. After it is installed, it clears program memory.
 2. While you are editing source code in Edit mode, your source code occupies program memory. EasyAsm expects to find it there when you invoke the assembler.
-3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program, and installs it in program memory. It runs from this location as it would when a user loads and runs your program. If the program exits with `RTS`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
+3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program to machine code, and installs your machine code in program memory. It runs from this location, as it would when a user loads and runs your program. If the program exits with `RTS`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
 
 Everything else is up to you.
 
-> **Note:** EasyAsm keeps its own code in Attic RAM while not in use, and copies itself to bank 5 when performing operations. Attic RAM is not included in MEGA65 Freezer states. If EasyAsm finds its code in bank 5 but not in Attic RAM, it will attempt to re-stash itself in Attic. This may cause undesired results if a program modifies bank 5 in a way that EasyAsm doesn't notice!
+> **Note:** EasyAsm keeps its own code in Attic RAM while not in use, and copies itself to bank 5 when performing operations. Attic RAM is not included in MEGA65 Freezer states. It is safe to use the Freezer during an EasyAsm session, but if you start a new session restored from a freeze state, you must run the EasyAsm installer again.
 
 ## Assembly language syntax
 
@@ -394,9 +388,52 @@ loop:
 
 The colon `:` is optional.
 
-A label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
+EasyAsm supports global labels and Acme-style "cheap" local labels. A global label must be unique across all labels in the source file. A "cheap" local label starts with an `@` sign, and is only valid up to the next global label. This allows subroutines with global names to have local labels with useful names that can be reused by other subroutines.
+
+```
+flash_border:
+  lda #15
+@loop:
+  sta $d020
+  dec
+  bne @loop
+  rts
+
+flash_background:
+  lda #15
+@loop:
+  sta $d021
+  dec
+  bne @loop
+  rts
+```
+
+A global label name must start with a letter, either lowercase or uppercase. A "cheap" local label name starts with `@` followed by a letter. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
 
 > **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish (e.g. Shift + G and Shift + T appear only slightly differently in uppercase text mode).
+
+EasyAsm supports relative labels for code. A relative label is a sequence of one or more minus `-` signs, or one or more plus `+` signs: `-` `--` `---` `+` `++` `+++` When an instruction uses a relative label as an address argument, it refers to the closest code label with that name in the source code. A relative label of minus signs scans upward to the closest assignment, and a relative label of plus signs scans downward.
+
+```asm
+flash_border:
+  lda $d020
+  cmp #3
+  beq +
+  lda #15
+- sta $d020
+  dec
+  bne -
++ rts
+
+flash_background:
+  lda #15
+- sta $d021
+  dec
+  bne -
+  rts
+```
+
+Relative labels can only be used directly as instruction address arguments, and cannot participate in expressions.
 
 ### Expressions
 
@@ -432,7 +469,7 @@ The power operator is right-associative: `x^y^z` = `x^(y^z)`
 
 To type the power operator, type the up-arrow character (next to the Restore key). To type the bitwise-or operator, type Mega + period.
 
-> **Tip:** Enter the command `FONT A` and switch to lowercase mode to display certain characters as their ASCII equivalents. To type the ASCII-specific characters:
+> **Tip:** Enter the command `FONT A` and switch to lowercase mode (Mega + Shift) to display certain characters as their ASCII equivalents. To type the ASCII-specific characters:
 > * Back-arrow: underscore (`_`)
 > * Up-arrow: caret (`^`)
 > * Mega + back-arrow: backtick
@@ -493,7 +530,7 @@ When assembling to disk, EasyAsm offers several options: writing a contiguous fi
 
 ### Writing a contiguous file
 
-The `!to` directive sets a filename and writing mode for assembling subsequent code to disk. Using the `cbm` mode, this creates a PRG file, with the address of the first assembled instruction that follows as the load address. This requires that the source code set the PC at the beginning, so the `!to` directive knows the starting address.
+The `!to` directive sets a filename and writing mode for assembling subsequent code to disk. Using the `cbm` mode, this creates a PRG file, with the address of the first assembled instruction that follows as the load address. This requires that the source code set the PC before the first instruction, so the `!to` directive knows the starting address.
 
 ```
 !to "routines", cbm
@@ -555,7 +592,7 @@ In EasyAsm, the `!to "...", runnable` directive creates a program file that star
 
 `!to "...", runnable` sets the PC automatically. It is not necessary to set the PC explicitly in this case. If the program redefines the PC before the first instruction, the segment will be located as requested, and the bootstrap routine will start at that segment's start address.
 
-If `!to "...", runnable` is followed by more than one segment, EasyAsm generates some additional code that automatically relocates all of the segments to their starting addresses, as part of the bootstrap process. The first segment is assumed to be the start of the program. The generated program behaves similarly to assembling to memory, and only requires loading and running one file, with no disk space or load time spent on empty data regions between segments.
+If `!to "...", runnable` is followed by more than one segment, EasyAsm generates some additional code that automatically relocates all of the segments to their starting addresses, as part of the bootstrap process. The first segment that follows the `!to` statement is assumed to be the start of the program. The generated program behaves similarly to assembling to memory, and only requires loading and running one file, with no disk space or load time spent on empty data regions between segments.
 
 ```
 !to "program", runnable
@@ -569,7 +606,6 @@ If `!to "...", runnable` is followed by more than one segment, EasyAsm generates
 change_background:
   inc $d020
   rts
-change_background_end = *
 ```
 
 ## Zero-page address arguments
@@ -578,18 +614,18 @@ The absolute addressing mode and the base page addressing mode have the same ass
 
 ```
 lda $fe            ; load index $fe off the base page
-lda $16fe          ; load address $16fe
+lda $16fe          ; load absolute address $16fe
 ```
 
 If the address expression evaluates to a value larger than 255, then EasyAsm uses absolute addressing.
 
-If the address expression evaluates to a value between 0 and 255, EasyAsm disambiguates using the following algorithm:
+If the address expression evaluates to a value between 0 and 255, EasyAsm disambiguates using the following procedure:
 
-1. If the address expression is a value literal *or* a symbol defined using a value literal, one or more leading zeroes signify absolute mode: `$00fe` Otherwise base page addressing is used: `$fe`
-2. If the value can be calculated in the first pass of the assembler, i.e. all symbols in the expression are defined earlier in the source text, base page addressing is used: `$fc+earlierlabel`
-3. Otherwise absolute addressing is assumed, to be calculated in a subsequent pass: `$fc+laterlabel`
+1. If the address expression is a value literal *or* a symbol defined using a value literal, and the value has one or more leading zeroes, EasyAsm uses absolute mode: `$00fe` Otherwise it uses base page addressing: `$fe`
+2. If the value can be calculated in the first pass of the assembler, i.e. all symbols in the expression are defined earlier in the source text, EasyAsm uses base page addressing: `$fc+earlierlabel`
+3. Otherwise EasyAsm assumes absolute addressing, to be calculated in a subsequent pass: `$fc+laterlabel`
 
-To clarify potential confusion in your source code, you can suffix the instruction mnemonic with `+1` to force base page addressing, or `+2` to for absolute addressing.
+To clarify potential confusion in your source code, you can suffix the instruction mnemonic with `+1` to force base page addressing, or `+2` to for absolute addressing. If base page addressing is requested and the value is larger than 255, EasyAsm reports the error.
 
 ```
 lda+1 $00fe        ; force base page addressing: $fe
@@ -644,7 +680,7 @@ String data does not automatically add a null terminator. If a null terminator i
 !pet "hello world!", 0
 ```
 
-EasyAsm does not support backslash-escape character sequences. To include a double-quote character in a `!pet` or `!scr` directive, end the string, use a 34 ($22) byte.
+EasyAsm does not support backslash-escape character sequences. To include a double-quote character in a `!pet` or `!scr` directive, end the string, then use a byte value of 34 ($22).
 
 ```
 !pet "i said, ", 34, "hello world!", 34, 0
@@ -668,9 +704,9 @@ Loads a binary file from disk to be assembled as data at the given location. Wit
 
 ### `!warn`
 
-`!warn "..."`
+`!warn "..." [, "..."]`
 
-Prints a given PETSCII message during the assembly process.
+Prints a given PETSCII message during the assembly process. Arguments are string literals or number expressions. A number expression argument is printed as both decimal and hexadecimal, useful for debugging, such as: `123 ($7B)`
 
 No other Acme-style message directives are supported. They're only useful for conditional assembly, which is not supported.
 
