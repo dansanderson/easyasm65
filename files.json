@@ -1,0 +1,13 @@
+{
+    "disk_filename": "easyasm.d81",
+    "disk_name": "easyasm",
+    "disk_id": "ea",
+    "text_style": "topic-single",
+    "files": [
+        {"file_path": "autoboot.bas", "name": "autoboot.c65"},
+        {"file_path": "typeme.txt", "name": "typeme"},
+        {"file_path": "easyasm.prg", "name": "easyasm"},
+        {"file_path": "easyasm-e.prg", "name": "easyasm-e"},
+        {"name": "--------------"}
+    ]
+}

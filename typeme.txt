@@ -1,0 +1,2 @@
+EasyAsm v0.1, by dddaaannn
+https://github.com/dansanderson/easyasm65

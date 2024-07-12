@@ -12,6 +12,61 @@ Features:
 * Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
 
+## Project status and roadmap
+
+PROJECT STATUS: **IN PROGRESS**
+
+- [ ] Source stash and restore
+
+- [ ] Unit test framework
+- [ ] Parser, with syntax errors
+  - [ ] Skip empty line
+  - [ ] Ignore comment
+  - [ ] Instructions, one addressing mode, literals
+  - [ ] All literal syntaxes
+  - [ ] All addressing modes
+  - [ ] Label / PC assignment
+  - [ ] Labelled instruction, colon optional
+  - [ ] Label argument
+  - [ ] Expressions
+- [ ] Assemble: single pass, literals only, no branching, no ZP
+- [ ] ZP addressing modes
+  - [ ] By argument value
+  - [ ] By literal syntax
+  - [ ] By +1/+2 syntax
+- [ ] 8-bit branching; error on oversize branch
+- [ ] Label assignment
+- [ ] Labels as arguments; two-pass
+  - [ ] Track 16-bit address syntax in assignment, for ZP addressing
+- [ ] Evaluate expressions
+- [ ] Read PC `*` in expressions
+- [ ] Assign PC `*` once at start
+- [ ] Assemble to memory workflow
+- [ ] Assemble to disk, single-segment: `!to "...", <mode>`
+  - [ ] `cbm`
+  - [ ] `raw`
+  - [ ] `runnable`, no PC assignment
+- [ ] `!byte`, `!8`
+- [ ] `!word`, `!16`
+- [ ] `!32`
+- [ ] `!fill`
+- [ ] `!pet`
+- [ ] `!scr`
+- [ ] `!warn`
+
+Release 0.1:
+* Single segment programs only: one `!to` and up to one `* = ...` per source file
+
+Roadmap:
+* `!binary`
+* `!source`
+* Automatic 16-bit branching; multi-pass
+* `runnable` with custom PC (single relocatable segment)
+* Multi-segment programs with `!to "...", cbm` and `raw`; multiple `* = ...` allowed; gaps filled on disk
+* Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
+* Multi-file output, multiple `!to` allowed
+* Freezable mode that uses bank 5 if it's already there
+
 ## An important note
 
 **Save your work to disk, early and often.**
@@ -19,6 +74,19 @@ Features:
 Writing a program for a microcomputer using the microcomputer itself comes with the inherent risk that a bug in your program will interfere with your programming environment. EasyAsm includes a feature to preserve your source code in memory while you are testing your program, but this cannot be guaranteed to work if the program does something unexpected.
 
 By design, EasyAsm does *not* force you to save your work to disk before testing your program. Please remember to do this yourself.
+
+## Quick reference
+
+* `RUN "EASYASM"` : install EasyAsm; erases program memory
+
+* `SYS $1E00` : assemble source code to memory, then run it
+* `SYS $1EXX` : assemble source code to disk, per `!to` directive
+* `SYS $1EXX` : restore source code after abnormal program exit
+
+* `EDIT ON` / `EDIT OFF` : enable/disable Edit mode; prompt is `OK.` when enabled
+* `DSAVE "..."` : save source file to disk; do this with Edit mode *enabled!*
+* `DSAVE "@..."` : save source file to disk, overwriting an existing file
+* `MONITOR` : start the Monitor from the `READY.`/`OK.` prompt
 
 ## Using EasyAsm
 
@@ -206,7 +274,7 @@ EasyAsm tries to maintain a minimal memory footprint while you are editing your 
 
 Of course, EasyAsm has to live somewhere. This is what EasyAsm needs:
 
-* EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8F00000-$8FFFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
+* EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8700000-$87FFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
 * EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you call an EasyAsm function with `SYS`. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running.
 
 EasyAsm uses program memory ($2001-$F6FF) in three ways:
@@ -217,6 +285,7 @@ EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
 Everything else is up to you.
 
+> **Note:** EasyAsm keeps its own code in Attic RAM while not in use, and copies itself to bank 5 when performing operations. Attic RAM is not included in MEGA65 Freezer states. If EasyAsm finds its code in bank 5 but not in Attic RAM, it will attempt to re-stash itself in Attic. This may cause undesired results if a program modifies bank 5 in a way that EasyAsm doesn't notice!
 
 ## Assembly language syntax
 
@@ -297,6 +366,7 @@ Number literals:
   * Binary literals can also use `.` for `0` and `#` for `1`, for more easily representing bitmap graphics: `%..#.##.`
 * PETSCII character: `'p'`
   * When used with the `!scr` directive, this is translated into a screen code.
+  * EasyAsm does not support backslash-escape sequences. The PETSCII code for a single-quote character is 39 ($27).
 
 To specify a negative number literal, use negation syntax: `-27` If a literal specifies all 32 bits and bit 31 is high, this will be treated as a two's complement negative number: `$FFFFFFFC` Negating such a literal will negate the number: `-$FFFFFFFC` and `4` are equivalent.
 
@@ -324,9 +394,9 @@ loop:
 
 The colon `:` is optional.
 
-A label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, or Mega + `@` (an underscore-like character).
+A label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
 
-> **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish (e.g. Shift + G and Shift + T are only slightly different in uppercase text mode).
+> **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish (e.g. Shift + G and Shift + T appear only slightly differently in uppercase text mode).
 
 ### Expressions
 
@@ -334,25 +404,25 @@ An argument's value can be calculated using a mathematical expression. An expres
 
 EasyAsm supports the following operators, listed in precedence order:
 
-| Syntax | Definition |
-|-|-|
-| `!v` | Bitwise complement |
-| `v ^ w` | To the power of |
-| `-v` | Negate |
-| `v * w` | Multiply |
-| `v DIV w` | Integer divide |
-| `v % w` | Remainder |
-| `v + w` | Add |
-| `v - w` | Subtract |
-| `v << w` | Shift left |
-| `v >> w` | Arithmetic shift right |
-| `v >>> w` | Logical shift right |
-| `<v` | Low byte of |
-| `>v` | High byte of |
-| `^v` | Bank byte of |
-| `v & w` | Bitwise And |
-| `v XOR w` | Bitwise Exclusive Or |
-| `v \| w` | Bitwise Or |
+| Syntax | Definition | Notes |
+|-|-|-|
+| `!v` | Bitwise complement | |
+| `v ^ w` | To the power of | Up-arrow |
+| `-v` | Negate | |
+| `v * w` | Multiply | |
+| `v DIV w` | Integer divide | |
+| `v % w` | Remainder | |
+| `v + w` | Add | |
+| `v - w` | Subtract | |
+| `v << w` | Shift left | |
+| `v >> w` | Arithmetic shift right | |
+| `v >>> w` | Logical shift right | |
+| `<v` | Low byte of | |
+| `>v` | High byte of | |
+| `^v` | Bank byte of | Up-arrow |
+| `v & w` | Bitwise And | |
+| `v XOR w` | Bitwise Exclusive Or | |
+| `v \| w` | Bitwise Or | Mega + period |
 
 EasyAsm does not support fractional number values, and so does not have a fractional division operator (`/`).
 
@@ -360,7 +430,16 @@ EasyAsm does not support Boolean values, and so does not have conditional operat
 
 The power operator is right-associative: `x^y^z` = `x^(y^z)`
 
-To type the power operator, use the "up arrow" character (next to the Restore key).
+To type the power operator, type the up-arrow character (next to the Restore key). To type the bitwise-or operator, type Mega + period.
+
+> **Tip:** Enter the command `FONT A` and switch to lowercase mode to display certain characters as their ASCII equivalents. To type the ASCII-specific characters:
+> * Back-arrow: underscore (`_`)
+> * Up-arrow: caret (`^`)
+> * Mega + back-arrow: backtick
+> * Mega + period: vertical bar (`|`)
+> * Mega + comma: tilde (`~`)
+> * Mega + forward-slash (or £): backslash (`\\`)
+> Remember that you must be in lowercase mode with this font setting to see the ASCII characters.
 
 ### Parentheses
 
@@ -558,6 +637,18 @@ Assembles a given number of bytes of data. The default value is $00. If a byte v
 ```
 
 Assembles arguments that can include character strings as a series of bytes. `!pet` renders character strings and character literals as PETSCII codes, as written directly in the PETSCII source file. `!scr` attempts to convert PETSCII codes to VIC screen codes. Number expressions are byte values and are rendered verbatim in either case.
+
+String data does not automatically add a null terminator. If a null terminator is desired, end the string with a 0 byte.
+
+```
+!pet "hello world!", 0
+```
+
+EasyAsm does not support backslash-escape character sequences. To include a double-quote character in a `!pet` or `!scr` directive, end the string, use a 34 ($22) byte.
+
+```
+!pet "i said, ", 34, "hello world!", 34, 0
+```
 
 ### `!source`
 
