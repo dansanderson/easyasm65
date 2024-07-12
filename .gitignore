@@ -1,3 +1,4 @@
 *.prg
 *.d81
 *.lst
+.mypy_cache

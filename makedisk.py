@@ -66,7 +66,7 @@ TODO:
 """
 
 import codecs
-import d64
+import d64  # type: ignore
 import json
 import pathlib
 import os
