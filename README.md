@@ -12,11 +12,11 @@ Features:
 * Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
 
+EasyAsm 65 is copyright © 2024 Dan Sanderson, released under the GNU Public License v3. See [LICENSE](LICENSE).
+
 ## Project status and roadmap
 
 PROJECT STATUS: **IN PROGRESS**
-
-- [ ] Source stash and restore
 
 - [ ] Unit test framework
 - [ ] Parser, with syntax errors
@@ -709,3 +709,23 @@ Here is a quick summary of features available in EasyAsm that are not available 
 * PETSCII character encoding of source files
 * `!to "...", runnable`
 * Assemble to multiple files from one source file, with multiple `!to` directives
+
+## Building EasyAsm
+
+Building EasyAsm from source requires the following tools:
+
+* [Acme assembler](https://sourceforge.net/projects/acme-crossass/)
+* [GNU Make](https://www.gnu.org/software/make/)
+* [Python 3](https://www.python.org/)
+* [The d64 Python package](https://pypi.org/project/d64/)
+    * To install: `python3 -m pip install d64`
+* `petcat`, [from VICE](https://vice-emu.sourceforge.io/) or [direct download](https://files.mega65.org?id=9561505c-a36d-4d3e-b158-d52a718e818e)
+    * This requires a recent version capable of producing MEGA65 programs.
+
+To build `easyasm.d81`:
+
+```
+make easyasm.d81
+```
+
+This project uses `makedisk.py`, my own tool for producing D81 disk files. The contents of the disk are described in `files.json`. It has built-in support for executing `petcat` to convert `.bas` files to PRG files, and also converts `.txt` files to `TYPE`-compatible SEQ files with nice formatting (lowercase text). See [makedisk.py](makedisk.py) for a complete description.
