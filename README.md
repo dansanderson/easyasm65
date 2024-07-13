@@ -1,18 +1,18 @@
-# EasyAsm 65
+# EasyAsm
 
-EasyAsm 65 (or just "EasyAsm") is an on-device assembly language programming tool for the MEGA65 personal computer. It uses the MEGA65's operating system as part of a complete assembly language development workflow, and maintains a minimal memory footprint when not in use.
+EasyAsm is an on-device assembly language programming tool for the MEGA65 personal computer. It uses the MEGA65's operating system as part of a complete assembly language development workflow, and maintains a minimal memory footprint when not in use.
 
 Features:
 * Supports all 45GS02 CPU instruction types and addressing modes.
 * Supports a subset of the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/) syntax and features.
 * Maintains a minimal memory footprint when running your program or during editing, so you can use the full power of your computer.
-* Uses the built-in screen editor's Edit mode for editing assembly language source code.
+* Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
 * Assembles to memory for testing, or to disk files for distribution.
 * Can produce a single-file bootstrap loader.
 * Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
 
-EasyAsm 65 is copyright © 2024 Dan Sanderson, released under the GNU Public License v3. See [LICENSE](LICENSE).
+EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
 ## Project status and roadmap
 
@@ -187,9 +187,10 @@ Assemble and run the program. This program changes the border color repeatedly, 
 
 To interrupt this program and return to BASIC, hold **Run/Stop** and press **Restore**. The program stops, the screen clears, and the `OK.` prompt of Edit mode reappears.
 
-Now type `LIST`:
+Now re-enable Edit mode, then type `LIST`:
 
 ```
+EDIT ON
 LIST
 ```
 
