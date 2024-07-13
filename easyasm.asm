@@ -58,6 +58,8 @@ dmaimm = $d707
 
 ; Character constants
 chr_cr = 13
+chr_spc = 32
+chr_uparrow = 94
 
 
 ; Call a given KERNAL routine
@@ -372,7 +374,9 @@ hex_nyb:
 ; Input: err_code, err_pos, cur_line_addr
 print_error:
     lda err_code
-    beq +++       ; zero = no error
+    bne +        ; zero = no error
+    rts
++
 
     dec
     asl
@@ -398,15 +402,62 @@ print_error:
     ldy #0
     ldz #0
     clc                    ; request unsigned
-    jsr print_dec32
     pha
+    phx
+    jsr print_dec32
     lda #chr_cr
     +kcall bsout
-    pla
 
-    ; jsr print_dec32    ; Print line number again.
-    ; TODO: output line
-    ; TODO: mark position
+    ; Print line number again.
+    plx
+    pla
+    ldy #0
+    ldz #0
+    clc                    ; request unsigned
+    jsr print_dec32
+    ; Sneak a peek at strbuf to get the line number length + 1
+    ldx #0
+-   inx
+    lda strbuf,x
+    bne -
+    phx
+
+    ; Print the source code line
+    lda #chr_spc
+    +kcall bsout
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    ldz #0
+    ldx #0
+-   lda [bas_ptr],z
+    beq +
+    sta strbuf,x
+    inz
+    inx
+    bra -
++   ldx #<strbuf
+    ldy #>strbuf
+    jsr print_cstr
+    lda #chr_cr
+    +kcall bsout
+
+    ; Print an error position marker
+    plx           ; Indent by width of line number + 1
+-   lda #chr_spc
+    +kcall bsout
+    dex
+    bne -
+    ldx err_pos   ; Indent by err_pos
+-   lda #chr_spc
+    +kcall bsout
+    dex
+    bne -
+    lda #chr_uparrow
+    +kcall bsout
+    lda #chr_cr
+    +kcall bsout
 
 +++ rts
 
@@ -417,18 +468,23 @@ parse_source:
     ; [$0.2003] = 12345
     lda #2
     sta err_code
+    lda #15
+    sta err_pos
     lda #$01
     sta cur_line_addr
     sta bas_ptr
     lda #$20
     sta cur_line_addr+1
     sta bas_ptr+1
-    ldz #2
-    lda #<12345
+
+    lda #testline_end-testline
+    tax
+    taz
+-   lda testline,x
     sta [bas_ptr],z
-    lda #>12345
-    inz
-    sta [bas_ptr],z
+    dex
+    dez
+    bpl -
 
     lda #255
 -   cmp #0
@@ -440,6 +496,9 @@ parse_source:
     bra -
 +   rts
 
+testline:
+!pet $19, $20, <12345, >12345, "this is a test line", 0, 0, 0
+testline_end:
 
 err_message_tbl:
 !word e01, e02
