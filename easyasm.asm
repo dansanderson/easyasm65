@@ -227,50 +227,117 @@ print_cstr:
     tab
     rts
 
+
 ; Input:
-;   Q = 32-bit value
+;   Q = 32-bit value (ZYXA)
 ;   C: 0=unsigned, 1=signed
 print_dec32:
-    ; phz
-    ; phy
-    ; phx
-    ; pha
-    ; php
-
-    lda #<strbuf
-    sta code_ptr
-    lda #>strbuf
-    sta code_ptr+1
-
-    ; Clear 11 chars of string buffer, with null term
+    ; Use strbuf like so:
+    ; $00: negative sign or null
+    ; $01-$0B: 10 final characters, null terminated
+    ; $0C-$10: 5 BCD bytes
+    ; $11-$14: 4 binary bytes
+    sta strbuf+$11
+    stx strbuf+$12
+    sty strbuf+$13
+    stz strbuf+$14
+    ldx #$10
     lda #0
-    ldy #12
--   sta (code_ptr),y
-    dey
+-   sta strbuf,x
+    dex
     bpl -
-    ; TODO: may not need to do this:
-    lda #'0'       ; Populate with zero, for safety
-    ldy #11
-    sta (code_ptr),y
 
-    ; TODO: Format decimal into strbuf, right-justified to offset 11
-
-    ; Find leftmost digit, print to end
-    ldy #0
--   lda (code_ptr),y
-    bne +
-    iny
-    bra -
-+   tya
-    clc
-    adc #<strbuf
+    bcc @unsigned_continue
+    tza
+    bpl @unsigned_continue
+    lda #$ff       ; Negate value
     tax
-    lda #0
-    adc #>strbuf
     tay
-    jsr print_cstr
+    taz
+    eorq strbuf+$11
+    inq
+    stq strbuf+$11
+    lda #'-'       ; Put negative sign in string buffer
+    sta strbuf
+@unsigned_continue
 
+    ; Using BCD mode, double-with-carry each binary digit of $11-$14 into
+    ; $0C-$10. Do 16 bits at a time.
+    sed
+    ldx #16
+-   row strbuf+$13
+    ldy #5
+--  lda strbuf+$0c-1,y
+    adc strbuf+$0c-1,y
+    sta strbuf+$0c-1,y
+    dey
+    bne --
+    dex
+    bne -
+    ldx #16
+-   row strbuf+$11
+    ldy #5
+--  lda strbuf+$0c-1,y
+    adc strbuf+$0c-1,y
+    sta strbuf+$0c-1,y
+    dey
+    bne --
+    dex
+    bne -
+    cld
+
+    ; Convert BCD in $0C-$10 to PETSCII digits in $01-$0B.
+    ldx #4
+-   txa
+    asl
+    tay   ; Y = 2*x
+    lda strbuf+$0c,x
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc #'0'
+    sta strbuf+$01,y
+    lda strbuf+$0c,x
+    and #$0f
+    clc
+    adc #'0'
+    sta strbuf+$02,y
+    dex
+    bpl -
+
+    ; Slide PETSCII digits left to eliminate leading zeroes.
+-   lda strbuf+$01
+    cmp #'0'
+    bne @written_continue
+    ldx #$02
+--  lda strbuf,x
+    sta strbuf-1,x
+    inx
+    cpx #$0b
+    bne --
+    lda #0
+    sta strbuf-1,x
+    bra -
+
+@written_continue
+    lda #0
+    sta strbuf+$0c
+    lda strbuf+$01  ; Edge case: 0
+    bne +
+    lda #'0'
+    sta strbuf+$01
++
+    ; Test for negative sign, and either print from sign or from first digit.
+    ldx #<strbuf
+    ldy #>strbuf
+    lda strbuf
+    bne +
+    inx      ; (assume doesn't cross a page boundary)
++   jsr print_cstr
     rts
+
 
 ; Input: A = 8-bit value
 print_hex8:
@@ -330,18 +397,18 @@ print_error:
     lda [bas_ptr],z        ; line number low
     ldy #0
     ldz #0
-    clc
-
+    clc                    ; request unsigned
     jsr print_dec32
-
+    pha
     lda #chr_cr
     +kcall bsout
+    pla
 
+    ; jsr print_dec32    ; Print line number again.
     ; TODO: output line
     ; TODO: mark position
 
 +++ rts
-
 
 parse_source:
     ; Test line number output in error message
