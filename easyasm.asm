@@ -662,23 +662,98 @@ ay_to_lower:
 
 ; Is a substring on the current line a mnemonic
 ; Input: A=start pos, Y=end pos (+1), cur_line_addr
-; Output: C=1: is mnemonic, A=mnemonic number; strbuf is normalized mnemonic string
+; Output:
+;   C=1: is mnemonic, code_ptr=mnemonic table row
+;   C=0: is not mnemonic
 ay_to_mnemonic:
-    jsr ay_to_lower
-    ; TODO: detect and identify mnemonic
-    ; - mnemonics is a table of eight-byte records; the first four bytes are the mnemonic
+    jsr ay_to_lower   ; move candidate to strbuf
+
+strbuf_to_mnemonic:
+    lda #<mnemonics
+    sta code_ptr
+    lda #>mnemonics
+    sta code_ptr+1
+
+    ; code_ptr = beginning of row
+    ; Y = row index; (code_ptr),y = table char
+    ; X = buffer index; strbuf,x = buffer char
+@nextrow
+    ldy #0
+    lda (code_ptr),y
+    bne +
+    ; No match in table. Exit C=0.
+    clc
+    rts
+
++   ldx #0
+-   lda (code_ptr),y
+    cmp strbuf,x
+    bne +
+    inx
+    iny
+    cpx #4
+    bne -
+    ; Full match. Exit C=1, code_ptr=row.
     sec
     rts
+
++   lda code_ptr    ; advance row
+    clc
+    adc #8
+    sta code_ptr
+    lda code_ptr+1
+    adc #0
+    sta code_ptr+1
+    bra @nextrow
 
 
 ; Is a substring on the current line a pseudoop
 ; Input: A=start pos, Y=end pos (+1), cur_line_addr
 ; Output: C=1: is pseudoop, A=pseudoop number; strbuf is normalized pseudoop string
 ay_to_pseudoop:
-    jsr ay_to_lower
-    ; TODO: detect and identify pseudoop
-    sec
+    jsr ay_to_lower   ; move candidate to strbuf
+
+strbuf_to_pseudoop:
+    lda #<pseudoops
+    sta code_ptr
+    lda #>pseudoops
+    sta code_ptr+1
+
+    ; Y = current pseudoop number
+    ; X = buffer index; strbuf,x = buffer char
+    ; (Z=0. All table reads via code_ptr+0.)
+    ldy #1
+    ldz #0
+@try_token
+    lda (code_ptr),z
+    bne +
+    ; No matches. Exit with C=0.
+    clc
     rts
+
++   ldx #0
+-   lda (code_ptr),z
+    cmp strbuf,x
+    bne @skip_token
+    lda (code_ptr),z
+    bne +
+    ; Matched up to end. Exit with C=1, A=Y.
+    sec
+    tya
+    rts
+
++   inx
+    inw code_ptr
+    bra -
+
+@skip_token
+    lda (code_ptr),z
+    beq +
+    inw code_ptr
+    bra @skip_token
++   iny
+    inw code_ptr
+    bra @try_token
 
 
 ; Input: cur_line_addr
@@ -868,13 +943,13 @@ e02: !pet "wassup",0
 ; 04-05: addressing mode bitmask
 ; 06-07: address of encoding list for supported addressing modes
 ;            %11111111,
-;             ^ Implied
+;             ^ Implied (parameterless, or A/Q)
 ;              ^ Immediate
 ;               ^ Immedate word
-;                ^ Base-page
+;                ^ Base-page, branch relative, bit-test branch relative
 ;                 ^ Base-page X-Indexed
 ;                  ^ Base-page Y-Indexed
-;                   ^ Absolute
+;                   ^ Absolute, 16-bit branch relative
 ;                    ^ Absolute X-Indexed
 ;                      %11111111
 ;                       ^ Absolute Y-Indexed
@@ -882,459 +957,426 @@ e02: !pet "wassup",0
 ;                         ^ Absolute Indirect X-Indexed
 ;                          ^ Base-Page Indirect X-Indexed
 ;                           ^ Base-Page Indirect Y-Indexed
-;                            ^ Base-Page Indirect Z-Indexed
-;                             ^ 32-bit Base-Page Indirect Z-Indexed
+;                            ^ Base-Page Indirect Z-Indexed (or no index)
+;                             ^ 32-bit Base-Page Indirect Z-Indexed (or no index)
 ;                              ^ Stack Relative Indirect, Y-Indexed
 mnemonics:
-!pet "adc",0,%00000000,%00000000
+!pet "adc",0,%01011011,%10011110
 !word enc_adc
-!pet "adcq" ,%00000000,%00000000
+!pet "adcq" ,%00010010,%00000110
 !word enc_adcq
-!pet "and",0,%00000000,%00000000
+!pet "and",0,%01011011,%10011110
 !word enc_and
-!pet "andq" ,%00000000,%00000000
+!pet "andq" ,%00010010,%00000110
 !word enc_andq
-!pet "asl",0,%00000000,%00000000
+!pet "asl",0,%10011011,%00000000
 !word enc_asl
-!pet "aslq" ,%00000000,%00000000
+!pet "aslq" ,%10011011,%00000000
 !word enc_aslq
-!pet "asr",0,%00000000,%00000000
+!pet "asr",0,%10011000,%00000000
 !word enc_asr
-!pet "asrq" ,%00000000,%00000000
+!pet "asrq" ,%10011000,%00000000
 !word enc_asrq
-!pet "asw",0,%00000000,%00000000
+!pet "asw",0,%00000010,%00000000
 !word enc_asw
-!pet "aug",0,%00000000,%00000000
-!word enc_aug
-!pet "bbr0" ,%00000000,%00000000
+!pet "bbr0" ,%00010000,%00000000
 !word enc_bbr0
-!pet "bbr1" ,%00000000,%00000000
+!pet "bbr1" ,%00010000,%00000000
 !word enc_bbr1
-!pet "bbr2" ,%00000000,%00000000
+!pet "bbr2" ,%00010000,%00000000
 !word enc_bbr2
-!pet "bbr3" ,%00000000,%00000000
+!pet "bbr3" ,%00010000,%00000000
 !word enc_bbr3
-!pet "bbr4" ,%00000000,%00000000
+!pet "bbr4" ,%00010000,%00000000
 !word enc_bbr4
-!pet "bbr5" ,%00000000,%00000000
+!pet "bbr5" ,%00010000,%00000000
 !word enc_bbr5
-!pet "bbr6" ,%00000000,%00000000
+!pet "bbr6" ,%00010000,%00000000
 !word enc_bbr6
-!pet "bbr7" ,%00000000,%00000000
+!pet "bbr7" ,%00010000,%00000000
 !word enc_bbr7
-!pet "bbs0" ,%00000000,%00000000
+!pet "bbs0" ,%00010000,%00000000
 !word enc_bbs0
-!pet "bbs1" ,%00000000,%00000000
+!pet "bbs1" ,%00010000,%00000000
 !word enc_bbs1
-!pet "bbs2" ,%00000000,%00000000
+!pet "bbs2" ,%00010000,%00000000
 !word enc_bbs2
-!pet "bbs3" ,%00000000,%00000000
+!pet "bbs3" ,%00010000,%00000000
 !word enc_bbs3
-!pet "bbs4" ,%00000000,%00000000
+!pet "bbs4" ,%00010000,%00000000
 !word enc_bbs4
-!pet "bbs5" ,%00000000,%00000000
+!pet "bbs5" ,%00010000,%00000000
 !word enc_bbs5
-!pet "bbs6" ,%00000000,%00000000
+!pet "bbs6" ,%00010000,%00000000
 !word enc_bbs6
-!pet "bbs7" ,%00000000,%00000000
+!pet "bbs7" ,%00010000,%00000000
 !word enc_bbs7
-!pet "bcc",0,%00000000,%00000000
+!pet "bcc",0,%00010010,%00000000
 !word enc_bcc
-!pet "bcs",0,%00000000,%00000000
+!pet "bcs",0,%00010010,%00000000
 !word enc_bcs
-!pet "beq",0,%00000000,%00000000
+!pet "beq",0,%00010010,%00000000
 !word enc_beq
-!pet "bit",0,%00000000,%00000000
+!pet "bit",0,%01011011,%00000000
 !word enc_bit
-!pet "bitq" ,%00000000,%00000000
+!pet "bitq" ,%00010010,%00000000
 !word enc_bitq
-!pet "bmi",0,%00000000,%00000000
+!pet "bmi",0,%00010010,%00000000
 !word enc_bmi
-!pet "bne",0,%00000000,%00000000
+!pet "bne",0,%00010010,%00000000
 !word enc_bne
-!pet "bpl",0,%00000000,%00000000
+!pet "bpl",0,%00010010,%00000000
 !word enc_bpl
-!pet "bra",0,%00000000,%00000000
+!pet "bra",0,%00010010,%00000000
 !word enc_bra
-!pet "brk",0,%00000000,%00000000
+!pet "brk",0,%10000000,%00000000
 !word enc_brk
-!pet "bsr",0,%00000000,%00000000
+!pet "bsr",0,%00000010,%00000000
 !word enc_bsr
-!pet "bvc",0,%00000000,%00000000
+!pet "bvc",0,%00010010,%00000000
 !word enc_bvc
-!pet "bvs",0,%00000000,%00000000
+!pet "bvs",0,%00010010,%00000000
 !word enc_bvs
-!pet "clc",0,%00000000,%00000000
+!pet "clc",0,%10000000,%00000000
 !word enc_clc
-!pet "cld",0,%00000000,%00000000
+!pet "cld",0,%10000000,%00000000
 !word enc_cld
-!pet "cle",0,%00000000,%00000000
+!pet "cle",0,%10000000,%00000000
 !word enc_cle
-!pet "cli",0,%00000000,%00000000
+!pet "cli",0,%10000000,%00000000
 !word enc_cli
-!pet "clv",0,%00000000,%00000000
+!pet "clv",0,%10000000,%00000000
 !word enc_clv
-!pet "cmp",0,%00000000,%00000000
+!pet "cmp",0,%01011011,%10011110
 !word enc_cmp
-!pet "cmpq" ,%00000000,%00000000
+!pet "cmpq" ,%00010010,%00000110
 !word enc_cmpq
-!pet "cpq",0,%00000000,%00000000
-!word enc_cpq
-!pet "cpx",0,%00000000,%00000000
+!pet "cpx",0,%01010010,%00000000
 !word enc_cpx
-!pet "cpy",0,%00000000,%00000000
+!pet "cpy",0,%01010010,%00000000
 !word enc_cpy
-!pet "cpz",0,%00000000,%00000000
+!pet "cpz",0,%01010010,%00000000
 !word enc_cpz
-!pet "dec",0,%00000000,%00000000
+!pet "dec",0,%10011011,%00000000
 !word enc_dec
-!pet "deq",0,%00000000,%00000000
+!pet "deq",0,%10011011,%00000000
 !word enc_deq
-!pet "dew",0,%00000000,%00000000
+!pet "dew",0,%00010000,%00000000
 !word enc_dew
-!pet "dex",0,%00000000,%00000000
+!pet "dex",0,%10000000,%00000000
 !word enc_dex
-!pet "dey",0,%00000000,%00000000
+!pet "dey",0,%10000000,%00000000
 !word enc_dey
-!pet "dez",0,%00000000,%00000000
+!pet "dez",0,%10000000,%00000000
 !word enc_dez
-!pet "eom",0,%00000000,%00000000
+!pet "eom",0,%10000000,%00000000
 !word enc_eom
-!pet "eor",0,%00000000,%00000000
+!pet "eor",0,%01011011,%10011110
 !word enc_eor
-!pet "eorq" ,%00000000,%00000000
+!pet "eorq" ,%00010010,%00000110
 !word enc_eorq
-!pet "inc",0,%00000000,%00000000
+!pet "inc",0,%10011011,%00000000
 !word enc_inc
-!pet "inq",0,%00000000,%00000000
+!pet "inq",0,%10011011,%00000000
 !word enc_inq
-!pet "inw",0,%00000000,%00000000
+!pet "inw",0,%00010000,%00000000
 !word enc_inw
-!pet "inx",0,%00000000,%00000000
+!pet "inx",0,%10000000,%00000000
 !word enc_inx
-!pet "iny",0,%00000000,%00000000
+!pet "iny",0,%10000000,%00000000
 !word enc_iny
-!pet "inz",0,%00000000,%00000000
+!pet "inz",0,%10000000,%00000000
 !word enc_inz
-!pet "jmp",0,%00000000,%00000000
+!pet "jmp",0,%00000010,%01100000
 !word enc_jmp
-!pet "jsr",0,%00000000,%00000000
+!pet "jsr",0,%00000010,%01100000
 !word enc_jsr
-!pet "lbcc" ,%00000000,%00000000
-!word enc_lbcc
-!pet "lbcs" ,%00000000,%00000000
-!word enc_lbcs
-!pet "lbeq" ,%00000000,%00000000
-!word enc_lbeq
-!pet "lbmi" ,%00000000,%00000000
-!word enc_lbmi
-!pet "lbne" ,%00000000,%00000000
-!word enc_lbne
-!pet "lbpl" ,%00000000,%00000000
-!word enc_lbpl
-!pet "lbra" ,%00000000,%00000000
-!word enc_lbra
-!pet "lbsr" ,%00000000,%00000000
-!word enc_lbsr
-!pet "lbvc" ,%00000000,%00000000
-!word enc_lbvc
-!pet "lbvs" ,%00000000,%00000000
-!word enc_lbvs
-!pet "lda",0,%00000000,%00000000
+!pet "lda",0,%01011011,%10011111
 !word enc_lda
-!pet "ldq",0,%00000000,%00000000
+!pet "ldq",0,%00010010,%00000110
 !word enc_ldq
-!pet "ldx",0,%00000000,%00000000
+!pet "ldx",0,%01010110,%10000000
 !word enc_ldx
-!pet "ldy",0,%00000000,%00000000
+!pet "ldy",0,%01011011,%00000000
 !word enc_ldy
-!pet "ldz",0,%00000000,%00000000
+!pet "ldz",0,%01000011,%00000000
 !word enc_ldz
-!pet "lsr",0,%00000000,%00000000
+!pet "lsr",0,%10011011,%00000000
 !word enc_lsr
-!pet "lsrq" ,%00000000,%00000000
+!pet "lsrq" ,%10011011,%00000000
 !word enc_lsrq
-!pet "map",0,%00000000,%00000000
+!pet "map",0,%10000000,%00000000
 !word enc_map
-!pet "neg",0,%00000000,%00000000
+!pet "neg",0,%10000000,%00000000
 !word enc_neg
-!pet "nop",0,%00000000,%00000000
-!word enc_nop
-!pet "ora",0,%00000000,%00000000
+!pet "ora",0,%01011011,%10011110
 !word enc_ora
-!pet "orq",0,%00000000,%00000000
+!pet "orq",0,%00010010,%00000110
 !word enc_orq
-!pet "pha",0,%00000000,%00000000
+!pet "pha",0,%10000000,%00000000
 !word enc_pha
-!pet "php",0,%00000000,%00000000
+!pet "php",0,%10000000,%00000000
 !word enc_php
-!pet "phw",0,%00000000,%00000000
+!pet "phw",0,%00100010,%00000000
 !word enc_phw
-!pet "phx",0,%00000000,%00000000
+!pet "phx",0,%10000000,%00000000
 !word enc_phx
-!pet "phy",0,%00000000,%00000000
+!pet "phy",0,%10000000,%00000000
 !word enc_phy
-!pet "phz",0,%00000000,%00000000
+!pet "phz",0,%10000000,%00000000
 !word enc_phz
-!pet "pla",0,%00000000,%00000000
+!pet "pla",0,%10000000,%00000000
 !word enc_pla
-!pet "plp",0,%00000000,%00000000
+!pet "plp",0,%10000000,%00000000
 !word enc_plp
-!pet "plx",0,%00000000,%00000000
+!pet "plx",0,%10000000,%00000000
 !word enc_plx
-!pet "ply",0,%00000000,%00000000
+!pet "ply",0,%10000000,%00000000
 !word enc_ply
-!pet "plz",0,%00000000,%00000000
+!pet "plz",0,%10000000,%00000000
 !word enc_plz
-!pet "rmb0" ,%00000000,%00000000
+!pet "resq" ,%00001001,%10011000
+!word enc_resq
+!pet "rmb0" ,%00010000,%00000000
 !word enc_rmb0
-!pet "rmb1" ,%00000000,%00000000
+!pet "rmb1" ,%00010000,%00000000
 !word enc_rmb1
-!pet "rmb2" ,%00000000,%00000000
+!pet "rmb2" ,%00010000,%00000000
 !word enc_rmb2
-!pet "rmb3" ,%00000000,%00000000
+!pet "rmb3" ,%00010000,%00000000
 !word enc_rmb3
-!pet "rmb4" ,%00000000,%00000000
+!pet "rmb4" ,%00010000,%00000000
 !word enc_rmb4
-!pet "rmb5" ,%00000000,%00000000
+!pet "rmb5" ,%00010000,%00000000
 !word enc_rmb5
-!pet "rmb6" ,%00000000,%00000000
+!pet "rmb6" ,%00010000,%00000000
 !word enc_rmb6
-!pet "rmb7" ,%00000000,%00000000
+!pet "rmb7" ,%00010000,%00000000
 !word enc_rmb7
-!pet "rol",0,%00000000,%00000000
+!pet "rol",0,%10011011,%00000000
 !word enc_rol
-!pet "rolq" ,%00000000,%00000000
+!pet "rolq" ,%10011011,%00000000
 !word enc_rolq
-!pet "ror",0,%00000000,%00000000
+!pet "ror",0,%10011011,%00000000
 !word enc_ror
-!pet "rorq" ,%00000000,%00000000
+!pet "rorq" ,%10011011,%00000000
 !word enc_rorq
-!pet "row",0,%00000000,%00000000
+!pet "row",0,%00000010,%00000000
 !word enc_row
-!pet "rti",0,%00000000,%00000000
+!pet "rsvq" ,%00001001,%10011001
+!word enc_rsvq
+!pet "rti",0,%10000000,%00000000
 !word enc_rti
-!pet "rts",0,%00000000,%00000000
+!pet "rts",0,%11000000,%00000000
 !word enc_rts
-!pet "sbc",0,%00000000,%00000000
+!pet "sbc",0,%01011011,%10011110
 !word enc_sbc
-!pet "sbcq" ,%00000000,%00000000
+!pet "sbcq" ,%00010010,%00000110
 !word enc_sbcq
-!pet "sec",0,%00000000,%00000000
+!pet "sec",0,%10000000,%00000000
 !word enc_sec
-!pet "sed",0,%00000000,%00000000
+!pet "sed",0,%10000000,%00000000
 !word enc_sed
-!pet "see",0,%00000000,%00000000
+!pet "see",0,%10000000,%00000000
 !word enc_see
-!pet "sei",0,%00000000,%00000000
+!pet "sei",0,%10000000,%00000000
 !word enc_sei
-!pet "smb0" ,%00000000,%00000000
+!pet "smb0" ,%00010000,%00000000
 !word enc_smb0
-!pet "smb1" ,%00000000,%00000000
+!pet "smb1" ,%00010000,%00000000
 !word enc_smb1
-!pet "smb2" ,%00000000,%00000000
+!pet "smb2" ,%00010000,%00000000
 !word enc_smb2
-!pet "smb3" ,%00000000,%00000000
+!pet "smb3" ,%00010000,%00000000
 !word enc_smb3
-!pet "smb4" ,%00000000,%00000000
+!pet "smb4" ,%00010000,%00000000
 !word enc_smb4
-!pet "smb5" ,%00000000,%00000000
+!pet "smb5" ,%00010000,%00000000
 !word enc_smb5
-!pet "smb6" ,%00000000,%00000000
+!pet "smb6" ,%00010000,%00000000
 !word enc_smb6
-!pet "smb7" ,%00000000,%00000000
+!pet "smb7" ,%00010000,%00000000
 !word enc_smb7
-!pet "sta",0,%00000000,%00000000
+!pet "sta",0,%00011011,%10011111
 !word enc_sta
-!pet "stq",0,%00000000,%00000000
+!pet "stq",0,%00010010,%00000110
 !word enc_stq
-!pet "stx",0,%00000000,%00000000
+!pet "stx",0,%00010110,%10000000
 !word enc_stx
-!pet "sty",0,%00000000,%00000000
+!pet "sty",0,%00011011,%00000000
 !word enc_sty
-!pet "stz",0,%00000000,%00000000
+!pet "stz",0,%00011011,%00000000
 !word enc_stz
-!pet "tab",0,%00000000,%00000000
+!pet "tab",0,%10000000,%00000000
 !word enc_tab
-!pet "tax",0,%00000000,%00000000
+!pet "tax",0,%10000000,%00000000
 !word enc_tax
-!pet "tay",0,%00000000,%00000000
+!pet "tay",0,%10000000,%00000000
 !word enc_tay
-!pet "taz",0,%00000000,%00000000
+!pet "taz",0,%10000000,%00000000
 !word enc_taz
-!pet "tba",0,%00000000,%00000000
+!pet "tba",0,%10000000,%00000000
 !word enc_tba
-!pet "trb",0,%00000000,%00000000
+!pet "trb",0,%00010010,%00000000
 !word enc_trb
-!pet "tsb",0,%00000000,%00000000
+!pet "tsb",0,%00010010,%00000000
 !word enc_tsb
-!pet "tsx",0,%00000000,%00000000
+!pet "tsx",0,%10000000,%00000000
 !word enc_tsx
-!pet "tsy",0,%00000000,%00000000
+!pet "tsy",0,%10000000,%00000000
 !word enc_tsy
-!pet "txa",0,%00000000,%00000000
+!pet "txa",0,%10000000,%00000000
 !word enc_txa
-!pet "txs",0,%00000000,%00000000
+!pet "txs",0,%10000000,%00000000
 !word enc_txs
-!pet "tya",0,%00000000,%00000000
+!pet "tya",0,%10000000,%00000000
 !word enc_tya
-!pet "tys",0,%00000000,%00000000
+!pet "tys",0,%10000000,%00000000
 !word enc_tys
-!pet "tza",0,%00000000,%00000000
+!pet "tza",0,%10000000,%00000000
 !word enc_tza
-mnemonics_end:
+!byte 0
 
 ; Encoding lists
-; Encodings for each supported addressing mode, lsb to msb in the bitfield
-; (Quad prefix NEG NEG and 32-bit Indirect prefix NOP is added in code.)
-enc_adc : !byte $00
-enc_adcq: !byte $00
-enc_and : !byte $00
-enc_andq: !byte $00
-enc_asl : !byte $00
-enc_aslq: !byte $00
-enc_asr : !byte $00
-enc_asrq: !byte $00
-enc_asw : !byte $00
-enc_aug : !byte $00
-enc_bbr0: !byte $00
-enc_bbr1: !byte $00
-enc_bbr2: !byte $00
-enc_bbr3: !byte $00
-enc_bbr4: !byte $00
-enc_bbr5: !byte $00
-enc_bbr6: !byte $00
-enc_bbr7: !byte $00
-enc_bbs0: !byte $00
-enc_bbs1: !byte $00
-enc_bbs2: !byte $00
-enc_bbs3: !byte $00
-enc_bbs4: !byte $00
-enc_bbs5: !byte $00
-enc_bbs6: !byte $00
-enc_bbs7: !byte $00
-enc_bcc : !byte $00
-enc_bcs : !byte $00
-enc_beq : !byte $00
-enc_bit : !byte $00
-enc_bitq: !byte $00
-enc_bmi : !byte $00
-enc_bne : !byte $00
-enc_bpl : !byte $00
-enc_bra : !byte $00
+; Single-byte encodings for each supported addressing mode, lsb to msb in the bitfield
+; Quad prefix $42 $42 and 32-bit Indirect prefix $ea are added in code.
+enc_adc : !byte $61, $65, $69, $6d, $71, $72, $75, $79, $7d, $72
+enc_adcq: !byte $65, $6d, $72, $72
+enc_and : !byte $21, $25, $29, $2d, $31, $32, $35, $39, $3d, $32
+enc_andq: !byte $25, $2d, $32, $32
+enc_asl : !byte $06, $0a, $0e, $16, $1e
+enc_aslq: !byte $06, $0a, $0e, $16, $1e
+enc_asr : !byte $43, $44, $54
+enc_asrq: !byte $43, $44, $54
+enc_asw : !byte $cb
+enc_bbr0: !byte $0f
+enc_bbr1: !byte $1f
+enc_bbr2: !byte $2f
+enc_bbr3: !byte $3f
+enc_bbr4: !byte $4f
+enc_bbr5: !byte $5f
+enc_bbr6: !byte $6f
+enc_bbr7: !byte $7f
+enc_bbs0: !byte $8f
+enc_bbs1: !byte $9f
+enc_bbs2: !byte $af
+enc_bbs3: !byte $bf
+enc_bbs4: !byte $cf
+enc_bbs5: !byte $df
+enc_bbs6: !byte $ef
+enc_bbs7: !byte $ff
+enc_bcc : !byte $90, $93
+enc_bcs : !byte $b0, $b3
+enc_beq : !byte $f0, $f3
+enc_bit : !byte $24, $2c, $34, $3c, $89
+enc_bitq: !byte $24, $2c
+enc_bmi : !byte $30, $33
+enc_bne : !byte $d0, $d3
+enc_bpl : !byte $10, $13
+enc_bra : !byte $80, $83
 enc_brk : !byte $00
-enc_bsr : !byte $00
-enc_bvc : !byte $00
-enc_bvs : !byte $00
-enc_clc : !byte $00
-enc_cld : !byte $00
-enc_cle : !byte $00
-enc_cli : !byte $00
-enc_clv : !byte $00
-enc_cmp : !byte $00
-enc_cmpq: !byte $00
-enc_cpq : !byte $00
-enc_cpx : !byte $00
-enc_cpy : !byte $00
-enc_cpz : !byte $00
-enc_dec : !byte $00
-enc_deq : !byte $00
-enc_dew : !byte $00
-enc_dex : !byte $00
-enc_dey : !byte $00
-enc_dez : !byte $00
-enc_eom : !byte $00
-enc_eor : !byte $00
-enc_eorq: !byte $00
-enc_inc : !byte $00
-enc_inq : !byte $00
-enc_inw : !byte $00
-enc_inx : !byte $00
-enc_iny : !byte $00
-enc_inz : !byte $00
-enc_jmp : !byte $00
-enc_jsr : !byte $00
-enc_lbcc: !byte $00
-enc_lbcs: !byte $00
-enc_lbeq: !byte $00
-enc_lbmi: !byte $00
-enc_lbne: !byte $00
-enc_lbpl: !byte $00
-enc_lbra: !byte $00
-enc_lbsr: !byte $00
-enc_lbvc: !byte $00
-enc_lbvs: !byte $00
-enc_lda : !byte $00
-enc_ldq : !byte $00
-enc_ldx : !byte $00
-enc_ldy : !byte $00
-enc_ldz : !byte $00
-enc_lsr : !byte $00
-enc_lsrq: !byte $00
-enc_map : !byte $00
-enc_neg : !byte $00
-enc_nop : !byte $00
-enc_ora : !byte $00
-enc_orq : !byte $00
-enc_pha : !byte $00
-enc_php : !byte $00
-enc_phw : !byte $00
-enc_phx : !byte $00
-enc_phy : !byte $00
-enc_phz : !byte $00
-enc_pla : !byte $00
-enc_plp : !byte $00
-enc_plx : !byte $00
-enc_ply : !byte $00
-enc_plz : !byte $00
-enc_rmb0: !byte $00
-enc_rmb1: !byte $00
-enc_rmb2: !byte $00
-enc_rmb3: !byte $00
-enc_rmb4: !byte $00
-enc_rmb5: !byte $00
-enc_rmb6: !byte $00
-enc_rmb7: !byte $00
-enc_rol : !byte $00
-enc_rolq: !byte $00
-enc_ror : !byte $00
-enc_rorq: !byte $00
-enc_row : !byte $00
-enc_rti : !byte $00
-enc_rts : !byte $00
-enc_sbc : !byte $00
-enc_sbcq: !byte $00
-enc_sec : !byte $00
-enc_sed : !byte $00
-enc_see : !byte $00
-enc_sei : !byte $00
-enc_smb0: !byte $00
-enc_smb1: !byte $00
-enc_smb2: !byte $00
-enc_smb3: !byte $00
-enc_smb4: !byte $00
-enc_smb5: !byte $00
-enc_smb6: !byte $00
-enc_smb7: !byte $00
-enc_sta : !byte $00
-enc_stq : !byte $00
-enc_stx : !byte $00
-enc_sty : !byte $00
-enc_stz : !byte $00
-enc_tab : !byte $00
-enc_tax : !byte $00
-enc_tay : !byte $00
-enc_taz : !byte $00
-enc_tba : !byte $00
-enc_trb : !byte $00
-enc_tsb : !byte $00
-enc_tsx : !byte $00
-enc_tsy : !byte $00
-enc_txa : !byte $00
-enc_txs : !byte $00
-enc_tya : !byte $00
-enc_tys : !byte $00
-enc_tza : !byte $00
+enc_bsr : !byte $63
+enc_bvc : !byte $50, $53
+enc_bvs : !byte $70, $73
+enc_clc : !byte $18
+enc_cld : !byte $d8
+enc_cle : !byte $02
+enc_cli : !byte $58
+enc_clv : !byte $b8
+enc_cmp : !byte $c1, $c5, $c9, $cd, $d1, $d2, $d5, $d9, $dd, $d2
+enc_cmpq: !byte $c5, $cd, $d2, $d2
+enc_cpx : !byte $e0, $e4, $ec
+enc_cpy : !byte $c0, $c4, $cc
+enc_cpz : !byte $c2, $d4, $dc
+enc_dec : !byte $3a, $c6, $ce, $d6, $de
+enc_deq : !byte $3a, $c6, $ce, $d6, $de
+enc_dew : !byte $c3
+enc_dex : !byte $ca
+enc_dey : !byte $88
+enc_dez : !byte $3b
+enc_eom : !byte $ea
+enc_eor : !byte $41, $45, $49, $4d, $51, $52, $55, $59, $5d, $52
+enc_eorq: !byte $45, $4d, $52, $52
+enc_inc : !byte $1a, $e6, $ee, $f6, $fe
+enc_inq : !byte $1a, $e6, $ee, $f6, $fe
+enc_inw : !byte $e3
+enc_inx : !byte $e8
+enc_iny : !byte $c8
+enc_inz : !byte $1b
+enc_jmp : !byte $4c, $6c, $7c
+enc_jsr : !byte $20, $22, $23
+enc_lda : !byte $a1, $a5, $a9, $ad, $b1, $b2, $b5, $b9, $bd, $e2, $b2
+enc_ldq : !byte $a5, $ad, $b2, $b2
+enc_ldx : !byte $a2, $a6, $ae, $b6, $be
+enc_ldy : !byte $a0, $a4, $ac, $b4, $bc
+enc_ldz : !byte $a3, $ab, $bb
+enc_lsr : !byte $46, $4a, $4e, $56, $5e
+enc_lsrq: !byte $46, $4a, $4e, $56, $5e
+enc_map : !byte $5c
+enc_neg : !byte $42
+enc_ora : !byte $01, $05, $09, $0d, $11, $12, $15, $19, $1d, $12
+enc_orq : !byte $05, $0d, $12, $12
+enc_pha : !byte $48
+enc_php : !byte $08
+enc_phw : !byte $f4, $fc
+enc_phx : !byte $da
+enc_phy : !byte $5a
+enc_phz : !byte $db
+enc_pla : !byte $68
+enc_plp : !byte $28
+enc_plx : !byte $fa
+enc_ply : !byte $7a
+enc_plz : !byte $fb
+enc_resq: !byte $61, $71, $75, $79, $7d
+enc_rmb0: !byte $07
+enc_rmb1: !byte $17
+enc_rmb2: !byte $27
+enc_rmb3: !byte $37
+enc_rmb4: !byte $47
+enc_rmb5: !byte $57
+enc_rmb6: !byte $67
+enc_rmb7: !byte $77
+enc_rol : !byte $26, $2a, $2e, $36, $3e
+enc_rolq: !byte $26, $2a, $2e, $36, $3e
+enc_ror : !byte $66, $6a, $6e, $76, $7e
+enc_rorq: !byte $66, $6a, $6e, $76, $7e
+enc_row : !byte $eb
+enc_rsvq: !byte $e1, $82, $f1, $f5, $f9, $fd
+enc_rti : !byte $40
+enc_rts : !byte $60, $62
+enc_sbc : !byte $e1, $e5, $e9, $ed, $f1, $f2, $f5, $f9, $fd, $f2
+enc_sbcq: !byte $e5, $ed, $f2, $f2
+enc_sec : !byte $38
+enc_sed : !byte $f8
+enc_see : !byte $03
+enc_sei : !byte $78
+enc_smb0: !byte $87
+enc_smb1: !byte $97
+enc_smb2: !byte $a7
+enc_smb3: !byte $b7
+enc_smb4: !byte $c7
+enc_smb5: !byte $d7
+enc_smb6: !byte $e7
+enc_smb7: !byte $f7
+enc_sta : !byte $81, $82, $85, $8d, $91, $92, $95, $99, $9d, $92
+enc_stq : !byte $85, $8d, $92, $92
+enc_stx : !byte $86, $8e, $96, $9b
+enc_sty : !byte $84, $8b, $8c, $94
+enc_stz : !byte $64, $74, $9c, $9e
+enc_tab : !byte $5b
+enc_tax : !byte $aa
+enc_tay : !byte $a8
+enc_taz : !byte $4b
+enc_tba : !byte $7b
+enc_trb : !byte $14, $1c
+enc_tsb : !byte $04, $0c
+enc_tsx : !byte $ba
+enc_tsy : !byte $0b
+enc_txa : !byte $8a
+enc_txs : !byte $9a
+enc_tya : !byte $98
+enc_tys : !byte $2b
+enc_tza : !byte $6b
 
 
 ; ---------------------------------------------------------
