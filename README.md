@@ -366,8 +366,8 @@ Number literals:
 * Binary: `%0010110`
   * Binary literals can also use `.` for `0` and `#` for `1`, for more easily representing bitmap graphics: `%..#.##.`
 * PETSCII character: `'p'`
-  * When used with the `!scr` directive, this is translated into a screen code.
-  * EasyAsm does not support backslash-escape sequences. The PETSCII code for a single-quote character is 39 ($27).
+  * When used with the `!scr` directive, this is translated into a screen code. Otherwise it is interpreted as the PETSCII code of the character that appears in the source file.
+  * EasyAsm does not support backslash-escape sequences. To represent the PETSCII code for the single-quote character `'`, simply put it in single quotes: `'''`. (If this looks confusing, the PETSCII code for a single-quote character is 39 ($27).)
 
 To specify a negative number literal, use negation syntax: `-27` If a literal specifies all 32 bits and bit 31 is high, this will be treated as a two's complement negative number: `$FFFFFFFC` Negating such a literal will negate the number: `-$FFFFFFFC` and `4` are equivalent.
 

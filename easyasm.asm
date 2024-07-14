@@ -476,13 +476,19 @@ print_error:
 ; Input: A=char
 ; Output: C: 0=no 1=yes
 is_letter:
-    cmp #'a'
+    ; I'm leaving Acme's converstion table set to "raw" so I'm forced to
+    ; understand this explicitly. PETSCII has two sets of uppercase letters.
+    cmp #'A'     ; $41 = PETSCII lower A
     bcc ++
-    cmp #'z'+1
+    cmp #'Z'+1   ; $5A = PETSCII lower Z
     bcc +
-    cmp #'A'
+    cmp #'a'     ; $61 = PETSCII upper A
     bcc ++
-    cmp #'Z'+1
+    cmp #'z'+1   ; $7A = PETSCII upper A
+    bcc +
+    cmp #193     ; $C1 = PETSCII Shift-A
+    bcc ++
+    cmp #218+1   ; $DA = PETSCII Shift-Z
     bcc +
     clc
     rts
@@ -552,27 +558,28 @@ accept_label_mnemonic_pseudoop:
     phy
     lda (cur_line_addr),y
 
-    ; If start is ! or @, next must be identifier.
-    cmp #'!'
-    bne +
-    bcs accept_fail    ; input C=1, not expecting a pseudo-op here
+    bcc +
+    cmp #'!'           ; Pseudoops not allowed here
+    beq accept_fail
+    bra ++
+
++   cmp #'!'
+    bne ++
     iny
     jsr accept_ident
     bcs accept_success
-    dey
     bra accept_fail
 
-+   cmp #'@'
+++  cmp #'@'
     bne +
     iny
     jsr accept_ident
     bcs accept_success
-    dey
     bra accept_fail
 
     ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
 +   cmp #'+'
-    bne ++
+    bne +
 -   iny
     lda (cur_line_addr),y
     cmp #'+'
@@ -580,22 +587,24 @@ accept_label_mnemonic_pseudoop:
     bra @check_rel_end
 
 +   cmp #'-'
-    bne ++
+    bne +
 -   iny
     lda (cur_line_addr),y
     cmp #'-'
     beq -
 
 @check_rel_end
-    beq accept_success
+    lda (cur_line_addr),y
+    beq accept_success   ; end of line
     cmp #chr_spc
-    beq accept_success
+    beq accept_success   ; space
     cmp #':'
-    beq accept_success
+    beq accept_success   ; colon
     bra accept_fail
 
     ; Otherwise expect an identifier.
-++  jmp accept_ident
++   ply
+    jmp accept_ident
 
 
 ; Input: Previous Y on stack
@@ -618,7 +627,7 @@ accept_fail
 ; Output: C=1: is mnemonic, strbuf is normalized mnemonic string
 ; TODO: also return index into mnemonic table?
 ay_is_mnemonic:
-    ; TODO
+    ; TODO: detect and identify mnemonic
     sec
     rts
 
@@ -628,7 +637,7 @@ ay_is_mnemonic:
 ; Output: C=1: is mnemonic, strbuf is normalized pseudoop string
 ; TODO: also return index into pseudoop table?
 ay_is_pseudoop:
-    ; TODO
+    ; TODO: detect and identify pseudoop
     sec
     rts
 
@@ -638,7 +647,10 @@ ay_is_pseudoop:
 parse_line:
     lda #0
     sta err_code
-    lda #2
+
+    ; Start line index Y at first character
+    ; (0=next addr word, 2=line number word)
+    ldy #4
 
     ; Handle empty or comment-only lines.
     jsr accept_whitespace_and_comment
@@ -646,7 +658,7 @@ parse_line:
     bne +
     rts
 +
-
+    ; Does line start with label, mnemonic, or pseudoop?
     phy
     jsr accept_label_mnemonic_pseudoop
     bcs +
@@ -743,11 +755,57 @@ parse_source:
     rts
 
 
+test_line:
+    !word test_line_end
+    !word 12345
+    ; !pet "!Abc", chr_backarrow, "d0123456789e", chr_megaat, "f", 0
+    !pet "label", 0
+test_line_end:
+    !word 0
+
 test_parser:
     +kprimm_start
-    !pet "hey there, i'm gonna test some stuff",0
+    !pet "hey there, i'm gonna test some stuff",13,0
+    +kprimm_end
+
+    lda #<test_line
+    sta cur_line_addr
+    lda #>test_line
+    sta cur_line_addr+1
+    ldy #4
+
+    ldz #1
+    clc
+    jsr accept_label_mnemonic_pseudoop
+    bcc @test_fail
+    ldz #2
+    cpy #test_line_end-test_line-1
+    bne @test_fail
+
+    +kprimm_start
+    !pet "all tests passed",13,0
     +kprimm_end
     rts
+
+@test_fail
+    pha
+    phx
+    phy
+    phz
+    php
+    +kprimm_start
+    !pet "failed ",0
+    +kprimm_end
+    tza
+    jsr print_hex8
+    lda #chr_cr
+    +kcall bsout
+    plp
+    plz
+    ply
+    plx
+    pla
+    brk
 
 
 ; ---------------------------------------------------------

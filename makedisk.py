@@ -50,6 +50,7 @@ which converts the text to PETSCII and makes no other changes.
 The text styles "topic" and "topic-single" process the text file using a
 lightweight markup language (intended as a very small subset of Markdown):
 
+* The file begins with clear-screen and lowercase codes.
 * Lines indented with two spaces are colored like BASIC code.
 * Inline text surrounded by backticks is colored like BASIC code.
 * Inline text surrounded by single underscores is underlined.
