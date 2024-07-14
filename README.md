@@ -305,30 +305,33 @@ loop:  ; beginning of the loop
 
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
 
-| | | | | | | | |
-|-----|------|-----|------|-----|------|-----|------|
-| adc | adcq | and | andq | asl | aslq | asr | asrq |
-| asw | aug | bbr# | bbs# | bcc | bcs | beq | bit |
-| bitq | bmi | bne | bpl | bra | brk | bsr | bvc |
-| bvs | clc | cld | cle | cli | clv | cmp | cpq |
-| cpx | cpy | cpz | dec | deq | dew | dex | dey |
-| dez | eom | eor | eorq | inc | inq | inw | inx |
-| iny | inz | jmp | jsr | lda | ldq | ldx | ldy |
-| ldz | lsr | lsrq | map | neg | nop | ora | orq |
-| pha | php | phw | phx | phy | phz | pla | plp |
-| plx | ply | plz | rmb# | rol | rolq | ror | rorq |
-| row | rti | rts | sbc | sbcq | sec | sed | see |
-| sei | smb# | sta | stq | stx | sty | stz | tab |
-| tax | tay | taz | tba | trb | tsb | tsx | tsy |
-| txa | txs | tya | tys | tza |
+```
+adc   bbs1  bvs   eor   lbvs  pla   rts   stz
+adcq  bbs2  clc   eorq  lda   plp   sbc   tab
+and   bbs3  cld   inc   ldq   plx   sbcq  tax
+andq  bbs4  cle   inq   ldx   ply   sec   tay
+asl   bbs5  cli   inw   ldy   plz   sed   taz
+aslq  bbs6  clv   inx   ldz   rmb0  see   tba
+asr   bbs7  cmp   iny   lsr   rmb1  sei   trb
+asrq  bcc   cmpq  inz   lsrq  rmb2  smb0  tsb
+asw   bcs   cpq   jmp   map   rmb3  smb1  tsx
+aug   beq   cpx   jsr   neg   rmb4  smb2  tsy
+bbr0  bit   cpy   lbcc  nop   rmb5  smb3  txa
+bbr1  bitq  cpz   lbcs  ora   rmb6  smb4  txs
+bbr2  bmi   dec   lbeq  orq   rmb7  smb5  tya
+bbr3  bne   deq   lbmi  pha   rol   smb6  tys
+bbr4  bpl   dew   lbne  php   rolq  smb7  tza
+bbr5  bra   dex   lbpl  phw   ror   sta
+bbr6  brk   dey   lbra  phx   rorq  stq
+bbr7  bsr   dez   lbsr  phy   row   stx
+bbs0  bvc   eom   lbvc  phz   rti   sty
+```
 
-For `bbr#`, `bbs#`, `rmb#`, and `smb#`, the `#` is a bit index 0 through 7, e.g. `smb3`.
+EasyAsm supports explicit 16-bit branch instructions, using Acme syntax: `lbcc`, `lbcs`, `lbeq`, `lbmi`, `lbne`, `lbpl`, `lbra`, `lbsr`, `lbvc`, `lbvs` Neither EasyAsm nor Acme support automatic promotion of 8-bit branch instructions to 16-bit. The assembler will report an error if an 8-bit branch is too short.
 
-EasyAsm supports 16-bit branch instructions, using Acme syntax: `lbcc`, `lbcs`, `lbeq`, `lbmi`, `lbne`, `lbpl`, `lbra`, `lbsr`, `lbvc`, `lbvs` Neither EasyAsm nor Acme support automatic promotion of 8-bit branch instructions to 16-bit. The assembler will report an error if an 8-bit branch is too short.
+EasyAsm supports both `cpq` (Acme) and `cmpq` (Monitor, MEGA65 manual) and spellings of that instruction.
 
-Notice that a few instructions are spelled differently in the MEGA65 manual. EasyAsm conforms to Acme spellings. For example, `CMPQ` is spelled `cpq`.
-
-Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm, as you would for Acme: to logical-shift right the accumulator, use `lsr`, not `lsr a`.
+Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm, as you would for Acme or the Monitor. For example, to logical-shift right the accumulator, use `lsr`, not `lsr a`.
 
 The following are examples of syntax for the addressing modes. See the [MEGA65 Compendium](https://files.mega65.org/?id=d668168c-1fef-4560-a530-77e9e237536d) for a complete description of which instructions support each addressing mode.
 

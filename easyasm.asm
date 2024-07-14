@@ -26,13 +26,12 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $ee
+* = $f0
 
 ; Parser
 err_code        *=*+1
 err_pos         *=*+1
 tok_start       *=*+2
-tok_end         *=*+2
 cur_line_addr   *=*+2
 
 ; General purpose
@@ -622,21 +621,61 @@ accept_fail
     rts
 
 
+; Convert indicated source string to lowercase in strbuf
+; Input: A=start pos, Y=end pos (+1), cur_line_addr
+; Output: strbuf, position 0 to null terminated
+ay_to_lower:
+    pha
+    sta tok_start   ; (Borrow tok_start as scratch)
+    tya
+    sec
+    sbc tok_start   ;
+    tax             ; X = length
+    pla             ; A = start offset
+
+    clc
+    adc cur_line_addr
+    sta tok_start
+    lda #0
+    adc cur_line_addr+1
+    sta tok_start+1 ; tok_start = first char
+
+    inx
+    lda #0
+    sta strbuf,x    ; null terminator
+    dex
+-   lda tok_start,x
+    jsr is_letter
+    bcc +
+    sec
+    sbc #'a'-'A'
+    cmp #193-('a'-'A')
+    bcc +
+    sec
+    sbc #193-'a'
++   sta strbuf,x
+    dex
+    bpl -
+
+    rts
+
+
 ; Is a substring on the current line a mnemonic
 ; Input: A=start pos, Y=end pos (+1), cur_line_addr
-; Output: C=1: is mnemonic, strbuf is normalized mnemonic string
-; TODO: also return index into mnemonic table?
-ay_is_mnemonic:
+; Output: C=1: is mnemonic, A=mnemonic number; strbuf is normalized mnemonic string
+ay_to_mnemonic:
+    jsr ay_to_lower
     ; TODO: detect and identify mnemonic
+    ; - mnemonics is a table of eight-byte records; the first four bytes are the mnemonic
     sec
     rts
 
 
 ; Is a substring on the current line a pseudoop
 ; Input: A=start pos, Y=end pos (+1), cur_line_addr
-; Output: C=1: is mnemonic, strbuf is normalized pseudoop string
-; TODO: also return index into pseudoop table?
-ay_is_pseudoop:
+; Output: C=1: is pseudoop, A=pseudoop number; strbuf is normalized pseudoop string
+ay_to_pseudoop:
+    jsr ay_to_lower
     ; TODO: detect and identify pseudoop
     sec
     rts
@@ -671,9 +710,9 @@ parse_line:
 
 +   pla   ; A = prev Y
     ; A to Y is label, mnemonic, or pseudoop. Disambiguate...
-    jsr ay_is_mnemonic
+    jsr ay_to_mnemonic
     bcs @is_mnemonic
-    jsr ay_is_pseudoop
+    jsr ay_to_pseudoop
     bcs @is_pseudoop
 
     ; This is a label.
@@ -702,9 +741,9 @@ parse_line:
     jsr accept_label_mnemonic_pseudoop
     bcc +
     pla
-    jsr ay_is_mnemonic
+    jsr ay_to_mnemonic
     bcs @is_mnemonic
-    jsr ay_is_pseudoop
+    jsr ay_to_pseudoop
     bcs @is_pseudoop
 +   ; Something follows the label, but it's not a mnemonic or pseudoop.
     ply
@@ -820,6 +859,513 @@ err_message_tbl:
 err_messages:
 e01: !pet "syntax error",0
 e02: !pet "wassup",0
+
+
+; ---------------------------------------------------------
+; Mnemonics tables
+
+; 00-03: lowercase text, left aligned, null padded
+; 04-05: addressing mode bitmask
+; 06-07: address of encoding list for supported addressing modes
+;            %11111111,
+;             ^ Implied
+;              ^ Immediate
+;               ^ Immedate word
+;                ^ Base-page
+;                 ^ Base-page X-Indexed
+;                  ^ Base-page Y-Indexed
+;                   ^ Absolute
+;                    ^ Absolute X-Indexed
+;                      %11111111
+;                       ^ Absolute Y-Indexed
+;                        ^ Absolute Indirect
+;                         ^ Absolute Indirect X-Indexed
+;                          ^ Base-Page Indirect X-Indexed
+;                           ^ Base-Page Indirect Y-Indexed
+;                            ^ Base-Page Indirect Z-Indexed
+;                             ^ 32-bit Base-Page Indirect Z-Indexed
+;                              ^ Stack Relative Indirect, Y-Indexed
+mnemonics:
+!pet "adc",0,%00000000,%00000000
+!word enc_adc
+!pet "adcq" ,%00000000,%00000000
+!word enc_adcq
+!pet "and",0,%00000000,%00000000
+!word enc_and
+!pet "andq" ,%00000000,%00000000
+!word enc_andq
+!pet "asl",0,%00000000,%00000000
+!word enc_asl
+!pet "aslq" ,%00000000,%00000000
+!word enc_aslq
+!pet "asr",0,%00000000,%00000000
+!word enc_asr
+!pet "asrq" ,%00000000,%00000000
+!word enc_asrq
+!pet "asw",0,%00000000,%00000000
+!word enc_asw
+!pet "aug",0,%00000000,%00000000
+!word enc_aug
+!pet "bbr0" ,%00000000,%00000000
+!word enc_bbr0
+!pet "bbr1" ,%00000000,%00000000
+!word enc_bbr1
+!pet "bbr2" ,%00000000,%00000000
+!word enc_bbr2
+!pet "bbr3" ,%00000000,%00000000
+!word enc_bbr3
+!pet "bbr4" ,%00000000,%00000000
+!word enc_bbr4
+!pet "bbr5" ,%00000000,%00000000
+!word enc_bbr5
+!pet "bbr6" ,%00000000,%00000000
+!word enc_bbr6
+!pet "bbr7" ,%00000000,%00000000
+!word enc_bbr7
+!pet "bbs0" ,%00000000,%00000000
+!word enc_bbs0
+!pet "bbs1" ,%00000000,%00000000
+!word enc_bbs1
+!pet "bbs2" ,%00000000,%00000000
+!word enc_bbs2
+!pet "bbs3" ,%00000000,%00000000
+!word enc_bbs3
+!pet "bbs4" ,%00000000,%00000000
+!word enc_bbs4
+!pet "bbs5" ,%00000000,%00000000
+!word enc_bbs5
+!pet "bbs6" ,%00000000,%00000000
+!word enc_bbs6
+!pet "bbs7" ,%00000000,%00000000
+!word enc_bbs7
+!pet "bcc",0,%00000000,%00000000
+!word enc_bcc
+!pet "bcs",0,%00000000,%00000000
+!word enc_bcs
+!pet "beq",0,%00000000,%00000000
+!word enc_beq
+!pet "bit",0,%00000000,%00000000
+!word enc_bit
+!pet "bitq" ,%00000000,%00000000
+!word enc_bitq
+!pet "bmi",0,%00000000,%00000000
+!word enc_bmi
+!pet "bne",0,%00000000,%00000000
+!word enc_bne
+!pet "bpl",0,%00000000,%00000000
+!word enc_bpl
+!pet "bra",0,%00000000,%00000000
+!word enc_bra
+!pet "brk",0,%00000000,%00000000
+!word enc_brk
+!pet "bsr",0,%00000000,%00000000
+!word enc_bsr
+!pet "bvc",0,%00000000,%00000000
+!word enc_bvc
+!pet "bvs",0,%00000000,%00000000
+!word enc_bvs
+!pet "clc",0,%00000000,%00000000
+!word enc_clc
+!pet "cld",0,%00000000,%00000000
+!word enc_cld
+!pet "cle",0,%00000000,%00000000
+!word enc_cle
+!pet "cli",0,%00000000,%00000000
+!word enc_cli
+!pet "clv",0,%00000000,%00000000
+!word enc_clv
+!pet "cmp",0,%00000000,%00000000
+!word enc_cmp
+!pet "cmpq" ,%00000000,%00000000
+!word enc_cmpq
+!pet "cpq",0,%00000000,%00000000
+!word enc_cpq
+!pet "cpx",0,%00000000,%00000000
+!word enc_cpx
+!pet "cpy",0,%00000000,%00000000
+!word enc_cpy
+!pet "cpz",0,%00000000,%00000000
+!word enc_cpz
+!pet "dec",0,%00000000,%00000000
+!word enc_dec
+!pet "deq",0,%00000000,%00000000
+!word enc_deq
+!pet "dew",0,%00000000,%00000000
+!word enc_dew
+!pet "dex",0,%00000000,%00000000
+!word enc_dex
+!pet "dey",0,%00000000,%00000000
+!word enc_dey
+!pet "dez",0,%00000000,%00000000
+!word enc_dez
+!pet "eom",0,%00000000,%00000000
+!word enc_eom
+!pet "eor",0,%00000000,%00000000
+!word enc_eor
+!pet "eorq" ,%00000000,%00000000
+!word enc_eorq
+!pet "inc",0,%00000000,%00000000
+!word enc_inc
+!pet "inq",0,%00000000,%00000000
+!word enc_inq
+!pet "inw",0,%00000000,%00000000
+!word enc_inw
+!pet "inx",0,%00000000,%00000000
+!word enc_inx
+!pet "iny",0,%00000000,%00000000
+!word enc_iny
+!pet "inz",0,%00000000,%00000000
+!word enc_inz
+!pet "jmp",0,%00000000,%00000000
+!word enc_jmp
+!pet "jsr",0,%00000000,%00000000
+!word enc_jsr
+!pet "lbcc" ,%00000000,%00000000
+!word enc_lbcc
+!pet "lbcs" ,%00000000,%00000000
+!word enc_lbcs
+!pet "lbeq" ,%00000000,%00000000
+!word enc_lbeq
+!pet "lbmi" ,%00000000,%00000000
+!word enc_lbmi
+!pet "lbne" ,%00000000,%00000000
+!word enc_lbne
+!pet "lbpl" ,%00000000,%00000000
+!word enc_lbpl
+!pet "lbra" ,%00000000,%00000000
+!word enc_lbra
+!pet "lbsr" ,%00000000,%00000000
+!word enc_lbsr
+!pet "lbvc" ,%00000000,%00000000
+!word enc_lbvc
+!pet "lbvs" ,%00000000,%00000000
+!word enc_lbvs
+!pet "lda",0,%00000000,%00000000
+!word enc_lda
+!pet "ldq",0,%00000000,%00000000
+!word enc_ldq
+!pet "ldx",0,%00000000,%00000000
+!word enc_ldx
+!pet "ldy",0,%00000000,%00000000
+!word enc_ldy
+!pet "ldz",0,%00000000,%00000000
+!word enc_ldz
+!pet "lsr",0,%00000000,%00000000
+!word enc_lsr
+!pet "lsrq" ,%00000000,%00000000
+!word enc_lsrq
+!pet "map",0,%00000000,%00000000
+!word enc_map
+!pet "neg",0,%00000000,%00000000
+!word enc_neg
+!pet "nop",0,%00000000,%00000000
+!word enc_nop
+!pet "ora",0,%00000000,%00000000
+!word enc_ora
+!pet "orq",0,%00000000,%00000000
+!word enc_orq
+!pet "pha",0,%00000000,%00000000
+!word enc_pha
+!pet "php",0,%00000000,%00000000
+!word enc_php
+!pet "phw",0,%00000000,%00000000
+!word enc_phw
+!pet "phx",0,%00000000,%00000000
+!word enc_phx
+!pet "phy",0,%00000000,%00000000
+!word enc_phy
+!pet "phz",0,%00000000,%00000000
+!word enc_phz
+!pet "pla",0,%00000000,%00000000
+!word enc_pla
+!pet "plp",0,%00000000,%00000000
+!word enc_plp
+!pet "plx",0,%00000000,%00000000
+!word enc_plx
+!pet "ply",0,%00000000,%00000000
+!word enc_ply
+!pet "plz",0,%00000000,%00000000
+!word enc_plz
+!pet "rmb0" ,%00000000,%00000000
+!word enc_rmb0
+!pet "rmb1" ,%00000000,%00000000
+!word enc_rmb1
+!pet "rmb2" ,%00000000,%00000000
+!word enc_rmb2
+!pet "rmb3" ,%00000000,%00000000
+!word enc_rmb3
+!pet "rmb4" ,%00000000,%00000000
+!word enc_rmb4
+!pet "rmb5" ,%00000000,%00000000
+!word enc_rmb5
+!pet "rmb6" ,%00000000,%00000000
+!word enc_rmb6
+!pet "rmb7" ,%00000000,%00000000
+!word enc_rmb7
+!pet "rol",0,%00000000,%00000000
+!word enc_rol
+!pet "rolq" ,%00000000,%00000000
+!word enc_rolq
+!pet "ror",0,%00000000,%00000000
+!word enc_ror
+!pet "rorq" ,%00000000,%00000000
+!word enc_rorq
+!pet "row",0,%00000000,%00000000
+!word enc_row
+!pet "rti",0,%00000000,%00000000
+!word enc_rti
+!pet "rts",0,%00000000,%00000000
+!word enc_rts
+!pet "sbc",0,%00000000,%00000000
+!word enc_sbc
+!pet "sbcq" ,%00000000,%00000000
+!word enc_sbcq
+!pet "sec",0,%00000000,%00000000
+!word enc_sec
+!pet "sed",0,%00000000,%00000000
+!word enc_sed
+!pet "see",0,%00000000,%00000000
+!word enc_see
+!pet "sei",0,%00000000,%00000000
+!word enc_sei
+!pet "smb0" ,%00000000,%00000000
+!word enc_smb0
+!pet "smb1" ,%00000000,%00000000
+!word enc_smb1
+!pet "smb2" ,%00000000,%00000000
+!word enc_smb2
+!pet "smb3" ,%00000000,%00000000
+!word enc_smb3
+!pet "smb4" ,%00000000,%00000000
+!word enc_smb4
+!pet "smb5" ,%00000000,%00000000
+!word enc_smb5
+!pet "smb6" ,%00000000,%00000000
+!word enc_smb6
+!pet "smb7" ,%00000000,%00000000
+!word enc_smb7
+!pet "sta",0,%00000000,%00000000
+!word enc_sta
+!pet "stq",0,%00000000,%00000000
+!word enc_stq
+!pet "stx",0,%00000000,%00000000
+!word enc_stx
+!pet "sty",0,%00000000,%00000000
+!word enc_sty
+!pet "stz",0,%00000000,%00000000
+!word enc_stz
+!pet "tab",0,%00000000,%00000000
+!word enc_tab
+!pet "tax",0,%00000000,%00000000
+!word enc_tax
+!pet "tay",0,%00000000,%00000000
+!word enc_tay
+!pet "taz",0,%00000000,%00000000
+!word enc_taz
+!pet "tba",0,%00000000,%00000000
+!word enc_tba
+!pet "trb",0,%00000000,%00000000
+!word enc_trb
+!pet "tsb",0,%00000000,%00000000
+!word enc_tsb
+!pet "tsx",0,%00000000,%00000000
+!word enc_tsx
+!pet "tsy",0,%00000000,%00000000
+!word enc_tsy
+!pet "txa",0,%00000000,%00000000
+!word enc_txa
+!pet "txs",0,%00000000,%00000000
+!word enc_txs
+!pet "tya",0,%00000000,%00000000
+!word enc_tya
+!pet "tys",0,%00000000,%00000000
+!word enc_tys
+!pet "tza",0,%00000000,%00000000
+!word enc_tza
+mnemonics_end:
+
+; Encoding lists
+; Encodings for each supported addressing mode, lsb to msb in the bitfield
+; (Quad prefix NEG NEG and 32-bit Indirect prefix NOP is added in code.)
+enc_adc : !byte $00
+enc_adcq: !byte $00
+enc_and : !byte $00
+enc_andq: !byte $00
+enc_asl : !byte $00
+enc_aslq: !byte $00
+enc_asr : !byte $00
+enc_asrq: !byte $00
+enc_asw : !byte $00
+enc_aug : !byte $00
+enc_bbr0: !byte $00
+enc_bbr1: !byte $00
+enc_bbr2: !byte $00
+enc_bbr3: !byte $00
+enc_bbr4: !byte $00
+enc_bbr5: !byte $00
+enc_bbr6: !byte $00
+enc_bbr7: !byte $00
+enc_bbs0: !byte $00
+enc_bbs1: !byte $00
+enc_bbs2: !byte $00
+enc_bbs3: !byte $00
+enc_bbs4: !byte $00
+enc_bbs5: !byte $00
+enc_bbs6: !byte $00
+enc_bbs7: !byte $00
+enc_bcc : !byte $00
+enc_bcs : !byte $00
+enc_beq : !byte $00
+enc_bit : !byte $00
+enc_bitq: !byte $00
+enc_bmi : !byte $00
+enc_bne : !byte $00
+enc_bpl : !byte $00
+enc_bra : !byte $00
+enc_brk : !byte $00
+enc_bsr : !byte $00
+enc_bvc : !byte $00
+enc_bvs : !byte $00
+enc_clc : !byte $00
+enc_cld : !byte $00
+enc_cle : !byte $00
+enc_cli : !byte $00
+enc_clv : !byte $00
+enc_cmp : !byte $00
+enc_cmpq: !byte $00
+enc_cpq : !byte $00
+enc_cpx : !byte $00
+enc_cpy : !byte $00
+enc_cpz : !byte $00
+enc_dec : !byte $00
+enc_deq : !byte $00
+enc_dew : !byte $00
+enc_dex : !byte $00
+enc_dey : !byte $00
+enc_dez : !byte $00
+enc_eom : !byte $00
+enc_eor : !byte $00
+enc_eorq: !byte $00
+enc_inc : !byte $00
+enc_inq : !byte $00
+enc_inw : !byte $00
+enc_inx : !byte $00
+enc_iny : !byte $00
+enc_inz : !byte $00
+enc_jmp : !byte $00
+enc_jsr : !byte $00
+enc_lbcc: !byte $00
+enc_lbcs: !byte $00
+enc_lbeq: !byte $00
+enc_lbmi: !byte $00
+enc_lbne: !byte $00
+enc_lbpl: !byte $00
+enc_lbra: !byte $00
+enc_lbsr: !byte $00
+enc_lbvc: !byte $00
+enc_lbvs: !byte $00
+enc_lda : !byte $00
+enc_ldq : !byte $00
+enc_ldx : !byte $00
+enc_ldy : !byte $00
+enc_ldz : !byte $00
+enc_lsr : !byte $00
+enc_lsrq: !byte $00
+enc_map : !byte $00
+enc_neg : !byte $00
+enc_nop : !byte $00
+enc_ora : !byte $00
+enc_orq : !byte $00
+enc_pha : !byte $00
+enc_php : !byte $00
+enc_phw : !byte $00
+enc_phx : !byte $00
+enc_phy : !byte $00
+enc_phz : !byte $00
+enc_pla : !byte $00
+enc_plp : !byte $00
+enc_plx : !byte $00
+enc_ply : !byte $00
+enc_plz : !byte $00
+enc_rmb0: !byte $00
+enc_rmb1: !byte $00
+enc_rmb2: !byte $00
+enc_rmb3: !byte $00
+enc_rmb4: !byte $00
+enc_rmb5: !byte $00
+enc_rmb6: !byte $00
+enc_rmb7: !byte $00
+enc_rol : !byte $00
+enc_rolq: !byte $00
+enc_ror : !byte $00
+enc_rorq: !byte $00
+enc_row : !byte $00
+enc_rti : !byte $00
+enc_rts : !byte $00
+enc_sbc : !byte $00
+enc_sbcq: !byte $00
+enc_sec : !byte $00
+enc_sed : !byte $00
+enc_see : !byte $00
+enc_sei : !byte $00
+enc_smb0: !byte $00
+enc_smb1: !byte $00
+enc_smb2: !byte $00
+enc_smb3: !byte $00
+enc_smb4: !byte $00
+enc_smb5: !byte $00
+enc_smb6: !byte $00
+enc_smb7: !byte $00
+enc_sta : !byte $00
+enc_stq : !byte $00
+enc_stx : !byte $00
+enc_sty : !byte $00
+enc_stz : !byte $00
+enc_tab : !byte $00
+enc_tax : !byte $00
+enc_tay : !byte $00
+enc_taz : !byte $00
+enc_tba : !byte $00
+enc_trb : !byte $00
+enc_tsb : !byte $00
+enc_tsx : !byte $00
+enc_tsy : !byte $00
+enc_txa : !byte $00
+enc_txs : !byte $00
+enc_tya : !byte $00
+enc_tys : !byte $00
+enc_tza : !byte $00
+
+
+; ---------------------------------------------------------
+; Pseudo-op table
+
+pseudoops:
+po_to = 1
+!pet "to",0
+po_byte = 2
+!pet "byte",0
+po_8 = 3
+!pet "8",0
+po_word = 4
+!pet "word",0
+po_16 = 5
+!pet "16",0
+po_32 = 6
+!pet "32",0
+po_fill = 7
+!pet "fill",0
+po_pet = 8
+!pet "pet",0
+po_scr = 9
+!pet "scr",0
+po_source = 10
+!pet "source",0
+po_binary = 11
+!pet "binary",0
+po_warn = 12
+!pet "warn",0
+!byte 0
 
 
 ; ---------------------------------------------------------
