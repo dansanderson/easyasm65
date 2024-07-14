@@ -1,0 +1,6 @@
+; This is a line comment.
+
+
+       ; This is also a line comment.
+
+    ; This line ; contains ; semicolons.

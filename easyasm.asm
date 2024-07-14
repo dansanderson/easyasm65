@@ -26,17 +26,23 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
+* = $ee
+
 ; Parser
-err_code        = $ee
-err_pos         = $ef
-tok_start       = $f0
-tok_end         = $f2
-cur_line_addr   = $f4
+err_code        *=*+1
+err_pos         *=*+1
+tok_start       *=*+2
+tok_end         *=*+2
+cur_line_addr   *=*+2
 
 ; General purpose
-code_ptr        = $f6   ; 16-bit pointer, CPU
-attic_ptr       = $f8   ; 32-bit pointer, Attic
-bas_ptr         = $fc   ; 32-bit pointer, bank 0
+code_ptr        *=*+2   ; 16-bit pointer, CPU
+attic_ptr       *=*+4   ; 32-bit pointer, Attic
+bas_ptr         *=*+4   ; 32-bit pointer, bank 0
+
+!if * > $100 {
+    !error "Exceeded BP map; move start to earlier, if possible : ", *
+}
 
 
 ; Attic map
@@ -60,6 +66,8 @@ dmaimm = $d707
 chr_cr = 13
 chr_spc = 32
 chr_uparrow = 94
+chr_backarrow = 95
+chr_megaat = 164
 
 
 ; Call a given KERNAL routine
@@ -139,7 +147,9 @@ assemble_to_memory_cmd:
     +kprimm_end
 
     jsr stash_source
-    jsr parse_source
+
+    jsr test_parser
+    ;jsr parse_source
     ; TODO: the rest of the owl
 
     jsr restore_source
@@ -461,44 +471,290 @@ print_error:
 
 +++ rts
 
-parse_source:
-    ; Test line number output in error message
-    ; error_code = 2
-    ; cur_line_addr = $2001
-    ; [$0.2003] = 12345
-    lda #2
-    sta err_code
-    lda #15
-    sta err_pos
-    lda #$01
-    sta cur_line_addr
-    sta bas_ptr
-    lda #$20
-    sta cur_line_addr+1
-    sta bas_ptr+1
 
-    lda #testline_end-testline
-    tax
-    taz
--   lda testline,x
-    sta [bas_ptr],z
-    dex
-    dez
-    bpl -
+; Test whether A is a letter
+; Input: A=char
+; Output: C: 0=no 1=yes
+is_letter:
+    cmp #'a'
+    bcc ++
+    cmp #'z'+1
+    bcc +
+    cmp #'A'
+    bcc ++
+    cmp #'Z'+1
+    bcc +
+    clc
+    rts
++   sec
+++  rts
 
-    lda #255
--   cmp #0
-    beq +
-    pha
-    jsr print_error
+
+; Test whether A is a secondary identifier character
+; Input: A=char
+; Output: C: 0=no 1=yes
+is_secondary_ident_char:
+    cmp #'0'
+    bcc +
+    cmp #'9'+1
+    bcc ++
++   cmp #chr_backarrow
+    beq ++
+    cmp #chr_megaat
+    bne +++
+++  sec
+    rts
++++ jmp is_letter
+
+
+; Skip over whitespace, and also a line comment if found after whitespace
+; Input: cur_line_addr, Y=pos
+; Output: Y advanced maybe; C=0 (no fail)
+accept_whitespace_and_comment:
+    lda (cur_line_addr),y
+    cmp #chr_spc
+    bne +
+    iny
+    bra accept_whitespace_and_comment
++   cmp #';'
+    bne +
+-   iny            ; Ignore comment to end of line
+    lda (cur_line_addr),y
+    bne -
++   clc
+    rts
+
+
+; Consume identifier
+; Input: cur_line_addr, Y=pos
+; Output: C: 0=not found, Y unchanged; 1=found, Y advanced
+accept_ident:
+    phy
+    lda (cur_line_addr),y
+
+    ; Must start with letter
+    jsr is_letter
+    bcc accept_fail
+
+    ; Can be followed by letter, number, back-arrow, Mega+@
+-   iny
+    lda (cur_line_addr),y
+    jsr is_secondary_ident_char
+    bcs -
+
+    bra accept_success
+
+
+; Consume label, mnemonic, or pseudo-op (if C=0)
+; Input: cur_line_addr, Y=pos; C: 0=accept pseudo-op, 1=no pseudo-op
+; Output: C: 0=not found, Y unchanged; 1=found, Y advanced
+accept_label_mnemonic_pseudoop:
+    phy
+    lda (cur_line_addr),y
+
+    ; If start is ! or @, next must be identifier.
+    cmp #'!'
+    bne +
+    bcs accept_fail    ; input C=1, not expecting a pseudo-op here
+    iny
+    jsr accept_ident
+    bcs accept_success
+    dey
+    bra accept_fail
+
++   cmp #'@'
+    bne +
+    iny
+    jsr accept_ident
+    bcs accept_success
+    dey
+    bra accept_fail
+
+    ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
++   cmp #'+'
+    bne ++
+-   iny
+    lda (cur_line_addr),y
+    cmp #'+'
+    beq -
+    bra @check_rel_end
+
++   cmp #'-'
+    bne ++
+-   iny
+    lda (cur_line_addr),y
+    cmp #'-'
+    beq -
+
+@check_rel_end
+    beq accept_success
+    cmp #chr_spc
+    beq accept_success
+    cmp #':'
+    beq accept_success
+    bra accept_fail
+
+    ; Otherwise expect an identifier.
+++  jmp accept_ident
+
+
+; Input: Previous Y on stack
+; Output: Stack popped, C=1
+accept_success
     pla
-    dec
-    bra -
-+   rts
+    sec
+    rts
 
-testline:
-!pet $19, $20, <12345, >12345, "this is a test line", 0, 0, 0
-testline_end:
+; Input: Previous Y on stack
+; Output: Y=previous Y, C=0
+accept_fail
+    ply
+    clc
+    rts
+
+
+; Is a substring on the current line a mnemonic
+; Input: A=start pos, Y=end pos (+1), cur_line_addr
+; Output: C=1: is mnemonic, strbuf is normalized mnemonic string
+; TODO: also return index into mnemonic table?
+ay_is_mnemonic:
+    ; TODO
+    sec
+    rts
+
+
+; Is a substring on the current line a pseudoop
+; Input: A=start pos, Y=end pos (+1), cur_line_addr
+; Output: C=1: is mnemonic, strbuf is normalized pseudoop string
+; TODO: also return index into pseudoop table?
+ay_is_pseudoop:
+    ; TODO
+    sec
+    rts
+
+
+; Input: cur_line_addr
+; Output: err_code, err_pos
+parse_line:
+    lda #0
+    sta err_code
+    lda #2
+
+    ; Handle empty or comment-only lines.
+    jsr accept_whitespace_and_comment
+    lda (cur_line_addr),y
+    bne +
+    rts
++
+
+    phy
+    jsr accept_label_mnemonic_pseudoop
+    bcs +
+    ; Something starts this line, but it's not a label, mnemonic, or pseudoop.
+    ply
+    lda #err_syntax
+    sta err_code
+    sty err_pos
+    rts
+
++   pla   ; A = prev Y
+    ; A to Y is label, mnemonic, or pseudoop. Disambiguate...
+    jsr ay_is_mnemonic
+    bcs @is_mnemonic
+    jsr ay_is_pseudoop
+    bcs @is_pseudoop
+
+    ; This is a label.
+    jsr accept_whitespace_and_comment
+    lda (cur_line_addr),y
+    bne +
+    rts
++   cmp #'='
+    bne +
+    ; Label assignment.
+    ; TODO: Expect expression.
+    rts
++   cmp #':'
+    bne +
+    ; Ignore a single colon after a line-starting label.
+    iny
++   jsr accept_whitespace_and_comment
+    lda (cur_line_addr),y
+    bne +
+    ; Label on a line by itself.
+    rts
++
+
+    ; Accept a mnemonic or pseudoop, and handle it.
+    phy
+    jsr accept_label_mnemonic_pseudoop
+    bcc +
+    pla
+    jsr ay_is_mnemonic
+    bcs @is_mnemonic
+    jsr ay_is_pseudoop
+    bcs @is_pseudoop
++   ; Something follows the label, but it's not a mnemonic or pseudoop.
+    ply
+    lda #err_syntax
+    sta err_code
+    sty err_pos
+    rts
+
+@is_mnemonic
+    ; A=start pos, Y=end pos (+1)
+    ; TODO: handle mnemonic
+    rts
+
+@is_pseudoop
+    ; A=start pos, Y=end pos (+1)
+    ; TODO: handle pseudoop
+    rts
+
+
+parse_source:
+    lda #<(source_start+1)
+    sta cur_line_addr
+    lda #>(source_start+1)
+    sta cur_line_addr+1
+
+@line_loop
+    ldy #0
+    lda (cur_line_addr),y
+    iny
+    ora (cur_line_addr),y
+    bne +
+    bra @end_of_program
++   jsr parse_line
+    lda err_code
+    bne @found_error
+    ldy #0
+    lda (cur_line_addr),y
+    sta cur_line_addr
+    iny
+    lda (cur_line_addr),y
+    sta cur_line_addr+1
+    bra @line_loop
+
+@found_error
+    jsr print_error
+
+@end_of_program
+    rts
+
+
+test_parser:
+    +kprimm_start
+    !pet "hey there, i'm gonna test some stuff",0
+    +kprimm_end
+    rts
+
+
+; ---------------------------------------------------------
+; Error message strings
+
+; Error code constants
+err_syntax = 1
 
 err_message_tbl:
 !word e01, e02
@@ -507,6 +763,8 @@ err_messages:
 e01: !pet "syntax error",0
 e02: !pet "wassup",0
 
+
+; ---------------------------------------------------------
 
 !if * >= strbuf {
     !error "EasyAsm code is too large, * = ", *

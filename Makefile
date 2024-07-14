@@ -7,7 +7,7 @@ DISK_FILES = easyasm.prg \
 	autoboot.bas
 
 %.prg: %.asm
-	${ACME} -f cbm -o $@ -l $@.lst $<
+	${ACME} -f cbm -o $@ -l $@.lst -r $@.rpt $<
 
 .PHONY: all clean
 

@@ -8,6 +8,9 @@
         {"file_path": "typeme.txt", "name": "typeme"},
         {"file_path": "easyasm.prg", "name": "easyasm"},
         {"file_path": "easyasm-e.prg", "name": "easyasm-e"},
-        {"name": "--------------"}
+        {"name": "--------------"},
+        {"file_path": "testdata/blanklines.txt", "name": "t-blanklines", "text_type": "plain"},
+        {"file_path": "testdata/commentsonly.txt", "name": "t-commentsonly", "text_type": "plain"},
+        {"file_path": "testdata/emptyfile.txt", "name": "t-emptyfile", "text_type": "plain"}
     ]
 }

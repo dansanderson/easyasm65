@@ -60,12 +60,14 @@ Release 0.1:
 Roadmap:
 * `!binary`
 * `!source`
-* Automatic 16-bit branching; multi-pass
 * `runnable` with custom PC (single relocatable segment)
 * Multi-segment programs with `!to "...", cbm` and `raw`; multiple `* = ...` allowed; gaps filled on disk
 * Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
 * Multi-file output, multiple `!to` allowed
 * Freezable mode that uses bank 5 if it's already there
+* List symbol definitions
+* List disassembly alongside source code
+* Automatic 16-bit branch instructions
 
 ## An important note
 
@@ -308,7 +310,7 @@ Instruction names (opcode mnemonics) are canonical for the 45GS02.
 | adc | adcq | and | andq | asl | aslq | asr | asrq |
 | asw | aug | bbr# | bbs# | bcc | bcs | beq | bit |
 | bitq | bmi | bne | bpl | bra | brk | bsr | bvc |
-| bvs | clc | cld | cle | cli | clv | cmp | cmpq |
+| bvs | clc | cld | cle | cli | clv | cmp | cpq |
 | cpx | cpy | cpz | dec | deq | dew | dex | dey |
 | dez | eom | eor | eorq | inc | inq | inw | inx |
 | iny | inz | jmp | jsr | lda | ldq | ldx | ldy |
@@ -320,9 +322,13 @@ Instruction names (opcode mnemonics) are canonical for the 45GS02.
 | tax | tay | taz | tba | trb | tsb | tsx | tsy |
 | txa | txs | tya | tys | tza |
 
-(For `bbr#`, `bbs#`, `rmb#`, and `smb#`, the `#` is a bit index 0 through 7, e.g. `smb3`.)
+For `bbr#`, `bbs#`, `rmb#`, and `smb#`, the `#` is a bit index 0 through 7, e.g. `smb3`.
 
-Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm (as you would for Acme): to logical-shift right the accumulator, use `lsr`, not `lsr a`.
+EasyAsm supports 16-bit branch instructions, using Acme syntax: `lbcc`, `lbcs`, `lbeq`, `lbmi`, `lbne`, `lbpl`, `lbra`, `lbsr`, `lbvc`, `lbvs` Neither EasyAsm nor Acme support automatic promotion of 8-bit branch instructions to 16-bit. The assembler will report an error if an 8-bit branch is too short.
+
+Notice that a few instructions are spelled differently in the MEGA65 manual. EasyAsm conforms to Acme spellings. For example, `CMPQ` is spelled `cpq`.
+
+Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm, as you would for Acme: to logical-shift right the accumulator, use `lsr`, not `lsr a`.
 
 The following are examples of syntax for the addressing modes. See the [MEGA65 Compendium](https://files.mega65.org/?id=d668168c-1fef-4560-a530-77e9e237536d) for a complete description of which instructions support each addressing mode.
 

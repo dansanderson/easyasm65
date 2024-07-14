@@ -1,4 +1,5 @@
 *.prg
 *.d81
 *.lst
+*.rpt
 .mypy_cache
