@@ -624,6 +624,7 @@ accept_fail
 ; Convert indicated source string to lowercase in strbuf
 ; Input: A=start pos, Y=end pos (+1), cur_line_addr
 ; Output: strbuf, position 0 to null terminated
+; Uses: code_ptr
 ay_to_lower:
     pha
     sta tok_start   ; (Borrow tok_start as scratch)
@@ -635,26 +636,31 @@ ay_to_lower:
 
     clc
     adc cur_line_addr
-    sta tok_start
+    sta bas_ptr
     lda #0
     adc cur_line_addr+1
-    sta tok_start+1 ; tok_start = first char
+    sta bas_ptr+1
 
+    txa
+    taz
     inx
     lda #0
     sta strbuf,x    ; null terminator
     dex
--   lda tok_start,x
+-   lda [bas_ptr],z
     jsr is_letter
     bcc +
+    cmp #'Z'+1
+    bcc +           ; already lower
     sec
     sbc #'a'-'A'
     cmp #193-('a'-'A')
-    bcc +
+    bcc +           ; lowered from first upper bank
     sec
-    sbc #193-'a'
+    sbc #193-'a'    ; lowered from second upper bank
 +   sta strbuf,x
     dex
+    dez
     bpl -
 
     rts
@@ -873,9 +879,12 @@ test_line:
     !word test_line_end
     !word 12345
     ; !pet "!Abc", chr_backarrow, "d0123456789e", chr_megaat, "f", 0
-    !pet "label", 0
+    !pet "!lA", chr_backarrow, $62, "El", 0
 test_line_end:
     !word 0
+
+test_num:
+    !byte 0
 
 test_parser:
     +kprimm_start
@@ -883,17 +892,60 @@ test_parser:
     +kprimm_end
 
     lda #<test_line
-    sta cur_line_addr
+    sta code_ptr
     lda #>test_line
-    sta cur_line_addr+1
-    ldy #4
+    sta code_ptr+1
+    lda #<$3000
+    sta bas_ptr
+    lda #>$3000
+    sta bas_ptr+1
+    ldz #0
+    ldy #0
+-   lda (code_ptr),y
+    sta [bas_ptr],z
+    beq +
+    inw code_ptr
+    inw bas_ptr
+    bra -
++   ; (Not quite right, doesn't copy last two zeros, next line ptr is wrong)
 
+    lda #<$3000
+    sta cur_line_addr
+    lda #>$3000
+    sta cur_line_addr+1
+
+    lda #4
+    ldy #9
+    jsr ay_to_lower
     ldz #1
-    clc
-    jsr accept_label_mnemonic_pseudoop
-    bcc @test_fail
+    stz test_num
+    lda strbuf
+    cmp #'!'
+    bne @test_fail
     ldz #2
-    cpy #test_line_end-test_line-1
+    stz test_num
+    lda strbuf+1
+    cmp #'L'
+    bne @test_fail
+    ldz #3
+    stz test_num
+    lda strbuf+2
+    cmp #'A'
+    bne @test_fail
+    ldz #4
+    stz test_num
+    lda strbuf+3
+    cmp #chr_backarrow
+    bne @test_fail
+    ldz #5
+    stz test_num
+    lda strbuf+4
+    cmp #'B'
+    bne @test_fail
+    ldz #6
+    stz test_num
+    lda strbuf+5
+    cmp #'E'
     bne @test_fail
 
     +kprimm_start
@@ -910,7 +962,7 @@ test_parser:
     +kprimm_start
     !pet "failed ",0
     +kprimm_end
-    tza
+    lda test_num
     jsr print_hex8
     lda #chr_cr
     +kcall bsout
