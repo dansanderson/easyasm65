@@ -641,12 +641,11 @@ ay_to_lower:
     adc cur_line_addr+1
     sta bas_ptr+1
 
-    txa
-    taz
-    inx
     lda #0
     sta strbuf,x    ; null terminator
     dex
+    txa
+    taz
 -   lda [bas_ptr],z
     jsr is_letter
     bcc +
@@ -720,16 +719,23 @@ ay_to_pseudoop:
     jsr ay_to_lower   ; move candidate to strbuf
 
 strbuf_to_pseudoop:
-    lda #<pseudoops
-    sta code_ptr
-    lda #>pseudoops
-    sta code_ptr+1
-
     ; Y = current pseudoop number
     ; X = buffer index; strbuf,x = buffer char
     ; (Z=0. All table reads via code_ptr+0.)
+    ldx #0
+    lda strbuf,x
+    cmp #'!'          ; confirm leading '!'
+    beq +
+    clc
+    rts
+
++   lda #<pseudoops
+    sta code_ptr
+    lda #>pseudoops
+    sta code_ptr+1
     ldy #1
     ldz #0
+
 @try_token
     lda (code_ptr),z
     bne +
@@ -737,7 +743,7 @@ strbuf_to_pseudoop:
     clc
     rts
 
-+   ldx #0
++   ldx #1
 -   lda (code_ptr),z
     cmp strbuf,x
     bne @skip_token
@@ -879,7 +885,7 @@ test_line:
     !word test_line_end
     !word 12345
     ; !pet "!Abc", chr_backarrow, "d0123456789e", chr_megaat, "f", 0
-    !pet "!lA", chr_backarrow, $62, "El", 0
+    !pet "!Warn more text", 0
 test_line_end:
     !word 0
 
@@ -916,36 +922,14 @@ test_parser:
 
     lda #4
     ldy #9
-    jsr ay_to_lower
+
     ldz #1
     stz test_num
-    lda strbuf
-    cmp #'!'
-    bne @test_fail
+    jsr ay_to_pseudoop
+    bcc @test_fail
     ldz #2
     stz test_num
-    lda strbuf+1
-    cmp #'L'
-    bne @test_fail
-    ldz #3
-    stz test_num
-    lda strbuf+2
-    cmp #'A'
-    bne @test_fail
-    ldz #4
-    stz test_num
-    lda strbuf+3
-    cmp #chr_backarrow
-    bne @test_fail
-    ldz #5
-    stz test_num
-    lda strbuf+4
-    cmp #'B'
-    bne @test_fail
-    ldz #6
-    stz test_num
-    lda strbuf+5
-    cmp #'E'
+    cmp #12
     bne @test_fail
 
     +kprimm_start
