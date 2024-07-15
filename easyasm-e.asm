@@ -36,6 +36,9 @@ EXPECTED_END_OF_DISPATCH = $1e5f
     !byte $2c
     ; $1E06: Restore source.
     lda #$03
+    !byte $2c
+    ; $1E09: (private) Run test suite.
+    lda #$04
 
     pha
 

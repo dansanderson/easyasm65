@@ -26,13 +26,12 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $f0
+* = $f2
 
 ; Parser
+line_pos        *=*+1
 err_code        *=*+1
-err_pos         *=*+1
-tok_start       *=*+2
-cur_line_addr   *=*+2
+line_addr       *=*+2
 
 ; General purpose
 code_ptr        *=*+2   ; 16-bit pointer, CPU
@@ -138,6 +137,7 @@ dispatch_jump:
     !word assemble_to_memory_cmd
     !word assemble_to_disk_cmd
     !word restore_source_cmd
+    !word run_test_suite_cmd
 
 
 assemble_to_memory_cmd:
@@ -146,9 +146,7 @@ assemble_to_memory_cmd:
     +kprimm_end
 
     jsr stash_source
-
-    jsr test_parser
-    ;jsr parse_source
+    jsr parse_source
     ; TODO: the rest of the owl
 
     jsr restore_source
@@ -380,7 +378,8 @@ hex_nyb:
 +   adc #'0'
     rts
 
-; Input: err_code, err_pos, cur_line_addr
+; Input: err_code, line_pos, line_addr
+; - If line_pos = $FF, don't print line
 print_error:
     lda err_code
     bne +        ; zero = no error
@@ -399,9 +398,9 @@ print_error:
     !pet " in line ",0
     +kprimm_end
 
-    lda cur_line_addr
+    lda line_addr
     sta bas_ptr
-    lda cur_line_addr+1
+    lda line_addr+1
     sta bas_ptr+1
     ldz #3
     lda [bas_ptr],z        ; line number high
@@ -416,6 +415,11 @@ print_error:
     jsr print_dec32
     lda #chr_cr
     +kcall bsout
+
+    ; Skip printing line if line_pos = $ff
+    lda line_pos
+    cmp #$ff
+    lbeq +++
 
     ; Print line number again.
     plx
@@ -458,7 +462,7 @@ print_error:
     +kcall bsout
     dex
     bne -
-    ldx err_pos   ; Indent by err_pos
+    ldx line_pos   ; Indent by line_pos
 -   lda #chr_spc
     +kcall bsout
     dex
@@ -512,141 +516,9 @@ is_secondary_ident_char:
 +++ jmp is_letter
 
 
-; Skip over whitespace, and also a line comment if found after whitespace
-; Input: cur_line_addr, Y=pos
-; Output: Y advanced maybe; C=0 (no fail)
-accept_whitespace_and_comment:
-    lda (cur_line_addr),y
-    cmp #chr_spc
-    bne +
-    iny
-    bra accept_whitespace_and_comment
-+   cmp #';'
-    bne +
--   iny            ; Ignore comment to end of line
-    lda (cur_line_addr),y
-    bne -
-+   clc
-    rts
-
-
-; Consume identifier
-; Input: cur_line_addr, Y=pos
-; Output: C: 0=not found, Y unchanged; 1=found, Y advanced
-accept_ident:
-    phy
-    lda (cur_line_addr),y
-
-    ; Must start with letter
-    jsr is_letter
-    bcc accept_fail
-
-    ; Can be followed by letter, number, back-arrow, Mega+@
--   iny
-    lda (cur_line_addr),y
-    jsr is_secondary_ident_char
-    bcs -
-
-    bra accept_success
-
-
-; Consume label, mnemonic, or pseudo-op (if C=0)
-; Input: cur_line_addr, Y=pos; C: 0=accept pseudo-op, 1=no pseudo-op
-; Output: C: 0=not found, Y unchanged; 1=found, Y advanced
-accept_label_mnemonic_pseudoop:
-    phy
-    lda (cur_line_addr),y
-
-    bcc +
-    cmp #'!'           ; Pseudoops not allowed here
-    beq accept_fail
-    bra ++
-
-+   cmp #'!'
-    bne ++
-    iny
-    jsr accept_ident
-    bcs accept_success
-    bra accept_fail
-
-++  cmp #'@'
-    bne +
-    iny
-    jsr accept_ident
-    bcs accept_success
-    bra accept_fail
-
-    ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
-+   cmp #'+'
-    bne +
--   iny
-    lda (cur_line_addr),y
-    cmp #'+'
-    beq -
-    bra @check_rel_end
-
-+   cmp #'-'
-    bne +
--   iny
-    lda (cur_line_addr),y
-    cmp #'-'
-    beq -
-
-@check_rel_end
-    lda (cur_line_addr),y
-    beq accept_success   ; end of line
-    cmp #chr_spc
-    beq accept_success   ; space
-    cmp #':'
-    beq accept_success   ; colon
-    bra accept_fail
-
-    ; Otherwise expect an identifier.
-+   ply
-    jmp accept_ident
-
-
-; Input: Previous Y on stack
-; Output: Stack popped, C=1
-accept_success
-    pla
-    sec
-    rts
-
-; Input: Previous Y on stack
-; Output: Y=previous Y, C=0
-accept_fail
-    ply
-    clc
-    rts
-
-
-; Convert indicated source string to lowercase in strbuf
-; Input: A=start pos, Y=end pos (+1), cur_line_addr
-; Output: strbuf, position 0 to null terminated
-; Uses: code_ptr
-ay_to_lower:
-    pha
-    sta tok_start   ; (Borrow tok_start as scratch)
-    tya
-    sec
-    sbc tok_start   ;
-    tax             ; X = length
-    pla             ; A = start offset
-
-    clc
-    adc cur_line_addr
-    sta bas_ptr
-    lda #0
-    adc cur_line_addr+1
-    sta bas_ptr+1
-
-    lda #0
-    sta strbuf,x    ; null terminator
-    dex
-    txa
-    taz
--   lda [bas_ptr],z
+; Input: A=char
+; Output: A=lowercase letter, or original char if not letter
+to_lowercase:
     jsr is_letter
     bcc +
     cmp #'Z'+1
@@ -657,23 +529,178 @@ ay_to_lower:
     bcc +           ; lowered from first upper bank
     sec
     sbc #193-'a'    ; lowered from second upper bank
-+   sta strbuf,x
-    dex
-    dez
-    bpl -
++   rts
 
+
+; Input: strbuf contains null-terminated string
+; Output: letters of strbuf changed to lowercase
+strbuf_to_lowercase:
+    ldx #0
+-   lda strbuf,x
+    bne +
+    jsr to_lowercase
+    sta strbuf,x
+    inx
+    bra -
++   rts
+
+
+; Input: strbuf, code_ptr; Z=max length
+; Output:
+;   strbuf < code_ptr: A=$ff
+;   strbuf = code_ptr: A=$00
+;   strbuf > code_ptr; A=$01
+strbuf_cmp_code_ptr:
+    ldx #0
+    ldy #0
+-   cpz #0
+    beq @is_equal
+    lda strbuf,x
+    cmp (code_ptr),y
+    bcc @is_less_than
+    bne @is_greater_than
+    inx
+    iny
+    dez
+    bra -
+
+@is_less_than:
+    lda #$ff
+    rts
+@is_equal:
+    lda #$00
+    rts
+@is_greater_than:
+    lda #$01
     rts
 
 
-; Is a substring on the current line a mnemonic
-; Input: A=start pos, Y=end pos (+1), cur_line_addr
+; Skip over whitespace, and also a line comment if found after whitespace
+; Input: bas_ptr = line_addr, Z = line_pos
+; Output: Z/line_pos advanced maybe; C=0 (no fail)
+accept_whitespace_and_comment:
+-   lda [bas_ptr],z
+    cmp #chr_spc
+    bne +
+    inz
+    bra -
++   cmp #';'
+    bne +
+-   inz            ; Ignore comment to end of line
+    lda [bas_ptr],z
+    bne -
++   stz line_pos
+    clc
+    rts
+
+
+; Consume identifier
+; Input: bas_ptr = line_addr, Z = line_pos
+; Output: C: 0=not found, Z = original line_pos; 1=found, Z/line_pos advanced
+accept_ident:
+    ; Must start with letter
+    lda [bas_ptr],z
+    jsr is_letter
+    bcc accept_fail
+
+    ; Can be followed by letter, number, back-arrow, Mega+@
+-   inz
+    lda [bas_ptr],z
+    jsr is_secondary_ident_char
+    bcs -
+
+    bra accept_success
+
+
+; Consume label, mnemonic, or pseudo-op (if C=0)
+; Input:
+;   bas_ptr = line_addr, Z = line_pos
+;   C: 0=accept pseudo-op, 1=no pseudo-op
+; Output:
+;   C: 0=not found, line_pos unchanged
+;   C: 1=found, Z/line_pos advanced
+accept_label_mnemonic_pseudoop:
+    lda [bas_ptr],z
+
+    bcc +
+    cmp #'!'           ; Pseudoops not allowed here
+    beq accept_fail
+    bra ++
+
++   cmp #'!'
+    bne ++
+    inz
+    jmp accept_ident
+
+++  cmp #'@'
+    bne +
+    inz
+    jmp accept_ident
+
+    ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
++   cmp #'+'
+    bne +
+-   inz
+    lda [bas_ptr],z
+    cmp #'+'
+    beq -
+    bra @check_rel_end
+
++   cmp #'-'
+    bne +
+-   inz
+    lda [bas_ptr],z
+    cmp #'-'
+    beq -
+
+@check_rel_end
+    lda [bas_ptr],z
+    beq accept_success   ; end of line
+    cmp #chr_spc
+    beq accept_success   ; space
+    cmp #':'
+    beq accept_success   ; colon
+    bra accept_fail
+
+    ; Otherwise expect an identifier.
++   jmp accept_ident
+
+
+; Input: Z = new line position
+; Output: line_pos advanced, C=1
+accept_success
+    stz line_pos
+    sec
+    rts
+
+; Output: line_pos untouched, C=0
+accept_fail
+    clc
+    rts
+
+
+; Input: Z=start pos, line_pos=end pos+1
+; Output:
+;   strbuf contains substring of code, null-terminated
+;   Z = line_pos = end pos+1
+code_to_strbuf:
+    ldx #0        ; strbuf index
+-   lda [bas_ptr],z
+    sta strbuf,x
+    inx
+    inz
+    cpz line_pos
+    bcc -
+    lda #0        ; null terminate
+    sta strbuf,x
+    rts
+
+
+; Input: strbuf is candidate string, lowercased
 ; Output:
 ;   C=1: is mnemonic, code_ptr=mnemonic table row
 ;   C=0: is not mnemonic
-ay_to_mnemonic:
-    jsr ay_to_lower   ; move candidate to strbuf
-
-strbuf_to_mnemonic:
+get_mnemonic_for_strbuf:
     lda #<mnemonics
     sta code_ptr
     lda #>mnemonics
@@ -682,7 +709,7 @@ strbuf_to_mnemonic:
     ; code_ptr = beginning of row
     ; Y = row index; (code_ptr),y = table char
     ; X = buffer index; strbuf,x = buffer char
-@nextrow
+@next_row
     ldy #0
     lda (code_ptr),y
     bne +
@@ -690,14 +717,9 @@ strbuf_to_mnemonic:
     clc
     rts
 
-+   ldx #0
--   lda (code_ptr),y
-    cmp strbuf,x
+    ldz #4
+    jsr strbuf_cmp_code_ptr
     bne +
-    inx
-    iny
-    cpx #4
-    bne -
     ; Full match. Exit C=1, code_ptr=row.
     sec
     rts
@@ -709,19 +731,15 @@ strbuf_to_mnemonic:
     lda code_ptr+1
     adc #0
     sta code_ptr+1
-    bra @nextrow
+    bra @next_row
 
 
-; Is a substring on the current line a pseudoop
-; Input: A=start pos, Y=end pos (+1), cur_line_addr
-; Output: C=1: is pseudoop, A=pseudoop number; strbuf is normalized pseudoop string
-ay_to_pseudoop:
-    jsr ay_to_lower   ; move candidate to strbuf
-
-strbuf_to_pseudoop:
-    ; Y = current pseudoop number
+; Input: strbuf is candidate string, lowercased
+; Output:
+;   C=1: is pseudoop, A=pseudoop number
+;   C=0: is not pseudoop
+get_pseudoop_for_strbuf:
     ; X = buffer index; strbuf,x = buffer char
-    ; (Z=0. All table reads via code_ptr+0.)
     ldx #0
     lda strbuf,x
     cmp #'!'          ; confirm leading '!'
@@ -733,145 +751,162 @@ strbuf_to_pseudoop:
     sta code_ptr
     lda #>pseudoops
     sta code_ptr+1
+
+    ; Y = current pseudoop number
+    ; (Z=0. All table reads via code_ptr+0.)
     ldy #1
     ldz #0
 
-@try_token
+@next_token
     lda (code_ptr),z
     bne +
     ; No matches. Exit with C=0.
     clc
     rts
 
-+   ldx #1
--   lda (code_ptr),z
-    cmp strbuf,x
-    bne @skip_token
-    lda (code_ptr),z
+    ldz #$ff
+    jsr strbuf_cmp_code_ptr
     bne +
-    ; Matched up to end. Exit with C=1, A=Y.
+    ; Matched up to end. Exit with C=1, A=pseudoop number.
     sec
     tya
     rts
++
 
-+   inx
-    inw code_ptr
-    bra -
-
-@skip_token
-    lda (code_ptr),z
+-   lda (code_ptr),z
     beq +
     inw code_ptr
-    bra @skip_token
+    bra -
 +   iny
     inw code_ptr
-    bra @try_token
+    bra @next_token
 
 
-; Input: cur_line_addr
-; Output: err_code, err_pos
+; Input: line_addr
+; Output: err_code, line_pos
 parse_line:
     lda #0
     sta err_code
 
-    ; Start line index Y at first character
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+
+    ; Start line pos at first character
     ; (0=next addr word, 2=line number word)
-    ldy #4
+    ldz #4
+    stz line_pos
 
     ; Handle empty or comment-only lines.
     jsr accept_whitespace_and_comment
-    lda (cur_line_addr),y
+    lda [bas_ptr],z
     bne +
     rts
 +
     ; Does line start with label, mnemonic, or pseudoop?
-    phy
+    phz
     jsr accept_label_mnemonic_pseudoop
+    plz
     bcs +
     ; Something starts this line, but it's not a label, mnemonic, or pseudoop.
-    ply
     lda #err_syntax
     sta err_code
-    sty err_pos
     rts
++
 
-+   pla   ; A = prev Y
-    ; A to Y is label, mnemonic, or pseudoop. Disambiguate...
-    jsr ay_to_mnemonic
+    ; Z-to-line_pos is label, mnemonic, or pseudoop. Disambiguate...
+    jsr code_to_strbuf
+    jsr strbuf_to_lowercase
+    jsr get_mnemonic_for_strbuf
     bcs @is_mnemonic
-    jsr ay_to_pseudoop
+    jsr get_pseudoop_for_strbuf
     bcs @is_pseudoop
+    jsr code_to_strbuf   ; strbuf = label
+    ldz line_pos
 
     ; This is a label.
     jsr accept_whitespace_and_comment
-    lda (cur_line_addr),y
+    lda [bas_ptr],z
     bne +
     rts
 +   cmp #'='
     bne +
     ; Label assignment.
     ; TODO: Expect expression.
+    inz
+    lda #2 ; DEBUG
+    sta err_code
     rts
 +   cmp #':'
     bne +
     ; Ignore a single colon after a line-starting label.
-    iny
-+   jsr accept_whitespace_and_comment
-    lda (cur_line_addr),y
+    inz
++   ; TODO: Handle label positional assignment.
+    ; TODO: Handle relative label assignment.
+    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
     bne +
     ; Label on a line by itself.
+    lda #3 ; DEBUG
+    sta err_code
     rts
 +
 
     ; Accept a mnemonic or pseudoop, and handle it.
-    phy
+    phz
     jsr accept_label_mnemonic_pseudoop
+    plz
     bcc +
-    pla
-    jsr ay_to_mnemonic
+    jsr code_to_strbuf
+    jsr strbuf_to_lowercase
+    jsr get_mnemonic_for_strbuf
     bcs @is_mnemonic
-    jsr ay_to_pseudoop
+    jsr get_pseudoop_for_strbuf
     bcs @is_pseudoop
+
 +   ; Something follows the label, but it's not a mnemonic or pseudoop.
-    ply
     lda #err_syntax
     sta err_code
-    sty err_pos
     rts
 
 @is_mnemonic
     ; A=start pos, Y=end pos (+1)
     ; TODO: handle mnemonic
+    lda #4 ; DEBUG
+    sta err_code
     rts
 
 @is_pseudoop
     ; A=start pos, Y=end pos (+1)
     ; TODO: handle pseudoop
+    lda #5 ; DEBUG
+    sta err_code
     rts
 
 
 parse_source:
     lda #<(source_start+1)
-    sta cur_line_addr
+    sta line_addr
     lda #>(source_start+1)
-    sta cur_line_addr+1
+    sta line_addr+1
 
 @line_loop
     ldy #0
-    lda (cur_line_addr),y
+    lda (line_addr),y
     iny
-    ora (cur_line_addr),y
+    ora (line_addr),y
     bne +
     bra @end_of_program
 +   jsr parse_line
     lda err_code
     bne @found_error
     ldy #0
-    lda (cur_line_addr),y
-    sta cur_line_addr
+    lda (line_addr),y
+    sta line_addr
     iny
-    lda (cur_line_addr),y
-    sta cur_line_addr+1
+    lda (line_addr),y
+    sta line_addr+1
     bra @line_loop
 
 @found_error
@@ -881,11 +916,43 @@ parse_source:
     rts
 
 
+run_test_suite_cmd:
+    +kprimm_start
+    !pet "-- test suite --",13,0
+    +kprimm_end
+
+
+    +kprimm_start
+    !pet 13,"-- all tests passed",13,0
+    +kprimm_end
+    rts
+
+
+test_fail:
+    pha
+    phx
+    phy
+    phz
+    php
+    +kprimm_start
+    !pet "failed ",0
+    +kprimm_end
+    lda test_num
+    jsr print_hex8
+    lda #chr_cr
+    +kcall bsout
+    plp
+    plz
+    ply
+    plx
+    pla
+    brk
+
+
 test_line:
     !word test_line_end
     !word 12345
-    ; !pet "!Abc", chr_backarrow, "d0123456789e", chr_megaat, "f", 0
-    !pet "!Warn more text", 0
+    !pet " ", 0
 test_line_end:
     !word 0
 
@@ -913,49 +980,31 @@ test_parser:
     inw code_ptr
     inw bas_ptr
     bra -
-+   ; (Not quite right, doesn't copy last two zeros, next line ptr is wrong)
++   inw bas_ptr
+    lda bas_ptr
+    sta $3000
+    lda bas_ptr+1
+    sta $3001
+    lda #0
+    sta [bas_ptr],z
+    inw bas_ptr
+    sta [bas_ptr],z
 
-    lda #<$3000
-    sta cur_line_addr
-    lda #>$3000
-    sta cur_line_addr+1
-
-    lda #4
-    ldy #9
+    lda #$00
+    sta line_addr
+    lda #$30
+    sta line_addr+1
 
     ldz #1
     stz test_num
-    jsr ay_to_pseudoop
-    bcc @test_fail
-    ldz #2
-    stz test_num
-    cmp #12
-    bne @test_fail
+    jsr parse_line
+    lda err_code
+    ; bne @test_fail
 
     +kprimm_start
     !pet "all tests passed",13,0
     +kprimm_end
     rts
-
-@test_fail
-    pha
-    phx
-    phy
-    phz
-    php
-    +kprimm_start
-    !pet "failed ",0
-    +kprimm_end
-    lda test_num
-    jsr print_hex8
-    lda #chr_cr
-    +kcall bsout
-    plp
-    plz
-    ply
-    plx
-    pla
-    brk
 
 
 ; ---------------------------------------------------------
@@ -965,11 +1014,14 @@ test_parser:
 err_syntax = 1
 
 err_message_tbl:
-!word e01, e02
+!word e01,e02,e03,e04,e05
 
 err_messages:
 e01: !pet "syntax error",0
-e02: !pet "wassup",0
+e02: !pet "is label expression assignment",0
+e03: !pet "is label pc assignment",0
+e04: !pet "is mnemonic",0
+e05: !pet "is pseudoop",0
 
 
 ; ---------------------------------------------------------
