@@ -1238,14 +1238,26 @@ mnemonics:
 !byte 0
 
 ; Encoding lists
-; Single-byte encodings for each supported addressing mode, lsb to msb in the bitfield
+; Single-byte encodings for each supported addressing mode, msb to lsb in the bitfield
 ; Quad prefix $42 $42 and 32-bit Indirect prefix $ea are added in code.
-enc_adc : !byte $61, $65, $69, $6d, $71, $72, $75, $79, $7d, $72
+; Example:
+;   "adc",0,%01011011,%10011110
+;             ^ Immediate = $69
+;               ^ Base page = $65
+;                ^ Base page, X-indexed = $75
+;                  ^ Absolute = $6d
+;                   ^ Absolute, X-indexed = $7d
+;                      ^ Absolute, Y-indexed = $79
+;                         ^ Base-Page Indirect X-Indexed = $61
+;                          ^ Base-Page Indirect Y-Indexed = $71
+;                           ^ Base-Page Indirect Z-Indexed = $72
+;                            ^ 32-bit Base-Page Indirect Z-Indexed = ($EA) $72
+enc_adc : !byte $69, $65, $75, $6d, $7d, $79, $61, $71, $72, $72
 enc_adcq: !byte $65, $6d, $72, $72
-enc_and : !byte $21, $25, $29, $2d, $31, $32, $35, $39, $3d, $32
+enc_and : !byte $29, $25, $35, $2d, $3d, $39, $21, $31, $32, $32
 enc_andq: !byte $25, $2d, $32, $32
-enc_asl : !byte $06, $0a, $0e, $16, $1e
-enc_aslq: !byte $06, $0a, $0e, $16, $1e
+enc_asl : !byte $0a, $06, $16, $0e, $1e
+enc_aslq: !byte $0a, $06, $16, $0e, $1e
 enc_asr : !byte $43, $44, $54
 enc_asrq: !byte $43, $44, $54
 enc_asw : !byte $cb
@@ -1268,7 +1280,7 @@ enc_bbs7: !byte $ff
 enc_bcc : !byte $90, $93
 enc_bcs : !byte $b0, $b3
 enc_beq : !byte $f0, $f3
-enc_bit : !byte $24, $2c, $34, $3c, $89
+enc_bit : !byte $89, $24, $34, $2c, $3c
 enc_bitq: !byte $24, $2c
 enc_bmi : !byte $30, $33
 enc_bne : !byte $d0, $d3
@@ -1283,38 +1295,38 @@ enc_cld : !byte $d8
 enc_cle : !byte $02
 enc_cli : !byte $58
 enc_clv : !byte $b8
-enc_cmp : !byte $c1, $c5, $c9, $cd, $d1, $d2, $d5, $d9, $dd, $d2
+enc_cmp : !byte $c9, $c5, $d5, $cd, $dd, $d9, $c1, $d1, $d2, $d2
 enc_cmpq: !byte $c5, $cd, $d2, $d2
 enc_cpx : !byte $e0, $e4, $ec
 enc_cpy : !byte $c0, $c4, $cc
 enc_cpz : !byte $c2, $d4, $dc
-enc_dec : !byte $3a, $c6, $ce, $d6, $de
-enc_deq : !byte $3a, $c6, $ce, $d6, $de
+enc_dec : !byte $3a, $c6, $d6, $ce, $de
+enc_deq : !byte $3a, $c6, $d6, $ce, $de
 enc_dew : !byte $c3
 enc_dex : !byte $ca
 enc_dey : !byte $88
 enc_dez : !byte $3b
 enc_eom : !byte $ea
-enc_eor : !byte $41, $45, $49, $4d, $51, $52, $55, $59, $5d, $52
+enc_eor : !byte $49, $45, $55, $4d, $5d, $59, $41, $51, $52, $52
 enc_eorq: !byte $45, $4d, $52, $52
-enc_inc : !byte $1a, $e6, $ee, $f6, $fe
-enc_inq : !byte $1a, $e6, $ee, $f6, $fe
+enc_inc : !byte $1a, $e6, $f6, $ee, $fe
+enc_inq : !byte $1a, $e6, $f6, $ee, $fe
 enc_inw : !byte $e3
 enc_inx : !byte $e8
 enc_iny : !byte $c8
 enc_inz : !byte $1b
 enc_jmp : !byte $4c, $6c, $7c
 enc_jsr : !byte $20, $22, $23
-enc_lda : !byte $a1, $a5, $a9, $ad, $b1, $b2, $b5, $b9, $bd, $e2, $b2
+enc_lda : !byte $a9, $a5, $b5, $ad, $bd, $b9, $a1, $b1, $b2, $b2, $e2
 enc_ldq : !byte $a5, $ad, $b2, $b2
-enc_ldx : !byte $a2, $a6, $ae, $b6, $be
-enc_ldy : !byte $a0, $a4, $ac, $b4, $bc
+enc_ldx : !byte $a2, $a6, $b6, $ae, $be
+enc_ldy : !byte $a0, $a4, $b4, $ac, $bc
 enc_ldz : !byte $a3, $ab, $bb
-enc_lsr : !byte $46, $4a, $4e, $56, $5e
-enc_lsrq: !byte $46, $4a, $4e, $56, $5e
+enc_lsr : !byte $4a, $46, $56, $4e, $5e
+enc_lsrq: !byte $4a, $46, $56, $4e, $5e
 enc_map : !byte $5c
 enc_neg : !byte $42
-enc_ora : !byte $01, $05, $09, $0d, $11, $12, $15, $19, $1d, $12
+enc_ora : !byte $09, $05, $15, $0d, $1d, $19, $01, $11, $12, $12
 enc_orq : !byte $05, $0d, $12, $12
 enc_pha : !byte $48
 enc_php : !byte $08
@@ -1327,7 +1339,7 @@ enc_plp : !byte $28
 enc_plx : !byte $fa
 enc_ply : !byte $7a
 enc_plz : !byte $fb
-enc_resq: !byte $61, $71, $75, $79, $7d
+enc_resq: !byte $75, $7d, $79, $61, $71
 enc_rmb0: !byte $07
 enc_rmb1: !byte $17
 enc_rmb2: !byte $27
@@ -1336,15 +1348,15 @@ enc_rmb4: !byte $47
 enc_rmb5: !byte $57
 enc_rmb6: !byte $67
 enc_rmb7: !byte $77
-enc_rol : !byte $26, $2a, $2e, $36, $3e
-enc_rolq: !byte $26, $2a, $2e, $36, $3e
-enc_ror : !byte $66, $6a, $6e, $76, $7e
-enc_rorq: !byte $66, $6a, $6e, $76, $7e
+enc_rol : !byte $2a, $26, $36, $2e, $3e
+enc_rolq: !byte $2a, $26, $36, $2e, $3e
+enc_ror : !byte $6a, $66, $76, $6e, $7e
+enc_rorq: !byte $6a, $66, $76, $6e, $7e
 enc_row : !byte $eb
-enc_rsvq: !byte $e1, $82, $f1, $f5, $f9, $fd
+enc_rsvq: !byte $f5, $fd, $f9, $e1, $f1, $82
 enc_rti : !byte $40
 enc_rts : !byte $60, $62
-enc_sbc : !byte $e1, $e5, $e9, $ed, $f1, $f2, $f5, $f9, $fd, $f2
+enc_sbc : !byte $e9, $e5, $f5, $ed, $fd, $f9, $e1, $f1, $f2, $f2
 enc_sbcq: !byte $e5, $ed, $f2, $f2
 enc_sec : !byte $38
 enc_sed : !byte $f8
@@ -1358,10 +1370,10 @@ enc_smb4: !byte $c7
 enc_smb5: !byte $d7
 enc_smb6: !byte $e7
 enc_smb7: !byte $f7
-enc_sta : !byte $81, $82, $85, $8d, $91, $92, $95, $99, $9d, $92
+enc_sta : !byte $85, $95, $8d, $9d, $99, $81, $91, $92, $92, $82
 enc_stq : !byte $85, $8d, $92, $92
-enc_stx : !byte $86, $8e, $96, $9b
-enc_sty : !byte $84, $8b, $8c, $94
+enc_stx : !byte $86, $96, $8e, $9b
+enc_sty : !byte $84, $94, $8c, $8b
 enc_stz : !byte $64, $74, $9c, $9e
 enc_tab : !byte $5b
 enc_tax : !byte $aa
