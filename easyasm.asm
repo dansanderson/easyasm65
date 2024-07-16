@@ -537,7 +537,7 @@ to_lowercase:
 strbuf_to_lowercase:
     ldx #0
 -   lda strbuf,x
-    bne +
+    beq +
     jsr to_lowercase
     sta strbuf,x
     inx
@@ -559,6 +559,8 @@ strbuf_cmp_code_ptr:
     cmp (code_ptr),y
     bcc @is_less_than
     bne @is_greater_than
+    lda strbuf,x
+    beq @is_equal  ; null term before max length
     inx
     iny
     dez
@@ -916,37 +918,256 @@ parse_source:
     rts
 
 
-run_test_suite_cmd:
-    +kprimm_start
-    !pet "-- test suite --",13,0
-    +kprimm_end
+; ---------------------------------------------------------
+; Tests
+; Each test routine should brk on failure
 
-
-    +kprimm_start
-    !pet 13,"-- all tests passed",13,0
-    +kprimm_end
-    rts
-
-
-test_fail:
-    pha
-    phx
-    phy
-    phz
-    php
-    +kprimm_start
-    !pet "failed ",0
-    +kprimm_end
-    lda test_num
-    jsr print_hex8
-    lda #chr_cr
+!macro print_chr .chr {
+    lda #.chr
     +kcall bsout
-    plp
-    plz
-    ply
-    plx
-    pla
+}
+
+!macro print_strlit .strlit {
+    +kprimm_start
+    !pet .strlit,0
+    +kprimm_end
+}
+
+!macro print_strlit_line .strlit {
+    +kprimm_start
+    !pet .strlit,13,0
+    +kprimm_end
+}
+
+!macro test_start .tnum {
+    +print_strlit "  test "
+    lda #.tnum
+    jsr print_hex8
+}
+!macro test_end {
+    +print_strlit_line "... ok"
+}
+
+; Input: code_ptr = first char of null-terminated string
+; Output: strbuf = same string
+copy_ptr_to_strbuf:
+    ldx #0
+    ldy #0
+-   lda (code_ptr),y
+    sta strbuf,x
+    beq +
+    iny
+    inx
+    bra -
++   rts
+
+; Input: code_ptr = first char of null-terminated string
+; Output: Z=0 if matches strbuf exactly, otherwise Z=1
+match_ptr_strbuf:
+    ldx #0
+    ldy #0
+-   lda (code_ptr),y
+    cmp strbuf,x
+    bne +
+    cmp #0
+    beq +
+    iny
+    inx
+    bra -
++   rts
+
+!macro test_copy_to_strbuf .straddr {
+    lda #<.straddr
+    sta code_ptr
+    lda #>.straddr
+    sta code_ptr+1
+    jsr copy_ptr_to_strbuf
+}
+
+!macro test_match_strbuf .straddr {
+    lda #<.straddr
+    sta code_ptr
+    lda #>.straddr
+    sta code_ptr+1
+    jsr match_ptr_strbuf
+}
+
+!macro test_is_letter .tnum, .in_a, .eout_c {
+    +test_start .tnum
+
+    lda #.in_a
+    jsr is_letter
+!if .eout_c {
+    bcs +
+    +print_strlit_line "fail"
     brk
++
+} else {
+    bcc +
+    +print_strlit_line "fail"
+    brk
++
+}
+
+    +test_end
+}
+
+!macro test_is_secondary_ident_char .tnum, .in_a, .eout_c {
+    +test_start .tnum
+
+    lda #.in_a
+    jsr is_secondary_ident_char
+!if .eout_c {
+    bcs +
+    brk
++
+} else {
+    bcc +
+    brk
++
+}
+
+    +test_end
+}
+
+!macro test_strbuf_to_lowercase .tnum, .instraddr, .outstraddr {
+    +test_start .tnum
+    +test_copy_to_strbuf .instraddr
+    jsr strbuf_to_lowercase
+    +test_match_strbuf .outstraddr
+    beq +
+    brk
++
+    +test_end
+}
+
+test_strbuf_to_lowercase_2_in:   !pet "ABC",0
+test_strbuf_to_lowercase_3_in:   !pet "aBc",0
+test_strbuf_to_lowercase_1_out:  !pet "abc",0
+
+!macro test_strbuf_cmp_code_ptr .tnum, .astraddr, .bstraddr, .maxlen, .ea {
+    +test_start .tnum
+    +test_copy_to_strbuf .astraddr
+    lda #<.bstraddr
+    sta code_ptr
+    lda #>.bstraddr
+    sta code_ptr+1
+    ldz .maxlen
+    jsr strbuf_cmp_code_ptr
+    cmp #.ea
+    beq +
+    brk
++
+    +test_end
+}
+
+test_strbuf_cmp_code_ptr_abc:     !pet "abc",0
+test_strbuf_cmp_code_ptr_acb:     !pet "acb",0
+test_strbuf_cmp_code_ptr_abcd:     !pet "abcd",0
+
+!macro test_accept_whitespace_and_comment .tnum, .basptr, .pos, .epos {
+    +test_start .tnum
+    lda #<.basptr
+    sta bas_ptr
+    lda #>.basptr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #.pos
+    jsr accept_whitespace_and_comment
+    cpz #.epos
+    beq +
+    +print_strlit_line "... fail??"
+    brk
++
+    +test_end
+}
+
+test_accept_whitespace_and_comment_empty_line:
+    !word +
+    !word 12345
+    !pet 0
++   !word 0
+
+test_accept_whitespace_and_comment_comment:
+    !word +
+    !word 12345
+    !pet "   ; comment ; with ; semicolons", 0
++   !word 0
+test_accept_whitespace_and_comment_comment_length = len("   ; comment ; with ; semicolons")
+
+test_accept_whitespace_and_comment_space_then_stuff:
+    !word +
+    !word 12345
+    !pet "   stuff", 0
++   !word 0
+
+
+run_test_suite_cmd:
+    +print_strlit_line "-- test suite --"
+
+    +print_chr chr_cr
+    +print_strlit_line "is-letter"
+    +test_is_letter $01, 'A', 1
+    +test_is_letter $02, 'B', 1
+    +test_is_letter $03, 'Z', 1
+    +test_is_letter $04, 'a', 1
+    +test_is_letter $05, 'b', 1
+    +test_is_letter $06, 'z', 1
+    +test_is_letter $07, 193, 1
+    +test_is_letter $08, 194, 1
+    +test_is_letter $09, 218, 1
+    +test_is_letter $0A, '@', 0
+    +test_is_letter $0B, '0', 0
+    +test_is_letter $0C, '9', 0
+    +test_is_letter $0D, ']', 0
+    +test_is_letter $0E, chr_backarrow, 0
+    +test_is_letter $0F, chr_megaat, 0
+    +test_is_letter $10, $e1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "is-secondary-ident-char"
+    +test_is_secondary_ident_char $01, 'A', 1
+    +test_is_secondary_ident_char $02, 'B', 1
+    +test_is_secondary_ident_char $03, 'Z', 1
+    +test_is_secondary_ident_char $04, 'a', 1
+    +test_is_secondary_ident_char $05, 'b', 1
+    +test_is_secondary_ident_char $06, 'z', 1
+    +test_is_secondary_ident_char $07, '0', 1
+    +test_is_secondary_ident_char $08, '9', 1
+    +test_is_secondary_ident_char $09, 193, 1
+    +test_is_secondary_ident_char $0A, 194, 1
+    +test_is_secondary_ident_char $0B, 218, 1
+    +test_is_secondary_ident_char $0C, chr_backarrow, 1
+    +test_is_secondary_ident_char $0D, chr_megaat, 1
+    +test_is_secondary_ident_char $0E, '@', 0
+    +test_is_secondary_ident_char $0F, ']', 0
+    +test_is_secondary_ident_char $10, $e1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "strbuf-to-lowercase"
+    +test_strbuf_to_lowercase $01, test_strbuf_to_lowercase_1_out, test_strbuf_to_lowercase_1_out
+    +test_strbuf_to_lowercase $02, test_strbuf_to_lowercase_2_in, test_strbuf_to_lowercase_1_out
+    +test_strbuf_to_lowercase $03, test_strbuf_to_lowercase_3_in, test_strbuf_to_lowercase_1_out
+
+    +print_chr chr_cr
+    +print_strlit_line "strbuf-cmp-code-ptr"
+    +test_strbuf_cmp_code_ptr $01, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abc, 3, $00
+    +test_strbuf_cmp_code_ptr $02, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abc, 6, $00
+    +test_strbuf_cmp_code_ptr $03, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_acb, 3, $ff
+    +test_strbuf_cmp_code_ptr $04, test_strbuf_cmp_code_ptr_acb, test_strbuf_cmp_code_ptr_abc, 3, $01
+    +test_strbuf_cmp_code_ptr $05, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abcd, 4, $ff
+    +test_strbuf_cmp_code_ptr $06, test_strbuf_cmp_code_ptr_abcd, test_strbuf_cmp_code_ptr_abc, 4, $01
+
+    +print_chr chr_cr
+    +print_strlit_line "accept-whitespace-and-comment"
+    +test_accept_whitespace_and_comment $01, test_accept_whitespace_and_comment_empty_line, 4, 4
+    +test_accept_whitespace_and_comment $02, test_accept_whitespace_and_comment_comment, 4, 4+test_accept_whitespace_and_comment_comment_length
+    +test_accept_whitespace_and_comment $03, test_accept_whitespace_and_comment_space_then_stuff, 4, 7
+
+    +print_chr chr_cr
+    +print_strlit_line "-- all tests passed --"
+    rts
 
 
 test_line:
