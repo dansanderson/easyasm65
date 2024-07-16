@@ -545,13 +545,12 @@ strbuf_to_lowercase:
 +   rts
 
 
-; Input: strbuf, code_ptr; Z=max length
+; Input: strbuf, code_ptr; X=strbuf start pos, Z=max length
 ; Output:
 ;   strbuf < code_ptr: A=$ff
 ;   strbuf = code_ptr: A=$00
 ;   strbuf > code_ptr; A=$01
 strbuf_cmp_code_ptr:
-    ldx #0
     ldy #0
 -   cpz #0
     beq @is_equal
@@ -597,13 +596,18 @@ accept_whitespace_and_comment:
 
 
 ; Consume identifier
-; Input: bas_ptr = line_addr, Z = line_pos
+; Input:
+;   bas_ptr = line_addr
+;   Z = line_pos
+;   C: 0=must start with letter, 1=allow non-letter start
 ; Output: C: 0=not found, Z = original line_pos; 1=found, Z/line_pos advanced
 accept_ident:
+    bcs +
     ; Must start with letter
     lda [bas_ptr],z
     jsr is_letter
     bcc accept_fail
++
 
     ; Can be followed by letter, number, back-arrow, Mega+@
 -   inz
@@ -632,11 +636,13 @@ accept_label_mnemonic_pseudoop:
 +   cmp #'!'
     bne ++
     inz
+    sec
     jmp accept_ident
 
 ++  cmp #'@'
     bne +
     inz
+    clc
     jmp accept_ident
 
     ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
@@ -665,7 +671,8 @@ accept_label_mnemonic_pseudoop:
     bra accept_fail
 
     ; Otherwise expect an identifier.
-+   jmp accept_ident
++   clc
+    jmp accept_ident
 
 
 ; Input: Z = new line position
@@ -681,7 +688,7 @@ accept_fail
     rts
 
 
-; Input: Z=start pos, line_pos=end pos+1
+; Input: bas_ptr, Z=start pos, line_pos=end pos+1
 ; Output:
 ;   strbuf contains substring of code, null-terminated
 ;   Z = line_pos = end pos+1
@@ -709,8 +716,6 @@ get_mnemonic_for_strbuf:
     sta code_ptr+1
 
     ; code_ptr = beginning of row
-    ; Y = row index; (code_ptr),y = table char
-    ; X = buffer index; strbuf,x = buffer char
 @next_row
     ldy #0
     lda (code_ptr),y
@@ -718,15 +723,16 @@ get_mnemonic_for_strbuf:
     ; No match in table. Exit C=0.
     clc
     rts
-
++
     ldz #4
+    ldx #0
     jsr strbuf_cmp_code_ptr
     bne +
     ; Full match. Exit C=1, code_ptr=row.
     sec
     rts
-
-+   lda code_ptr    ; advance row
++
+    lda code_ptr    ; advance row
     clc
     adc #8
     sta code_ptr
@@ -748,8 +754,8 @@ get_pseudoop_for_strbuf:
     beq +
     clc
     rts
-
-+   lda #<pseudoops
++
+    lda #<pseudoops
     sta code_ptr
     lda #>pseudoops
     sta code_ptr+1
@@ -757,25 +763,29 @@ get_pseudoop_for_strbuf:
     ; Y = current pseudoop number
     ; (Z=0. All table reads via code_ptr+0.)
     ldy #1
-    ldz #0
 
 @next_token
+    ldz #0
     lda (code_ptr),z
     bne +
     ; No matches. Exit with C=0.
     clc
     rts
++
 
     ldz #$ff
+    ldx #1
+    phy
     jsr strbuf_cmp_code_ptr
     bne +
     ; Matched up to end. Exit with C=1, A=pseudoop number.
+    pla
     sec
-    tya
     rts
-+
++   ply
 
--   lda (code_ptr),z
+-   ldz #0
+    lda (code_ptr),z
     beq +
     inw code_ptr
     bra -
@@ -950,6 +960,8 @@ parse_source:
 
 ; Input: code_ptr = first char of null-terminated string
 ; Output: strbuf = same string
+; (This is similar to code_to_strbuf except it copies from code
+; memory, i.e. test data.)
 copy_ptr_to_strbuf:
     ldx #0
     ldy #0
@@ -1053,6 +1065,7 @@ test_strbuf_to_lowercase_1_out:  !pet "abc",0
     lda #>.bstraddr
     sta code_ptr+1
     ldz .maxlen
+    ldx #0
     jsr strbuf_cmp_code_ptr
     cmp #.ea
     beq +
@@ -1077,7 +1090,6 @@ test_strbuf_cmp_code_ptr_abcd:     !pet "abcd",0
     jsr accept_whitespace_and_comment
     cpz #.epos
     beq +
-    +print_strlit_line "... fail??"
     brk
 +
     +test_end
@@ -1101,6 +1113,164 @@ test_accept_whitespace_and_comment_space_then_stuff:
     !word 12345
     !pet "   stuff", 0
 +   !word 0
+
+!macro test_accept_ident .tnum, .basptr, .c, .ec, .ez {
+    +test_start .tnum
+    lda #<.basptr
+    sta bas_ptr
+    lda #>.basptr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #0
+!if .c {
+    sec
+} else {
+    clc
+}
+    jsr accept_ident
+!if .ec {
+    bcs +
+    brk
++
+} else {
+    bcc +
+    brk
++
+}
+    cpz #.ez
+    beq +
+    brk
++
+    +test_end
+}
+
+test_accept_ident_1: !pet "label  ",0
+test_accept_ident_2: !pet "label", chr_backarrow, "12", chr_megaat, "3  ",0
+test_accept_ident_3: !pet "0label",0
+test_accept_ident_4: !pet "!label",0
+test_accept_ident_5: !pet "@label",0
+test_accept_ident_6: !pet "+",0
+test_accept_ident_7: !pet "++++",0
+test_accept_ident_8: !pet "-",0
+test_accept_ident_9: !pet "----",0
+test_accept_ident_10: !pet "++++:",0
+test_accept_ident_11: !pet "++++ ",0
+test_accept_ident_12: !pet "!!label",0
+
+!macro test_accept_label_mnemonic_pseudoop .tnum, .basptr, .c, .ec, .ez {
+    +test_start .tnum
+    lda #<.basptr
+    sta bas_ptr
+    lda #>.basptr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #0
+!if .c {
+    sec
+} else {
+    clc
+}
+    jsr accept_label_mnemonic_pseudoop
+!if .ec {
+    bcs +
+    brk
++
+} else {
+    bcc +
+    brk
++
+}
+    cpz #.ez
+    beq +
+    brk
++
+    +test_end
+}
+
+!macro test_code_to_strbuf .tnum, .basptr, .pos, .endpos, .eptr, .ez {
+    +test_start .tnum
+    lda #<.basptr
+    sta bas_ptr
+    lda #>.basptr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #.endpos
+    stz line_pos
+    ldz #.pos
+    jsr code_to_strbuf
+    +test_match_strbuf .eptr
+    beq +
+    brk
++
+    cpz #.ez
+    beq +
+    brk
++
+    +test_end
+}
+
+!macro test_get_mnemonic_for_strbuf .tnum, .straddr, .ec, .erowaddr {
+    +test_start .tnum
+    +test_copy_to_strbuf .straddr
+    clc
+    jsr get_mnemonic_for_strbuf
+!if .ec {
+    bcs +
+    brk
++
+    lda code_ptr
+    cmp #<.erowaddr
+    beq +
+    brk
++
+    lda code_ptr+1
+    cmp #>.erowaddr
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++
+}
+    +test_end
+}
+
+test_get_mnemonic_for_strbuf_1: !pet "cpq",0
+test_get_mnemonic_for_strbuf_2: !pet "adc",0
+test_get_mnemonic_for_strbuf_3: !pet "ggg",0
+test_get_mnemonic_for_strbuf_4: !pet "ldax",0
+
+!macro test_get_pseudoop_for_strbuf .tnum, .straddr, .ec, .ea {
+    +test_start .tnum
+    +test_copy_to_strbuf .straddr
+    jsr get_pseudoop_for_strbuf
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail ec should be 1, is 0"
+    brk
++   cmp #.ea
+    beq +
+    +print_strlit_line "... wrong a"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail ec should be 0, is 1"
+    brk
++
+}
+    +test_end
+}
+
+test_get_pseudoop_for_strbuf_1: !pet "!to",0
+test_get_pseudoop_for_strbuf_2: !pet "!warn",0
+test_get_pseudoop_for_strbuf_3: !pet "!8",0
+test_get_pseudoop_for_strbuf_4: !pet "warn",0
+test_get_pseudoop_for_strbuf_5: !pet "lda",0
 
 
 run_test_suite_cmd:
@@ -1164,6 +1334,50 @@ run_test_suite_cmd:
     +test_accept_whitespace_and_comment $01, test_accept_whitespace_and_comment_empty_line, 4, 4
     +test_accept_whitespace_and_comment $02, test_accept_whitespace_and_comment_comment, 4, 4+test_accept_whitespace_and_comment_comment_length
     +test_accept_whitespace_and_comment $03, test_accept_whitespace_and_comment_space_then_stuff, 4, 7
+
+    +print_chr chr_cr
+    +print_strlit_line "accept-ident"
+    +test_accept_ident $01, test_accept_ident_1, 0, 1, 5
+    +test_accept_ident $02, test_accept_ident_2, 0, 1, 10
+    +test_accept_ident $03, test_accept_ident_3, 0, 0, 0
+    +test_accept_ident $04, test_accept_ident_4, 0, 0, 0
+    +test_accept_ident $05, test_accept_ident_4, 1, 1, 6
+    +test_accept_ident $06, test_accept_ident_5, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "accept-label-mnemonic-pseudoop"
+    +test_accept_label_mnemonic_pseudoop $01, test_accept_ident_1, 0, 1, 5
+    +test_accept_label_mnemonic_pseudoop $02, test_accept_ident_2, 0, 1, 10
+    +test_accept_label_mnemonic_pseudoop $03, test_accept_ident_3, 0, 0, 0
+    +test_accept_label_mnemonic_pseudoop $04, test_accept_ident_4, 0, 1, 6
+    +test_accept_label_mnemonic_pseudoop $04, test_accept_ident_4, 1, 0, 0
+    +test_accept_label_mnemonic_pseudoop $05, test_accept_ident_5, 0, 1, 6
+    +test_accept_label_mnemonic_pseudoop $06, test_accept_ident_6, 0, 1, 1
+    +test_accept_label_mnemonic_pseudoop $07, test_accept_ident_7, 0, 1, 4
+    +test_accept_label_mnemonic_pseudoop $08, test_accept_ident_8, 0, 1, 1
+    +test_accept_label_mnemonic_pseudoop $09, test_accept_ident_9, 0, 1, 4
+    +test_accept_label_mnemonic_pseudoop $0A, test_accept_ident_10, 0, 1, 4
+    +test_accept_label_mnemonic_pseudoop $0B, test_accept_ident_11, 0, 1, 4
+    +test_accept_label_mnemonic_pseudoop $0C, test_accept_ident_12, 1, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "code-to-strbuf"
+    +test_code_to_strbuf $01, test_accept_whitespace_and_comment_comment, 4, 37, test_accept_whitespace_and_comment_comment+4, 37
+
+    +print_chr chr_cr
+    +print_strlit_line "get-mnemonic-for-strbuf"
+    +test_get_mnemonic_for_strbuf $01, test_get_mnemonic_for_strbuf_1, 1, mnemonics+(45*8)
+    +test_get_mnemonic_for_strbuf $02, test_get_mnemonic_for_strbuf_2, 1, mnemonics
+    +test_get_mnemonic_for_strbuf $03, test_get_mnemonic_for_strbuf_3, 0, 0
+    +test_get_mnemonic_for_strbuf $04, test_get_mnemonic_for_strbuf_4, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "get-pseudoop-for-strbuf"
+    +test_get_pseudoop_for_strbuf $01, test_get_pseudoop_for_strbuf_1, 1, 1
+    +test_get_pseudoop_for_strbuf $02, test_get_pseudoop_for_strbuf_2, 1, 12
+    +test_get_pseudoop_for_strbuf $03, test_get_pseudoop_for_strbuf_3, 1, 3
+    +test_get_pseudoop_for_strbuf $04, test_get_pseudoop_for_strbuf_4, 0, 0
+    +test_get_pseudoop_for_strbuf $05, test_get_pseudoop_for_strbuf_5, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
@@ -1359,6 +1573,8 @@ mnemonics:
 !pet "cmp",0,%01011011,%10011110
 !word enc_cmp
 !pet "cmpq" ,%00010010,%00000110
+!word enc_cmpq
+!pet "cpq",0,%00010010,%00000110
 !word enc_cmpq
 !pet "cpx",0,%01010010,%00000000
 !word enc_cpx
