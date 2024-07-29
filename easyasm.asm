@@ -28,12 +28,9 @@ easyasm_base_page = $1e
 
 * = $f2
 
-; Parser
-line_pos        *=*+1
-err_code        *=*+1
-line_addr       *=*+2
-
-; General purpose
+line_pos        *=*+1   ; Offset of line_addr
+err_code        *=*+1   ; Error code; 0=no error
+line_addr       *=*+2   ; Addr of current BASIC line
 code_ptr        *=*+2   ; 16-bit pointer, CPU
 attic_ptr       *=*+4   ; 32-bit pointer, Attic
 bas_ptr         *=*+4   ; 32-bit pointer, bank 0
@@ -146,7 +143,7 @@ assemble_to_memory_cmd:
     +kprimm_end
 
     jsr stash_source
-    jsr parse_source
+    jsr assemble_source
     ; TODO: the rest of the owl
 
     jsr restore_source
@@ -159,7 +156,7 @@ assemble_to_disk_cmd:
     +kprimm_end
 
     jsr stash_source
-    jsr parse_source
+    jsr assemble_source
     ; TODO: the rest of the owl
 
     rts
@@ -796,7 +793,7 @@ get_pseudoop_for_strbuf:
 
 ; Input: line_addr
 ; Output: err_code, line_pos
-parse_line:
+assemble_line:
     lda #0
     sta err_code
 
@@ -816,7 +813,7 @@ parse_line:
     bne +
     rts
 +
-    ; Does line start with label, mnemonic, or pseudoop?
+    ; Accept a label, menmonic, or pseudoop.
     phz
     jsr accept_label_mnemonic_pseudoop
     plz
@@ -825,23 +822,30 @@ parse_line:
     lda #err_syntax
     sta err_code
     rts
+
++   jsr assemble_mnemonic_or_pseudoop
+    bcc +
+    rts
 +
-
-    ; Z-to-line_pos is label, mnemonic, or pseudoop. Disambiguate...
-    jsr code_to_strbuf
-    jsr strbuf_to_lowercase
-    jsr get_mnemonic_for_strbuf
-    bcs @is_mnemonic
-    jsr get_pseudoop_for_strbuf
-    bcs @is_pseudoop
-    jsr code_to_strbuf   ; strbuf = label
-    ldz line_pos
-
     ; This is a label.
+    jsr code_to_strbuf   ; strbuf = label
     jsr accept_whitespace_and_comment
     lda [bas_ptr],z
+    cmp #':'
     bne +
+    ; Ignore a single colon after a line-starting label.
+    inz
+    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
++   cmp #0
+    bne +
+    ; Positional label on a line by itself.
+    ; TODO: Handle label positional assignment.
+    ; TODO: Handle relative label assignment.
+    lda #3 ; DEBUG
+    sta err_code
     rts
+
 +   cmp #'='
     bne +
     ; Label assignment.
@@ -850,54 +854,62 @@ parse_line:
     lda #2 ; DEBUG
     sta err_code
     rts
-+   cmp #':'
-    bne +
-    ; Ignore a single colon after a line-starting label.
-    inz
-+   ; TODO: Handle label positional assignment.
+
++   ; Positional label on a line with other stuff.
+    ; TODO: Handle label positional assignment.
     ; TODO: Handle relative label assignment.
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-    bne +
-    ; Label on a line by itself.
-    lda #3 ; DEBUG
-    sta err_code
-    rts
-+
 
     ; Accept a mnemonic or pseudoop, and handle it.
     phz
     jsr accept_label_mnemonic_pseudoop
     plz
     bcc +
-    jsr code_to_strbuf
-    jsr strbuf_to_lowercase
-    jsr get_mnemonic_for_strbuf
-    bcs @is_mnemonic
-    jsr get_pseudoop_for_strbuf
-    bcs @is_pseudoop
+    phz
+    jsr assemble_mnemonic_or_pseudoop
+    plz
+    bcc +
+    rts
 
 +   ; Something follows the label, but it's not a mnemonic or pseudoop.
+    stz line_pos
     lda #err_syntax
     sta err_code
     rts
 
-@is_mnemonic
+
+; Input: Z-to-line_pos is candidate
+; Output:
+;   C=0: text is neither mnemonic nor pseudoop
+;   C=1: assembled mnemonic or pseudoop, Z/line_pos advanced
+assemble_mnemonic_or_pseudoop:
+    ; Z-to-line_pos is label, mnemonic, or pseudoop. Disambiguate...
+    jsr code_to_strbuf
+    jsr strbuf_to_lowercase
+    jsr get_mnemonic_for_strbuf
+    bcs @assemble_mnemonic
+    jsr get_pseudoop_for_strbuf
+    bcs @assemble_pseudoop
+    clc
++   rts
+
+@assemble_mnemonic
     ; A=start pos, Y=end pos (+1)
     ; TODO: handle mnemonic
     lda #4 ; DEBUG
     sta err_code
+    sec
     rts
 
-@is_pseudoop
+@assemble_pseudoop
     ; A=start pos, Y=end pos (+1)
     ; TODO: handle pseudoop
     lda #5 ; DEBUG
     sta err_code
+    sec
     rts
 
 
-parse_source:
+assemble_source:
     lda #<(source_start+1)
     sta line_addr
     lda #>(source_start+1)
@@ -910,7 +922,7 @@ parse_source:
     ora (line_addr),y
     bne +
     bra @end_of_program
-+   jsr parse_line
++   jsr assemble_line
     lda err_code
     bne @found_error
     ldy #0
@@ -1432,6 +1444,26 @@ po_warn = 12
 !pet "warn",0
 !byte 0
 
+; Index: PETSCII code, value: screen code
+; Untranslatable characters become spaces.
+scr_table:
+!scr $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+!scr $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+!scr ' ', '!', $22, '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/'
+!scr '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?'
+!scr '@', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o'
+!scr 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '[', $1c, ']', $1e, $1f
+!scr $40, 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'
+!scr 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', $5b, $5c, $5d, $5e, $5f
+!scr $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+!scr $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20, $20
+!scr $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $6a, $6b, $6c, $6d, $6e, $6f
+!scr $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $7e, $7f
+!scr $40, 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'
+!scr 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', $5b, $5c, $5d, $5e, $5f
+!scr $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $6a, $6b, $6c, $6d, $6e, $6f
+!scr $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $7e, $7f
+
 
 ; ---------------------------------------------------------
 ; Tests
@@ -1516,12 +1548,10 @@ match_ptr_strbuf:
     jsr is_letter
 !if .eout_c {
     bcs +
-    +print_strlit_line "fail"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "fail"
     brk
 +
 }
@@ -1777,6 +1807,52 @@ test_get_pseudoop_for_strbuf_3: !pet "!8",0
 test_get_pseudoop_for_strbuf_4: !pet "warn",0
 test_get_pseudoop_for_strbuf_5: !pet "lda",0
 
+!macro test_assemble_line .tnum, .lineaddr, .ecode, .epos {
+    +test_start .tnum
+
+    lda #$05
+    sta bas_ptr+2   ; Test code in bank 5
+    lda #<(.lineaddr-4)
+    sta line_addr
+    lda #>(.lineaddr-4)
+    sta line_addr+1
+    jsr assemble_line
+    lda err_code
+    cmp #.ecode
+    beq +
+    +print_strlit_line "... fail, unexpected errcode"
+    brk
++   lda err_code
+    beq +
+    lda line_pos
+    cmp #.epos
+    beq +
+    +print_strlit_line "... fail, unexpected line pos"
+    brk
++
+    +test_end
+}
+
+test_assemble_line_1: !pet 0
+test_assemble_line_2: !pet "   ",0
+test_assemble_line_3: !pet "   ; comment",0
+test_assemble_line_4: !pet "label",0
+test_assemble_line_5: !pet "label:",0
+test_assemble_line_6: !pet "+++",0
+test_assemble_line_7: !pet "+++:",0
+test_assemble_line_8: !pet "label = 12345",0
+test_assemble_line_9: !pet "lda #1",0
+test_assemble_line_10: !pet "inx",0
+test_assemble_line_11: !pet "   lda #1  ; comment",0
+test_assemble_line_12: !pet "label lda #1",0
+test_assemble_line_13: !pet "label: lda #1",0
+test_assemble_line_14: !pet "label: lda #1  ; comment",0
+test_assemble_line_15: !pet "label: Lda #1  ; comment",0
+test_assemble_line_16: !pet "!to \"filename\",cbm",0
+test_assemble_line_17: !pet "!TO \"filename\",cbm",0
+test_assemble_line_18: !pet "!8 1,2,3",0
+test_assemble_line_19: !pet "label problem",0
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -1885,67 +1961,30 @@ run_test_suite_cmd:
     +test_get_pseudoop_for_strbuf $05, test_get_pseudoop_for_strbuf_5, 0, 0
 
     +print_chr chr_cr
+    +print_strlit_line "assemble-line"
+    +test_assemble_line $01, test_assemble_line_1, 0, 0
+    +test_assemble_line $02, test_assemble_line_2, 0, 0
+    +test_assemble_line $03, test_assemble_line_3, 0, 0
+    +test_assemble_line $04, test_assemble_line_4, 3, 9
+    +test_assemble_line $05, test_assemble_line_5, 3, 10
+    +test_assemble_line $06, test_assemble_line_6, 3, 7
+    +test_assemble_line $07, test_assemble_line_7, 3, 8
+    +test_assemble_line $08, test_assemble_line_8, 2, 10
+    +test_assemble_line $09, test_assemble_line_9, 4, 7
+    +test_assemble_line $0a, test_assemble_line_10, 4, 7
+    +test_assemble_line $0b, test_assemble_line_11, 4, 10
+    +test_assemble_line $0c, test_assemble_line_12, 4, 13
+    +test_assemble_line $0d, test_assemble_line_13, 4, 14
+    +test_assemble_line $0e, test_assemble_line_14, 4, 14
+    +test_assemble_line $0f, test_assemble_line_15, 4, 14
+    +test_assemble_line $10, test_assemble_line_16, 5, 7
+    +test_assemble_line $11, test_assemble_line_17, 5, 7
+    +test_assemble_line $12, test_assemble_line_18, 5, 6
+    +test_assemble_line $13, test_assemble_line_19, 1, 10
+
+    +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
     rts
-
-
-test_line:
-    !word test_line_end
-    !word 12345
-    !pet " ", 0
-test_line_end:
-    !word 0
-
-test_num:
-    !byte 0
-
-test_parser:
-    +kprimm_start
-    !pet "hey there, i'm gonna test some stuff",13,0
-    +kprimm_end
-
-    lda #<test_line
-    sta code_ptr
-    lda #>test_line
-    sta code_ptr+1
-    lda #<$3000
-    sta bas_ptr
-    lda #>$3000
-    sta bas_ptr+1
-    ldz #0
-    ldy #0
--   lda (code_ptr),y
-    sta [bas_ptr],z
-    beq +
-    inw code_ptr
-    inw bas_ptr
-    bra -
-+   inw bas_ptr
-    lda bas_ptr
-    sta $3000
-    lda bas_ptr+1
-    sta $3001
-    lda #0
-    sta [bas_ptr],z
-    inw bas_ptr
-    sta [bas_ptr],z
-
-    lda #$00
-    sta line_addr
-    lda #$30
-    sta line_addr+1
-
-    ldz #1
-    stz test_num
-    jsr parse_line
-    lda err_code
-    ; bne @test_fail
-
-    +kprimm_start
-    !pet "all tests passed",13,0
-    +kprimm_end
-    rts
-
 
 ; ---------------------------------------------------------
 

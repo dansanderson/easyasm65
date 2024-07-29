@@ -8,7 +8,7 @@ Features:
 * Maintains a minimal memory footprint when running your program or during editing, so you can use the full power of your computer.
 * Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
 * Assembles to memory for testing, or to disk files for distribution.
-* Can produce a single-file bootstrap loader.
+* Can produce a single-file bootstrap loader as part of your program.
 * Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
 
@@ -16,43 +16,9 @@ EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
 ## Project status and roadmap
 
-PROJECT STATUS: **IN PROGRESS**
+This is EasyAsm version 0.1.
 
-- [ ] Unit test framework
-- [ ] Parser, with syntax errors
-  - [ ] Skip empty line
-  - [ ] Ignore comment
-  - [ ] Instructions, one addressing mode, literals
-  - [ ] All literal syntaxes
-  - [ ] All addressing modes
-  - [ ] Label / PC assignment
-  - [ ] Labelled instruction, colon optional
-  - [ ] Label argument
-  - [ ] Expressions
-- [ ] Assemble: single pass, literals only, no branching, no ZP
-- [ ] ZP addressing modes
-  - [ ] By argument value
-  - [ ] By literal syntax
-  - [ ] By +1/+2 syntax
-- [ ] 8-bit branching; error on oversize branch
-- [ ] Label assignment
-- [ ] Labels as arguments; two-pass
-  - [ ] Track 16-bit address syntax in assignment, for ZP addressing
-- [ ] Evaluate expressions
-- [ ] Read PC `*` in expressions
-- [ ] Assign PC `*` once at start
-- [ ] Assemble to memory workflow
-- [ ] Assemble to disk, single-segment: `!to "...", <mode>`
-  - [ ] `cbm`
-  - [ ] `raw`
-  - [ ] `runnable`, no PC assignment
-- [ ] `!byte`, `!8`
-- [ ] `!word`, `!16`
-- [ ] `!32`
-- [ ] `!fill`
-- [ ] `!pet`
-- [ ] `!scr`
-- [ ] `!warn`
+**All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
 Release 0.1:
 * Single segment programs only: one `!to` and up to one `* = ...` per source file
@@ -261,7 +227,7 @@ A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 | A line contains... | BASIC commands | Text |
 | File type for DLOAD and DSAVE | PRG | SEQ |
 | Saves line numbers to disk | Yes | No |
-| Allows blank lines | No | Yes |
+| Allows blank lines (with Shift+Space) | No | Yes |
 | To display a file without loading it: | `LIST "FNAME"` | `TYPE "FNAME"` |
 
 
@@ -272,7 +238,9 @@ EasyAsm tries to maintain a minimal memory footprint while you are editing your 
 Of course, EasyAsm has to live somewhere. This is what EasyAsm needs:
 
 * EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8700000-$87FFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
-* EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you call an EasyAsm function with `SYS`. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running.
+* EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you invoke EasyAsm. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running.
+
+As a safety precaution, EasyAsm will not assemble to addresses $1E00-$1EFF when assembling to memory. This restriction does not apply when assembling to disk.
 
 EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
@@ -280,13 +248,12 @@ EasyAsm uses program memory ($2001-$F6FF) in three ways:
 2. While you are editing source code in Edit mode, your source code occupies program memory. EasyAsm expects to find it there when you invoke the assembler.
 3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program to machine code, and installs your machine code in program memory. It runs from this location, as it would when a user loads and runs your program. If the program exits with `RTS`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
 
-Everything else is up to you.
-
 > **Note:** EasyAsm keeps its own code in Attic RAM while not in use, and copies itself to bank 5 when performing operations. Attic RAM is not included in MEGA65 Freezer states. It is safe to use the Freezer during an EasyAsm session, but if you start a new session restored from a freeze state, you must run the EasyAsm installer again.
+
 
 ## Assembly language syntax
 
-Wherever possible, EasyAsm uses syntax compatible with the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/), so you can enter example code from books and articles for that assembler without changes. Only a subset of Acme features are supported. Source code features exclusive to EasyAsm attempt to extend the Acme syntax in intuitive ways.
+Wherever possible, EasyAsm uses syntax compatible with the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/), so you can enter example code from books and articles for that assembler without changes. Only a subset of Acme features are supported. Source code features exclusive to EasyAsm extend the Acme syntax.
 
 ### Comments
 
@@ -369,12 +336,44 @@ Number literals:
 * Binary: `%0010110`
   * Binary literals can also use `.` for `0` and `#` for `1`, for more easily representing bitmap graphics: `%..#.##.`
 * PETSCII character: `'p'`
-  * When used with the `!scr` directive, this is translated into a screen code. Otherwise it is interpreted as the PETSCII code of the character that appears in the source file.
-  * EasyAsm does not support backslash-escape sequences. To represent the PETSCII code for the single-quote character `'`, simply put it in single quotes: `'''`. (If this looks confusing, the PETSCII code for a single-quote character is 39 ($27).)
+  * When used with the `!scr` directive, this is translated into a screen code if applicable. Otherwise it is interpreted as the PETSCII code of the character that appears in the source file.
+  * EasyAsm does not support backslash-escape sequences. To represent the PETSCII code for the single-quote character `'`, put it in single quotes: `'''`. (As an alternative, the PETSCII code for a single-quote character is 39 ($27).)
 
 To specify a negative number literal, use negation syntax: `-27` If a literal specifies all 32 bits and bit 31 is high, this will be treated as a two's complement negative number: `$FFFFFFFC` Negating such a literal will negate the number: `-$FFFFFFFC` and `4` are equivalent.
 
 Some assembler directives accept text strings as arguments, surrounded by double-quotes: `"string"` These are not values and cannot be used in expressions. The `!pet` and `!scr` directives render strings into sequences of character bytes (PETSCII or screen codes, respectively).
+
+### Entering PETSCII control codes
+
+Similar to editing a BASIC program, you can enter PETSCII control codes inside double-quoted strings by typing the key that would normally perform that code, such as cursor movement, color changes, or clearing the screen.
+
+When you type a double-quote character (`"`), the editor switches to *quote mode,* and keys that would type PETSCII control codes instead enter inverse symbols that represent those codes in the string. When you type the closing double-quote, the editor switches off quote mode.
+
+Double-quoted string arguments to `!pet` can contain PETSCII control codes entered in this way. In the following example, type `{CLR}` as Shift + Clr, and `{WHT}` as Ctrl + 2.
+
+```asm
+  jsr primm
+  !pet "{CLR}{WHT}Hello world!",0
+```
+
+Quote mode is also active temporarily for spaces inserted with the Shift + Inst key. This is convenient for inserting characters within quoted strings without having to type double-quotes just to activate quote mode.
+
+When you enter a line by pressing the Return key, only PETSCII codes inside of double-quotes are interpreted as PETSCII codes. (This is true when editing BASIC programs as well as in Edit mode.) A PETSCII code outside of double-quotes is interpreted by the editor as a symbol character.
+
+For EasyAsm, this means that it is not practical to enter PETSCII codes as single-quoted character literals. Instead, use number literals or named constants to refer to PETSCII control codes.
+
+```asm
+chr_clr = 147
+chr_esc = 27
+
+  lda #chr_clr
+  jsr bsout
+
+  lda #chr_esc
+  jsr bsout
+  lda #'5'
+  jsr bsout
+```
 
 ### Labels
 
@@ -398,6 +397,12 @@ loop:
 
 The colon `:` is optional.
 
+A global label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
+
+> **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish. For example, Shift + G and Shift + T both appear as vertical lines in uppercase text mode.
+
+### "Cheap" local labels
+
 EasyAsm supports global labels and Acme-style "cheap" local labels. A global label must be unique across all labels in the source file. A "cheap" local label starts with an `@` sign, and is only valid up to the next global label. This allows subroutines with global names to have local labels with useful names that can be reused by other subroutines.
 
 ```
@@ -418,9 +423,9 @@ flash_background:
   rts
 ```
 
-A global label name must start with a letter, either lowercase or uppercase. A "cheap" local label name starts with `@` followed by a letter. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
+A "cheap" local label name starts with `@` followed by a letter. Subsequent characters follow the rules for labels.
 
-> **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish (e.g. Shift + G and Shift + T appear only slightly differently in uppercase text mode).
+### Relative labels
 
 EasyAsm supports relative labels for code. A relative label is a sequence of one or more minus `-` signs, or one or more plus `+` signs: `-` `--` `---` `+` `++` `+++` When an instruction uses a relative label as an address argument, it refers to the closest code label with that name in the source code. A relative label of minus signs scans upward to the closest assignment, and a relative label of plus signs scans downward.
 
@@ -488,7 +493,7 @@ To type the power operator, type the up-arrow character (next to the Restore key
 > * Mega + forward-slash (or £): backslash (`\\`)
 > Remember that you must be in lowercase mode with this font setting to see the ASCII characters.
 
-### Parentheses
+### Parentheses and brackets
 
 Both parentheses `(` `)` and square brackets `[` `]` can be used to group terms in expressions to influence the order of operations. The two bracket types can be used interchangeably, but must be used in matching pairs.
 
@@ -505,120 +510,10 @@ lda (($ff-1)-foo),y  ; indirect ZP, Y-indexed
 lda ([$ff-1]-foo),y  ; indirect ZP, Y-indexed
 lda ($ff-1)-foo,x    ; direct ZP, X-indexed
 lda [$ff-1],y        ; 32-bit indirect ZP, Y-indexed
+lda ([$ff-1]),y      ; indirect ZP, Y-indexed
 ```
 
-## The program counter
-
-EasyAsm maintains a *program counter* (PC), the address where the next assembled instruction will appear in memory. As the assembler encounters each CPU instruction, it generates the machine code for the instruction, places it at the address in the program counter, then increments the program counter by the size of the instruction.
-
-A program can refer to the current value of the PC in code using an asterisk `*`. A program can use the value in an expression. It can also assign a new value to the PC, similar to a label, to influence the assembly process.
-
-```
-* = $c000    ; Set the PC to $C000
-
-change_background:   ; change_background = $c000
-    inc $d020   ; Assembles to three bytes
-    rts         ; Assembles to one byte
-
-blah = *     ; Label "blah" is now set to $c004
-
-blah:        ; (This does the same thing.)
-    ; ...
-```
-
-A typical program does not have to change the PC. It can use the `!to "...", runnable` directive to start a runnable program to be saved to the given filename. This sets the PC automatically to an address appropriate to the bootstrap code that EasyAsm puts at the beginning of the program data.
-
-### Segments
-
-A set of instructions and data assembled to a contiguous region of memory is known as a *segment*. A typical program consists of one segment.
-
-When program code assigns a new value to the program counter and this is followed by an instruction, EasyAsm starts a new segment at that address. It keeps track of all the contiguous segments formed by assembled instructions and data.
-
-When assembling to memory, it writes each segment to the requested memory locations.
-
-When assembling to disk, EasyAsm offers several options: writing a contiguous file, writing segments to separate files, or bundling segments into a runnable program.
-
-### Writing a contiguous file
-
-The `!to` directive sets a filename and writing mode for assembling subsequent code to disk. Using the `cbm` mode, this creates a PRG file, with the address of the first assembled instruction that follows as the load address. This requires that the source code set the PC before the first instruction, so the `!to` directive knows the starting address.
-
-```
-!to "routines", cbm
-* = $c000
-
-change_background:
-  inc $d020
-  rts
-```
-
-If a single `!to` directive is followed by more than one segment, EasyAsm creates a PRG file that starts at the segment with the lowest address. Each segment is followed by a region of empty data, such that each segment is written into its starting address when the file is loaded. This can be useful if the separator regions are expected to be small, such as to align code to specific addresses.
-
-This example generates one file with the first segment, a region of empty data to align the next segment, followed by the second segment.
-
-```
-!to "routines", cbm
-* = $7400
-  jsr change_background
-  ; ...
-  rts
-
-; (...empty data generated here...)
-
-* = $7f00
-change_background:
-  inc $d020
-  rts
-```
-
-If the gap between segments is large, this could result in excess use of disk space and loading time. EasyAsm offers other options to avoid this scenario.
-
-### Writing segments to separate files
-
-EasyAsm source code can request that segments be written to different files by providing the `!to "...", cbm` directive more than once. It is the program's responsibility to load each segment file into the appropriate memory location.
-
-This example generates two files, one for each segment.
-
-```
-!to "screen", cbm
-* = $7400
-
-  ; (Some disk code to load the "routines" file...)
-
-  jsr change_background
-  ; ...
-  rts
-
-!to "routines", cbm
-* = $c000
-
-change_background:
-  inc $d020
-  rts
-```
-
-### Generating a runnable program
-
-In EasyAsm, the `!to "...", runnable` directive creates a program file that starts with a bootstrap routine. A user can load and `RUN` this program from the `READY.` prompt. The program starts with the first instruction after the `!to "...", runnable` directive.
-
-`!to "...", runnable` sets the PC automatically. It is not necessary to set the PC explicitly in this case. If the program redefines the PC before the first instruction, the segment will be located as requested, and the bootstrap routine will start at that segment's start address.
-
-If `!to "...", runnable` is followed by more than one segment, EasyAsm generates some additional code that automatically relocates all of the segments to their starting addresses, as part of the bootstrap process. The first segment that follows the `!to` statement is assumed to be the start of the program. The generated program behaves similarly to assembling to memory, and only requires loading and running one file, with no disk space or load time spent on empty data regions between segments.
-
-```
-!to "program", runnable
-
-  jsr change_background
-  ; ...
-  rts
-
-* = $c000
-
-change_background:
-  inc $d020
-  rts
-```
-
-## Zero-page address arguments
+### Zero-page address arguments
 
 The absolute addressing mode and the base page addressing mode have the same assembler syntax, despite being separate instructions with separate behaviors. For example:
 
@@ -645,6 +540,164 @@ varname = $fe
 lda+2 varname      ; force absolute addressing: $00fe
 ```
 
+
+## The program counter
+
+EasyAsm maintains a *program counter* (PC), the address where the next assembled instruction will appear in memory. As the assembler encounters each CPU instruction, it generates the machine code for the instruction, places it at the address in the program counter, then increments the program counter by the size of the instruction.
+
+A program can refer to the current value of the PC in code using an asterisk `*`. A program can use the value in an expression. It can also assign a new value to the PC, similar to a label, to influence the assembly process.
+
+```
+* = $c000    ; Set the PC to $C000
+
+change_background:   ; change_background = $c000
+  inc $d020   ; Assembles to three bytes
+  rts         ; Assembles to one byte
+
+blah = *     ; Label "blah" is now set to $c004
+
+blah:        ; (This does the same thing.)
+  ; ...
+```
+
+A typical program does not have to change the PC. It can use the `!to "...", runnable` directive to start a runnable program to be saved to the given filename. This sets the PC automatically to an address appropriate to the bootstrap code that EasyAsm puts at the beginning of the program data.
+
+### Segments
+
+A set of instructions and data assembled to a contiguous region of memory is known as a *segment*. A typical program consists of one segment.
+
+When program code assigns a new value to the program counter and this is followed by an instruction, EasyAsm starts a new segment at that address. It keeps track of all the contiguous segments formed by assembled instructions and data.
+
+### "Pseudo-PC"
+
+EasyAsm currently does not support Acme's "pseudo-PC" feature, which allows for a section of code to be assembled as if the PC were a particular value, but the segment is stored in the PRG file consecutively with the surrounding code. (It would be the program's responsibility to copy the code to the correct location in order to run it.)
+
+As an alternative, EasyAsm has a way to assemble multiple segments to disk as a single compact file, with a generated bootstrap routine that relocates all segments to their final memory locations. See the explanation of `!to "...", runnable`, below.
+
+
+## Assembling to disk
+
+When assembling to memory, EasyAsm writes each segment to the requested memory locations.
+
+When assembling to disk, EasyAsm offers several options: writing a contiguous file, writing segments to separate files, or bundling segments into a runnable program.
+
+### Writing a contiguous file
+
+The `!to` directive sets a filename and writing mode for assembling subsequent code to disk. Using the `cbm` mode, this creates a PRG file, with the address of the first assembled instruction that follows as the load address. This requires that the source code set the PC before the first instruction, so the `!to` directive knows the starting address.
+
+```
+!to "routines", cbm
+* = $a000
+
+change_background:
+  inc $d020
+  rts
+```
+
+If a single `!to` directive is followed by more than one segment, EasyAsm creates a PRG file that starts at the segment with the lowest address. Each segment is followed by a region of empty data, such that each segment is written into its starting address when the file is loaded. This can be useful if the separator regions are expected to be small, such as to align code to specific addresses.
+
+This example generates one file with the first segment, a region of empty data to align the next segment, followed by the second segment.
+
+```
+!to "routines", cbm
+
+* = $7400
+  jsr change_border
+  ; ...
+  rts
+
+; (...empty data generated here...)
+
+* = $7f00
+change_border:
+  inc $d020
+  rts
+```
+
+If the gap between segments is large, this could result in excess use of disk space and loading time. EasyAsm offers other options to avoid this scenario.
+
+### Writing segments to separate files
+
+EasyAsm source code can request that segments be written to different files by providing the `!to "...", cbm` directive more than once. It is the program's responsibility to load each segment file from disk into the appropriate memory location.
+
+This example generates two files, one for each segment.
+
+```
+!to "screen", cbm
+* = $7400
+
+  ; (Some disk code to load the "routines" file...)
+
+  jsr change_border
+  ; ...
+  rts
+
+!to "routines", cbm
+* = $a000
+
+change_border:
+  inc $d020
+  rts
+```
+
+### Generating a runnable program
+
+In EasyAsm, the `!to "...", runnable` directive creates a program file that starts with a bootstrap routine. A user can load and `RUN` this program from the `READY.` prompt. The program starts with the first instruction after the `!to "...", runnable` directive.
+
+`!to "...", runnable` sets the PC automatically. It is not necessary to set the PC explicitly in this case.
+
+```asm
+!to "myprog", runnable
+
+  inc $d020
+  rts
+```
+
+If the program redefines the PC before the first instruction, the segment will be located as requested, and the bootstrap routine will start at that segment's start address.
+
+```asm
+!to "myprog", runnable
+
+* = $7000
+
+  inc $d020
+  rts
+```
+
+If `!to "...", runnable` is followed by more than one segment, EasyAsm generates additional code that relocates all of the segments to their starting addresses, as part of the bootstrap process. The first segment that follows the `!to` statement is assumed to be the start of the program. The generated program behaves similarly to assembling to memory, and only requires loading and running one file, with no disk space or load time spent on empty data regions between segments.
+
+```
+!to "program", runnable
+
+  jsr change_border
+  ; ...
+  rts
+
+* = $7000
+
+change_border:
+  inc $d020
+  rts
+```
+
+## Using disk drives
+
+Assembler directives that refer to files on disk (`!to`, `!source`, `!binary`) always use the current "default disk" unit. BASIC 65 initially sets this to unit 8. You can change the default disk with the `SET DEF` command.
+
+```basic
+SET DEF 9
+```
+
+BASIC disk commands use this default, and allow overriding the default with the `U` argument. EasyAsm does not currently have a way to overriding the default selectively. Take care to set the default disk unit when managing files across multiple disks.
+
+```basic
+SET DEF 9
+EDIT ON
+DLOAD "MYPROG.S",U8  : rem: Loads from unit 8
+SYS $1E00            : rem: Assembles to unit 9
+```
+
+
 ## Assembler directives (pseudo-operands)
 
 EasyAsm supports the following assembler directives.
@@ -657,7 +710,7 @@ EasyAsm supports the following assembler directives.
 
 Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address), `raw` (PRG without address), or `runnable` (bootstrap routine).
 
-> TODO: unit/drive number?
+EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
 ### `!byte` or `!8`, `!word` or `!16`, `!32`
 
@@ -682,9 +735,9 @@ Assembles a given number of bytes of data. The default value is $00. If a byte v
 !scr "..." [, "..."]
 ```
 
-Assembles arguments that can include character strings as a series of bytes. `!pet` renders character strings and character literals as PETSCII codes, as written directly in the PETSCII source file. `!scr` attempts to convert PETSCII codes to VIC screen codes. Number expressions are byte values and are rendered verbatim in either case.
+Assembles arguments that can include character strings as a series of bytes. `!pet` renders character strings and character literals as PETSCII codes, as written directly in the PETSCII source file. `!scr` converts PETSCII characters in double-quoted strings and single-quoted character literals to VIC screen codes. Number expressions are byte values and are rendered verbatim in either case.
 
-String data does not automatically add a null terminator. If a null terminator is desired, end the string with a 0 byte.
+String data does not automatically add a null terminator. If a null terminator is desired, end the directive with a 0 byte.
 
 ```
 !pet "hello world!", 0
@@ -696,13 +749,17 @@ EasyAsm does not support backslash-escape character sequences. To include a doub
 !pet "i said, ", 34, "hello world!", 34, 0
 ```
 
+If a PETSCII control code appears in a string or character literal passed to `!scr`, it is converted to the screen code for a space ($20).
+
 ### `!source`
 
-`!source "..."`
+```
+!source "..."
+```
 
 Loads a source file from disk to be assembled as code at the given location.
 
-> TODO: unit/drive number?
+EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
 ### `!binary`
 
@@ -710,7 +767,7 @@ Loads a source file from disk to be assembled as code at the given location.
 
 Loads a binary file from disk to be assembled as data at the given location. Without arguments, the entire file is included. `<size>` limits the number of bytes to include. `<skip>` starts assembling data that many bytes into the file.
 
-> TODO: unit/drive number?
+EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
 ### `!warn`
 
@@ -727,11 +784,11 @@ EasyAsm tries to provide a subset of the features of the Acme assembler, using c
 
 ### Acme features that are not supported
 
-EasyAsm does not currently have the following features that are present in the Acme assembler.
+EasyAsm has the following limitations compared to the Acme assembler.
 
+* Per-file source size limit of 44 KB
 * No macros
-* No conditional assembly
-* No loops
+* No conditional or looping assembly
 * No symbol list output
 * No fractional number values
 * No fractional division operator
@@ -740,9 +797,7 @@ EasyAsm does not currently have the following features that are present in the A
 * No value lists (used as arguments to macros)
 * No zones (but "cheap" local symbols are supported)
 * No CPUs other than the 45GS02
-* No features not supported by the 45GS02 CPU
-* No assembler directives (pseudo-ops) other than those listed
-* No directive aliases other than those listed
+* No assembler directives (pseudo-ops) or directive aliases other than those listed
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
 * No octal literals
 * No way to set a "pseudo-PC"
@@ -753,8 +808,11 @@ EasyAsm does not currently have the following features that are present in the A
 Here is a quick summary of features available in EasyAsm that are not available in Acme:
 
 * PETSCII character encoding of source files
+* Single-quote character literal: `'''`
+* Double quote characters not allowed in double-quoted strings
 * `!to "...", runnable`
 * Assemble to multiple files from one source file, with multiple `!to` directives
+
 
 ## Building EasyAsm
 
