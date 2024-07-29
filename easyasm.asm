@@ -26,7 +26,18 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $f2
+* = $100 - 27
+
+expr_a          *=*+4
+expr_b          *=*+4
+expr_result     *=*+4
+expr_flags      *=*+1
+F_EXPR_BRACKET_MASK   = %00000011
+F_EXPR_BRACKET_NONE   = %00000000
+F_EXPR_BRACKET_PAREN  = %00000001
+F_EXPR_BRACKET_SQUARE = %00000010
+F_EXPR_BRACKET_ZERO   = %00000011
+F_EXPR_UNDEFINED      = %00000100
 
 line_pos        *=*+1   ; Offset of line_addr
 err_code        *=*+1   ; Error code; 0=no error
@@ -575,7 +586,7 @@ strbuf_cmp_code_ptr:
 
 ; Skip over whitespace, and also a line comment if found after whitespace
 ; Input: bas_ptr = line_addr, Z = line_pos
-; Output: Z/line_pos advanced maybe; C=0 (no fail)
+; Output: Z/line_pos advanced maybe
 accept_whitespace_and_comment:
 -   lda [bas_ptr],z
     cmp #chr_spc
@@ -588,7 +599,6 @@ accept_whitespace_and_comment:
     lda [bas_ptr],z
     bne -
 +   stz line_pos
-    clc
     rts
 
 
@@ -791,6 +801,227 @@ get_pseudoop_for_strbuf:
     bra @next_token
 
 
+; Input: expr_result
+; Output: expr_result = expr_result * 10
+;   Overwrites expr_a
+;   Preserves Z
+expr_times_ten:
+    phz
+    ldq expr_result
+    rolq
+    stq expr_a
+    rolq
+    rolq
+    adcq expr_a
+    stq expr_result
+    plz
+    rts
+
+
+; Accept a number/char literal
+; Input: bas_ptr=line_addr, Z=line_pos
+; Output:
+;  C: 0=not found, Z/line_pos unchanged
+;  C: 1=found, expr_result; Z/line_pos advanced
+accept_literal:
+    lda #0
+    sta expr_result
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+
+    lda [bas_ptr],z
+    cmp #'\''
+    bne ++
+    ; Char literal
+    inz
+    lda [bas_ptr],z
+    tax
+    inz
+    lda [bas_ptr],z
+    cmp #'\''
+    lbne @not_found
+
+++  ldx #0
+    stx expr_b+1
+    stx expr_b+2
+    stx expr_b+3
+
+    cmp #'$'
+    lbeq @do_hex_literal
+    cmp #'%'
+    lbeq @do_binary_literal
+    cmp #'0'
+    lbcc @not_found
+    cmp #'9'+1
+    lbcc @do_decimal_literal
+
+@not_found
+    ldz line_pos
+    clc
+    rts
+
+@do_decimal_literal
+    cmp #'0'
+    lbcc @found
+    cmp #'9'+1
+    lbcs @found
+    jsr expr_times_ten
+    lda [bas_ptr],z
+    sec
+    sbc #'0'
+    sta expr_b
+    phz
+    ldq expr_result
+    adcq expr_b
+    stq expr_result
+    plz
+    inz
+    lda [bas_ptr],z
+    lbra @do_decimal_literal
+
+@do_hex_literal
+    ; Set up first digit, confirm it's a hex digit
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    lbcc @not_found
+    cmp #'9'+1
+    bcc +
+    cmp #'A'
+    lbcc @not_found
+    cmp #'F'+1
+    bcc +
+    cmp #'a'
+    lbcc @not_found
+    cmp #'f'+1
+    lbcs @not_found
+
++
+--- cmp #'0'
+    lbcc @found
+    cmp #'9'+1
+    bcc +
+    cmp #'A'
+    lbcc @found
+    cmp #'F'+1
+    bcc ++
+    cmp #'a'
+    lbcc @found
+    cmp #'f'+1
+    lbcs @found
+    ; a-f
+    sec
+    sbc #'a'-10
+    bra +++
++   ; 0-9
+    sec
+    sbc #'0'
+    bra +++
+++  ; A-F
+    sec
+    sbc #'A'-10
++++ sta expr_b
+    phz
+    clc
+    ldq expr_result
+    rolq
+    rolq
+    rolq
+    rolq
+    adcq expr_b
+    stq expr_result
+    plz
+    inz
+    lda [bas_ptr],z
+    bra ---
+
+@do_binary_literal
+    ; Set up first digit, confirm it's a binary digit
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    beq +
+    cmp #'.'
+    beq +
+    cmp #'1'
+    beq +
+    cmp #'#'
+    lbne @not_found
+
++
+--- cmp #'1'
+    beq ++
+    cmp #'#'
+    beq ++
+    cmp #'0'
+    beq +
+    cmp #'.'
+    lbne @found
++   ; 0
+    clc
+    bra +++
+++  ; 1
+    sec
++++ rolq expr_result
+    inz
+    lda [bas_ptr],z
+    bra ---
+
+@found
+    stz line_pos
+    sec
+    rts
+
+
+; Input: bas_ptr=line_addr, Z=line_pos
+; Output:
+;  C: 0=not found, Z/line_pos unchanged
+;  C: 1=found, expr_flags, expr_result, Z/line_pos advanced
+accept_expression:
+    lda #0
+    sta expr_flags
+
+    ; Remember a starting bracket, leading zero in hex or dec literal
+    lda [bas_ptr],z
+    cmp #'('
+    bne +
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    ora #F_EXPR_BRACKET_PAREN
+    sta expr_flags
+    bra +++
++   cmp #'['
+    bne +
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    ora #F_EXPR_BRACKET_SQUARE
+    sta expr_flags
+    bra +++
++   cmp #'$'  ; Hex literal with two leading zeros may be 16-bit addr
+    bne +
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    bne +++
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    beq ++
+    bra +++
++   cmp #'0'  ; Dec literal with leading zero may be 16-bit addr
+    bne +++
+++  lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    ora #F_EXPR_BRACKET_SQUARE
+    sta expr_flags
++++ ldz line_pos
+
+; TODO: a real expression parser
+;   Only support number literals as expressions for now
+    jmp accept_literal
+
+
 ; Input: line_addr
 ; Output: err_code, line_pos
 assemble_line:
@@ -967,9 +1198,9 @@ e05: !pet "is pseudoop",0
 ;             ^ Implied (parameterless, or A/Q)
 ;              ^ Immediate
 ;               ^ Immedate word
-;                ^ Base-page, branch relative, bit-test branch relative
-;                 ^ Base-page X-Indexed
-;                  ^ Base-page Y-Indexed
+;                ^ Base-Page, branch relative, bit-test branch relative
+;                 ^ Base-Page X-Indexed
+;                  ^ Base-Page Y-Indexed
 ;                   ^ Absolute, 16-bit branch relative
 ;                    ^ Absolute X-Indexed
 ;                      %11111111
