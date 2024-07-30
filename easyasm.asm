@@ -841,6 +841,9 @@ accept_literal:
     lda [bas_ptr],z
     cmp #'\''
     lbne @not_found
+    stx expr_result
+    inz
+    lbra @found
 
 ++  ldx #0
     stx expr_b+1
@@ -872,8 +875,9 @@ accept_literal:
     sbc #'0'
     sta expr_b
     phz
-    ldq expr_result
-    adcq expr_b
+    ldq expr_b
+    clc
+    adcq expr_result
     stq expr_result
     plz
     inz
@@ -887,40 +891,47 @@ accept_literal:
     cmp #'0'
     lbcc @not_found
     cmp #'9'+1
+    bcc +++
+
+    cmp #$c1
     bcc +
-    cmp #'A'
+    sec
+    sbc #$c1-'A'
++   cmp #'a'
+    bcc +
+    sec
+    sbc #'a'-'A'
++   cmp #'A'
     lbcc @not_found
     cmp #'F'+1
-    bcc +
-    cmp #'a'
-    lbcc @not_found
-    cmp #'f'+1
     lbcs @not_found
 
-+
++++
 --- cmp #'0'
     lbcc @found
     cmp #'9'+1
-    bcc +
-    cmp #'A'
-    lbcc @found
-    cmp #'F'+1
-    bcc ++
-    cmp #'a'
-    lbcc @found
-    cmp #'f'+1
-    lbcs @found
-    ; a-f
-    sec
-    sbc #'a'-10
-    bra +++
-+   ; 0-9
+    bcs +
+    ; 0-9
     sec
     sbc #'0'
     bra +++
-++  ; A-F
+
++   cmp #$c1
+    bcc +
+    sec
+    sbc #$c1-'A'
++   cmp #'a'
+    bcc +
+    sec
+    sbc #'a'-'A'
++   cmp #'A'
+    lbcc @found
+    cmp #'F'+1
+    lbcs @found
+    ; A-F (possibly reduced from a-f or $c1-$c6)
     sec
     sbc #'A'-10
+
 +++ sta expr_b
     phz
     clc
@@ -2016,16 +2027,13 @@ test_get_mnemonic_for_strbuf_4: !pet "ldax",0
     jsr get_pseudoop_for_strbuf
 !if .ec {
     bcs +
-    +print_strlit_line "... fail ec should be 1, is 0"
     brk
 +   cmp #.ea
     beq +
-    +print_strlit_line "... wrong a"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "... fail ec should be 0, is 1"
     brk
 +
 }
@@ -2037,6 +2045,76 @@ test_get_pseudoop_for_strbuf_2: !pet "!warn",0
 test_get_pseudoop_for_strbuf_3: !pet "!8",0
 test_get_pseudoop_for_strbuf_4: !pet "warn",0
 test_get_pseudoop_for_strbuf_5: !pet "lda",0
+
+!macro test_accept_literal .tnum, .lineaddr, .ec, .eval, .epos {
+    +test_start .tnum
+    lda #<.lineaddr
+    sta bas_ptr
+    lda #>.lineaddr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #0
+    jsr accept_literal
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail ec should be 1, is 0"
+    brk
++   lda #<.eval
+    ldx #>.eval
+    ldy #^.eval
+    ldz #<(.eval >>> 24)
+    cpq expr_result
+    beq +
+    ldq expr_result
+    +print_strlit_line "... wrong expr-result"
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    +print_strlit_line "... wrong line-pos"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail ec should be 0, is 1"
+    brk
++
+}
+
+    +test_end
+}
+
+test_accept_literal_1: !pet "'x'",0
+test_accept_literal_2: !pet "'''",0
+test_accept_literal_3: !pet "$0",0
+test_accept_literal_4: !pet "$1",0
+test_accept_literal_5: !pet "$f",0
+test_accept_literal_6: !pet "$F",0
+test_accept_literal_7: !pet "$deadbeef",0
+test_accept_literal_8: !pet "$DEadbeEF",0
+test_accept_literal_9: !pet "$000a",0
+test_accept_literal_10: !pet "$1000",0
+test_accept_literal_11: !pet "%0",0
+test_accept_literal_12: !pet "%1",0
+test_accept_literal_13: !pet "%0101",0
+test_accept_literal_14: !pet "%1010",0
+test_accept_literal_15: !pet "%.#.#",0
+test_accept_literal_16: !pet "%#.#.",0
+test_accept_literal_17: !pet "%....##..####....##..####....####",0
+test_accept_literal_18: !pet "0",0
+test_accept_literal_19: !pet "9",0
+test_accept_literal_20: !pet "1234567890",0
+test_accept_literal_21: !pet "0123",0
+test_accept_literal_22: !pet "$z",0
+test_accept_literal_23: !pet "%z",0
+test_accept_literal_24: !pet "a",0
+test_accept_literal_25: !pet "$Fg",0
+test_accept_literal_26: !pet "%12",0
+test_accept_literal_27: !pet "56a",0
+test_accept_literal_28: !pet 0
+
 
 !macro test_assemble_line .tnum, .lineaddr, .ecode, .epos {
     +test_start .tnum
@@ -2190,6 +2268,37 @@ run_test_suite_cmd:
     +test_get_pseudoop_for_strbuf $03, test_get_pseudoop_for_strbuf_3, 1, 3
     +test_get_pseudoop_for_strbuf $04, test_get_pseudoop_for_strbuf_4, 0, 0
     +test_get_pseudoop_for_strbuf $05, test_get_pseudoop_for_strbuf_5, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "accept-literal"
+    +test_accept_literal $01, test_accept_literal_1, 1, 88, 3
+    +test_accept_literal $02, test_accept_literal_2, 1, '\'', 3
+    +test_accept_literal $03, test_accept_literal_3, 1, $0, 2
+    +test_accept_literal $04, test_accept_literal_4, 1, $1, 2
+    +test_accept_literal $05, test_accept_literal_5, 1, $f, 2
+    +test_accept_literal $06, test_accept_literal_6, 1, $F, 2
+    +test_accept_literal $07, test_accept_literal_7, 1, $deadbeef, 9
+    +test_accept_literal $08, test_accept_literal_8, 1, $DEadbeEF, 9
+    +test_accept_literal $09, test_accept_literal_9, 1, $000a, 5
+    +test_accept_literal $0a, test_accept_literal_10, 1, $1000, 5
+    +test_accept_literal $0b, test_accept_literal_11, 1, %0000, 2
+    +test_accept_literal $0c, test_accept_literal_12, 1, %0001, 2
+    +test_accept_literal $0d, test_accept_literal_13, 1, %0101, 5
+    +test_accept_literal $0e, test_accept_literal_14, 1, %1010, 5
+    +test_accept_literal $0f, test_accept_literal_15, 1, %.#.#, 5
+    +test_accept_literal $10, test_accept_literal_16, 1, %#.#., 5
+    +test_accept_literal $11, test_accept_literal_17, 1, %....##..####....##..####....####, 33
+    +test_accept_literal $12, test_accept_literal_18, 1, 0, 1
+    +test_accept_literal $13, test_accept_literal_19, 1, 9, 1
+    +test_accept_literal $14, test_accept_literal_20, 1, 1234567890, 10
+    +test_accept_literal $15, test_accept_literal_21, 1, 0123, 4
+    +test_accept_literal $16, test_accept_literal_22, 0, 0, 0
+    +test_accept_literal $17, test_accept_literal_23, 0, 0, 0
+    +test_accept_literal $18, test_accept_literal_24, 0, 0, 0
+    +test_accept_literal $19, test_accept_literal_25, 1, $F, 2
+    +test_accept_literal $1a, test_accept_literal_26, 1, %1, 2
+    +test_accept_literal $1b, test_accept_literal_27, 1, 56, 2
+    +test_accept_literal $1c, test_accept_literal_28, 0, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "assemble-line"
