@@ -26,7 +26,12 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 27
+* = $100 - 26
+
+pass            *=*+1
+program_counter *=*+2
+asm_flags       *=*+1
+F_ASM_PC_DEFINED = %00000001
 
 expr_a          *=*+4
 expr_b          *=*+4
@@ -586,7 +591,7 @@ strbuf_cmp_code_ptr:
 
 ; Skip over whitespace, and also a line comment if found after whitespace
 ; Input: bas_ptr = line_addr, Z = line_pos
-; Output: Z/line_pos advanced maybe
+; Output: Z/line_pos advanced maybe; A=last read
 accept_whitespace_and_comment:
 -   lda [bas_ptr],z
     cmp #chr_spc
@@ -892,16 +897,8 @@ accept_literal:
     lbcc @not_found
     cmp #'9'+1
     bcc +++
-
-    cmp #$c1
-    bcc +
-    sec
-    sbc #$c1-'A'
-+   cmp #'a'
-    bcc +
-    sec
-    sbc #'a'-'A'
-+   cmp #'A'
+    jsr to_lowercase
+    cmp #'A'
     lbcc @not_found
     cmp #'F'+1
     lbcs @not_found
@@ -916,19 +913,12 @@ accept_literal:
     sbc #'0'
     bra +++
 
-+   cmp #$c1
-    bcc +
-    sec
-    sbc #$c1-'A'
-+   cmp #'a'
-    bcc +
-    sec
-    sbc #'a'-'A'
-+   cmp #'A'
++   jsr to_lowercase
+    cmp #'A'
     lbcc @found
     cmp #'F'+1
     lbcs @found
-    ; A-F (possibly reduced from a-f or $c1-$c6)
+    ; A-F
     sec
     sbc #'A'-10
 
@@ -1024,13 +1014,225 @@ accept_expression:
     bne +++
 ++  lda expr_flags
     and #!F_EXPR_BRACKET_MASK
-    ora #F_EXPR_BRACKET_SQUARE
+    ora #F_EXPR_BRACKET_ZERO
     sta expr_flags
 +++ ldz line_pos
 
 ; TODO: a real expression parser
 ;   Only support number literals as expressions for now
     jmp accept_literal
+
+
+; Expression should be treated as 16-bit
+; Input: expr_flags, expr_result
+; Output:
+;   C: 0=expr is 8-bit
+;   C: 1=expr is 16-bit
+is_expr_16bit:
+    lda expr_flags
+    and #F_EXPR_BRACKET_MASK
+    cmp #F_EXPR_BRACKET_ZERO
+    beq +
+    lda expr_result+1
+    ora expr_result+2
+    ora expr_result+3
+    bne +
+    sec
+    rts
++   clc
+    rts
+
+
+; Accept an addressing-operand expression
+; Input: bas_ptr=line_addr, Z=line_pos
+; Output:
+;  C: 0=not found, Z/line_pos unchanged
+;  C: 1=found, expr_result=operand, X/Y=addr mode bit, Z/line_pos advanced
+accept_addressing_operand:
+    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
+    bne +
+    ; Implied
+    ldx #%10000000
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
+
++   cmp #'#'
+    bne +++
+    ; Immediate
+    jsr accept_expression
+    lbcc @exit_fail
++   jsr is_expr_16bit
+    bcs +
+    ldx #%01000000  ; Immediate 8-bit
+    bra ++
++   ldx #%00100000  ; Immediate 16-bit
+++  ldy #%00000000
+    stz line_pos
+    sec
+    rts
+
++++ jsr accept_expression
+    bcc +++
+    jsr accept_whitespace_and_comment
+    bne ++
+    ; Expression followed by end of line.
+    lda expr_flags
+    and #F_EXPR_BRACKET_MASK
+    cmp #F_EXPR_BRACKET_PAREN
+    bne +
+    ldx #%00000000  ; Absolute Indirect
+    ldy #%01000000
+    stz line_pos
+    sec
+    rts
++   jsr is_expr_16bit
+    bcs +
+    ldx #%00010000  ; Base-page, branch relative, bit-test branch relative
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
++   ldx #%00000010  ; Absolute, 16-bit branch relative
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
+
+++  cmp #','
+    lbne @exit_fail
+    ; Expression folowed by comma.
+    lda expr_flags
+    and #F_EXPR_BRACKET_MASK
+    cmp #F_EXPR_BRACKET_PAREN
+    bne ++
+    ; With parens...
+    inz
+    jsr accept_whitespace_and_comment
+    jsr to_lowercase
+    cmp #'Y'
+    bne +
+    ldx #%00000000
+    ldy #%00001000  ; Base-page Indirect Y-Indexed
+    stz line_pos
+    sec
+    rts
++   cmp #'Z'
+    lbne @exit_fail
+    ldx #%00000000
+    ldy #%00000100  ; Base-page Indirect Z-Indexed
+    stz line_pos
+    sec
+    rts
+
+++  cmp #F_EXPR_BRACKET_SQUARE
+    bne ++
+    ; With square brackets...
+    inz
+    jsr accept_whitespace_and_comment
+    jsr to_lowercase
+    cmp #'Z'
+    lbne @exit_fail
+    ldx #%00000000
+    ldy #%00000010  ; 32-bit Base-page Indirect Z-Indexed
+    stz line_pos
+    sec
+    rts
+
+++  ; Without parens...
+    inz
+    jsr accept_whitespace_and_comment
+    jsr to_lowercase
+    cmp #'X'
+    bne ++
+    jsr is_expr_16bit
+    bcs +
+    ldx #%00001000  ; Base-page X-Indexed
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
++   ldx #%00000001  ; Absolute X-Indexed
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
+
+++  cmp #'Y'
+    lbne @exit_fail
+    jsr is_expr_16bit
+    bcs +
+    ldx #%00000100  ; Base-page Y-Indexed
+    ldy #%00000000
+    stz line_pos
+    sec
+    rts
++   ldx #%00000000  ; Absolute Y-Indexed
+    ldy #%10000000
+    stz line_pos
+    sec
+    rts
+
++++ ; (<expr>,X) or (<expr>,SP),Y
+    lda [bas_ptr],z
+    cmp #'('
+    lbne @exit_fail
+    inz
+    jsr accept_whitespace_and_comment
+    jsr accept_expression
+    lbcc @exit_fail
+    jsr accept_whitespace_and_comment
+    cmp #','
+    lbne @exit_fail
+    inz
+    lda [bas_ptr],z
+    jsr to_lowercase
+    cmp #'X'
+    beq +
+    cmp #'S'
+    lbne @exit_fail
+    inz
+    lda [bas_ptr],z
+    jsr to_lowercase
+    cmp #'P'
+    lbne @exit_fail
+    jsr accept_whitespace_and_comment
+    cmp #')'
+    lbne @exit_fail
+    jsr accept_whitespace_and_comment
+    cmp #','
+    lbne @exit_fail
+    jsr accept_whitespace_and_comment
+    cmp #'Y'
+    lbne @exit_fail
+    ; (<expr>,SP),Y
+    ; TODO: range check expression value? on last pass?
+    stz line_pos
+    ldx #%00000000  ; Stack Relative Indirect, Y-Indexed
+    ldy #%00000001
+    sec
+    rts
+
++   jsr accept_whitespace_and_comment
+    cmp #')'
+    lbne @exit_fail
+    ; (<expr>,X)
+    stz line_pos
+    ldx #%00000000
+    jsr is_expr_16bit
+    bcs +
+    ldy #%00010000  ; Base-page Indirect X-Indexed
+    bra ++
++   ldy #%00100000  ; Absolute Indirect X-Indexed
+++  sec
+    rts
+
+@exit_fail
+    ldz line_pos
+    clc
+    rts
 
 
 ; Input: line_addr
