@@ -26,7 +26,7 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 32
+* = $100 - 33
 
 pass            *=*+1
 program_counter *=*+2
@@ -44,6 +44,7 @@ F_EXPR_BRACKET_SQUARE = %00000010
 F_EXPR_BRACKET_ZERO   = %00000011
 F_EXPR_UNDEFINED      = %00000100
 
+tok_pos         *=*+1   ; Offset of tokbuf
 line_pos        *=*+1   ; Offset of line_addr
 err_code        *=*+1   ; Error code; 0=no error
 line_addr       *=*+2   ; Addr of current BASIC line
@@ -64,7 +65,9 @@ attic_data          = attic_source_stash + $d700
 
 ; Other memory
 source_start = $2000  ; bank 0
+tokbuf = $7e00        ; bank 5
 strbuf = $7f00        ; bank 5
+max_end_of_program = tokbuf
 
 ; KERNAL routines
 bsout = $ffd2
@@ -79,6 +82,7 @@ chr_spc = 32
 chr_uparrow = 94
 chr_backarrow = 95
 chr_megaat = 164
+chr_doublequote = 34
 
 
 ; Call a given KERNAL routine
@@ -110,6 +114,10 @@ chr_megaat = 164
     pla
 }
 
+
+; ------------------------------------------------------------
+; Dispatch
+; ------------------------------------------------------------
 
 * = $2000    ; Actually $52000
 
@@ -222,6 +230,10 @@ restore_source:
 
     rts
 
+
+; ------------------------------------------------------------
+; Utilities
+; ------------------------------------------------------------
 
 ; Print a C-style string
 ; Input: X/Y address (bank 5)
@@ -563,6 +575,7 @@ strbuf_to_lowercase:
 ;   strbuf < code_ptr: A=$ff
 ;   strbuf = code_ptr: A=$00
 ;   strbuf > code_ptr; A=$01
+;   X=strbuf last pos
 strbuf_cmp_code_ptr:
     ldy #0
 -   cpz #0
@@ -589,11 +602,17 @@ strbuf_cmp_code_ptr:
     rts
 
 
+; ------------------------------------------------------------
+; Tokenizer
+; ------------------------------------------------------------
+
 ; Skip over whitespace, and also a line comment if found after whitespace
-; Input: bas_ptr = line_addr, Z = line_pos
-; Output: Z/line_pos advanced maybe; A=last read
+; Input: bas_ptr = line_addr, line_pos
+; Output: line_pos advanced maybe; A=last read, Zero flag if zero
 accept_whitespace_and_comment:
+    ldz line_pos
 -   lda [bas_ptr],z
+    tax
     cmp #chr_spc
     bne +
     inz
@@ -602,8 +621,10 @@ accept_whitespace_and_comment:
     bne +
 -   inz            ; Ignore comment to end of line
     lda [bas_ptr],z
+    tax
     bne -
 +   stz line_pos
+    txa   ; Set flags
     rts
 
 
@@ -612,22 +633,535 @@ accept_whitespace_and_comment:
 ;   bas_ptr = line_addr
 ;   Z = line_pos
 ;   C: 0=must start with letter, 1=allow non-letter start
-; Output: C: 0=not found, Z = original line_pos; 1=found, Z/line_pos advanced
+; Output:
+;   If found, C=1, Z advanced (line_pos not)
+;   If not found, C=0, Z = line_pos
 accept_ident:
     bcs +
     ; Must start with letter
     lda [bas_ptr],z
     jsr is_letter
-    bcc accept_fail
+    bcs +
+    ldz line_pos
+    clc
+    rts
 +
-
     ; Can be followed by letter, number, back-arrow, Mega+@
 -   inz
     lda [bas_ptr],z
     jsr is_secondary_ident_char
     bcs -
+    sec
+    rts
 
-    bra accept_success
+
+; Input: expr_result
+; Output: expr_result = expr_result * 10
+;   Overwrites expr_a
+;   Preserves Z
+expr_times_ten:
+    phz
+    ldq expr_result
+    rolq
+    stq expr_a
+    rolq
+    rolq
+    adcq expr_a
+    stq expr_result
+    plz
+    rts
+
+
+; Accept a number/char literal
+; Input: bas_ptr=line_addr, line_pos
+; Output:
+;  C: 0=not found, line_pos unchanged
+;  C: 1=found; expr_result=value; line_pos advanced
+accept_literal:
+    ldz line_pos
+
+    lda #0
+    sta expr_result
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+
+    lda [bas_ptr],z
+    cmp #'\''
+    bne ++
+    ; Char literal
+    inz
+    lda [bas_ptr],z
+    tax
+    inz
+    lda [bas_ptr],z
+    cmp #'\''
+    lbne @not_found
+    stx expr_result
+    inz
+    lbra @found
+
+++  ldx #0
+    stx expr_b+1
+    stx expr_b+2
+    stx expr_b+3
+
+    cmp #'$'
+    lbeq @do_hex_literal
+    cmp #'%'
+    lbeq @do_binary_literal
+    cmp #'0'
+    lbcc @not_found
+    cmp #'9'+1
+    lbcc @do_decimal_literal
+
+@not_found
+    ldz (easyasm_base_page << 8) + line_pos
+    clc
+    rts
+
+@do_decimal_literal
+    cmp #'0'
+    lbcc @found
+    cmp #'9'+1
+    lbcs @found
+    jsr expr_times_ten
+    lda [bas_ptr],z
+    sec
+    sbc #'0'
+    sta expr_b
+    phz
+    ldq expr_b
+    clc
+    adcq expr_result
+    stq expr_result
+    plz
+    inz
+    lda [bas_ptr],z
+    lbra @do_decimal_literal
+
+@do_hex_literal
+    ; Set up first digit, confirm it's a hex digit
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    lbcc @not_found
+    cmp #'9'+1
+    bcc +++
+    jsr to_lowercase
+    cmp #'A'
+    lbcc @not_found
+    cmp #'F'+1
+    lbcs @not_found
+
++++
+--- cmp #'0'
+    lbcc @found
+    cmp #'9'+1
+    bcs +
+    ; 0-9
+    sec
+    sbc #'0'
+    bra +++
+
++   jsr to_lowercase
+    cmp #'A'
+    lbcc @found
+    cmp #'F'+1
+    lbcs @found
+    ; A-F
+    sec
+    sbc #'A'-10
+
++++ sta expr_b
+    phz
+    clc
+    ldq expr_result
+    rolq
+    rolq
+    rolq
+    rolq
+    adcq expr_b
+    stq expr_result
+    plz
+    inz
+    lda [bas_ptr],z
+    bra ---
+
+@do_binary_literal
+    ; Set up first digit, confirm it's a binary digit
+    inz
+    lda [bas_ptr],z
+    cmp #'0'
+    beq +
+    cmp #'.'
+    beq +
+    cmp #'1'
+    beq +
+    cmp #'#'
+    lbne @not_found
+
++
+--- cmp #'1'
+    beq ++
+    cmp #'#'
+    beq ++
+    cmp #'0'
+    beq +
+    cmp #'.'
+    lbne @found
++   ; 0
+    clc
+    bra +++
+++  ; 1
+    sec
++++ rolq expr_result
+    inz
+    lda [bas_ptr],z
+    bra ---
+
+@found
+    stz line_pos
+    sec
+    rts
+
+
+; Locate a substring of strbuf in a null-terminated list of null-terminated lowercase strings
+; Input:
+;   strbuf
+;   X=strbuf start pos
+;   code_ptr = first char of first item in match list
+;   C: 0=no restrictions; 1=next cannot be ident char
+; Output:
+;   If found, C=1, Y=entry number counted from zero, X=strbuf pos of next char
+;   If not found, C=0
+find_item_count = expr_a
+find_start_pos = expr_a+1
+find_item_length = expr_a+2
+find_word_boundary = expr_a+3
+find_in_token_list:
+    lda #0
+    sta find_item_count
+    stx find_start_pos
+    lda #0
+    bcc +
+    inc
++   sta find_word_boundary
+
+@next_item
+    ldz #0
+    lda (code_ptr),z
+    beq @find_fail
+    ; Z = item length
+-   inz
+    lda (code_ptr),z
+    bne -
+    stz find_item_length
+
+    ldx find_start_pos
+    jsr strbuf_cmp_code_ptr
+    beq @found_prefix
+
+    clc
+    lda code_ptr
+    adc find_item_length
+    sta code_ptr
+    lda #0
+    adc code_ptr+1
+    sta code_ptr+1
+    inc find_item_count
+    bra @next_item
+
+@found_prefix
+    inx
+    lda find_word_boundary
+    beq @find_success
+    lda strbuf,x
+    jsr is_secondary_ident_char
+    bcs @find_fail
+
+@find_success
+    sec
+    ldy find_item_count
+    rts
+
+@find_fail
+    clc
+    rts
+
+
+; Tokenize mnemonic.
+; Input: bas_ptr = line_addr, strbuf = lowercase line, Z/line_pos at start
+; Output:
+;   If found, C=1, X=token number, line_pos advanced
+;   If not found, C=0, line_pos unchanged
+tokenize_mnemonic:
+    ldx line_pos
+    lda #<mnemonics
+    sta code_ptr
+    lda #>mnemonics
+    sta code_ptr+1
+    sec  ; Must not immediately precede an identifier character.
+    jsr find_in_token_list
+    bcc @not_found
+    tya  ; Y = mnemonic token ID
+    tax
+    sec
+    rts
+@not_found
+    clc
+    rts
+
+
+; Tokenize pseudoop.
+; Input: strbuf = lowercase line, line_pos at first char
+; Output:
+;   If found, C=1, X=token number, line_pos advanced
+;   If not found, C=0, line_pos unchanged
+tokenize_pseudoop:
+    ldz line_pos
+    lda (strbuf),z
+    cmp #'!'
+    bne @not_found
+    ldx line_pos
+    inx
+    lda #<pseudoops
+    sta code_ptr
+    lda #>pseudoops
+    sta code_ptr+1
+    sec  ; Must not immediately precede an identifier character.
+    jsr find_in_token_list
+    bcc @not_found
+    tya
+    clc
+    adc #mnemonic_count  ; Y+mnemonic_count = pseudoop token ID
+    tax
+    sec
+    rts
+@not_found
+    clc
+    rts
+
+
+; Tokenize a non-mnemonic non-pseudoop keyword.
+; Input: strbuf = lowercase line, line_pos at first char
+; Output:
+;   If found, C=1, X=token number, line_pos advanced
+;   If not found, C=0, line_pos unchanged
+tokenize_other_keywords:
+    ldx line_pos
+    lda #<other_keywords
+    sta code_ptr
+    lda #>other_keywords
+    sta code_ptr+1
+    sec  ; Must not immediately precede an identifier character.
+    jsr find_in_token_list
+    bcc @not_found
+    tya
+    clc
+    adc #last_po  ; Y+last_po = keyword token ID
+    tax
+    sec
+    rts
+@not_found
+    clc
+    rts
+
+
+; Tokenize non-keyword tokens.
+; Input: strbuf = lowercase line, line_pos at first char
+; Output:
+;   If found, C=1, X=token number, line_pos advanced
+;   If not found, C=0, line_pos unchanged
+tokenize_other:
+    ldx line_pos
+    lda #<other_tokens
+    sta code_ptr
+    lda #>other_tokens
+    sta code_ptr+1
+    clc  ; Allow an identifier character immediately after.
+    jsr find_in_token_list
+    bcc @not_found
+    tya
+    clc
+    adc #last_kw  ; Y+last_kw = non-keyword token ID
+    tax
+    sec
+    rts
+@not_found
+    clc
+    rts
+
+
+; Load a full source line into strbuf, lowercased.
+; Input: line_addr
+; Output: line_addr copied to strbuf, lowercased
+load_line_to_strbuf:
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr
+    ldy #4
+    ldz #4
+-   lda [bas_ptr],z
+    jsr to_lowercase
+    sta (str_buf),y
+    beq +
+    iny
+    inz
+    beq +
+    bra -
++   rts
+
+
+; Tokenize a full line.
+;
+; This populates tokbuf with tokens, null-terminated. Tokens are variable width.
+; * String literal: tk_string_literal, line_pos, length
+; * Number literal: tk_number_literal, line_pos, expr_result (4 bytes)
+; * Label or register: tk_label_or_reg, line_pos, length
+; * Mnemonic, pseudoop, keyword, non-keyword token: token ID, line_pos
+;
+; Input: line_addr
+; Output:
+;   On success, err_code=0, tokbuf populated.
+;   On failure, err_code=syntax error, line_pos set to error.
+tokenize:
+    jsr load_line_to_strbuf
+    ldy #0
+    sty err_code
+    sty tok_pos
+    ldz #4
+    stz line_pos
+
+@tokenize_loop
+    jsr accept_whitespace_and_comment
+    cmp #0
+    beq @success
+
+    ; String literal
+    cmp #chr_doublequote
+    bne +
+    ldz line_pos
+-   inz
+    lda [bas_ptr],z
+    cmp #chr_doublequote
+    bne -
+    ; Push tk_string_literal, line_pos, length (z-line_pos)
+    ldx tok_pos
+    lda #tk_string_literal
+    sta (tokbuf),x
+    inx
+    lda line_pos
+    sta (tokbuf),x
+    inx
+    tza
+    sec
+    sbc line_pos
+    sta (tokbuf),x
+    inx
+    stx tok_pos
+    inz
+    stz line_pos
+    bra @tokenize_loop
+
++   ; Numeric literal
+    jsr accept_literal
+    bcc +
+    ; Push tk_number_literal, line_pos, expr_result (4 bytes)
+    ldx tok_pos
+    lda #tk_string_literal
+    sta (tokbuf),x
+    inx
+    lda line_pos
+    sta (tokbuf),x
+    inx
+    lda expr_result
+    sta (tokbuf),x
+    inx
+    lda expr_result+1
+    sta (tokbuf),x
+    inx
+    lda expr_result+2
+    sta (tokbuf),x
+    inx
+    lda expr_result+3
+    sta (tokbuf),x
+    inx
+    stx tok_pos
+    bra @tokenize_loop
+
++   ; Mnemonic
+    jsr tokenize_mnemonic
+    bcs @push_tok_pos_then_continue
+
+    ; Pseudoop
+    jsr tokenize_pseudoop
+    bcs @push_tok_pos_then_continue
+
+    ; Keyword
+    jsr tokenize_other_keywords
+    bcs @push_tok_pos_then_continue
+
+    ; Non-keyword token
+    ; Note: This tokenizes relative labels (---, +++) as punctuation tokens.
+    jsr tokenize_other
+    bcs @push_tok_pos_then_continue
+
+    ; Label
+    ldz line_pos
+    lda [bas_ptr],z
+    cmp #'@'
+    bne +
+    inz
+    sec
+    bra ++
++   clc
+++  jsr accept_ident
+    bcc @syntax_error
+    ; Push tk_label_or_reg, line_pos, length (z-line_pos)
+    ldx tok_pos
+    lda #tk_string_literal
+    sta (tokbuf),x
+    inx
+    lda line_pos
+    sta (tokbuf),x
+    inx
+    tza
+    sec
+    sbc line_pos
+    sta (tokbuf),x
+    inx
+    stx tok_pos
+    bra @tokenize_loop
+
+@push_tok_pos_then_continue
+    ; Push X, line_pos
+    txa
+    ldx tok_pos
+    sta (tokbuf),x
+    inx
+    lda line_pos
+    sta (tokbuf),x
+    inx
+    stx tok_pos
+    bra @tokenize_loop
+
+@syntax_error
+    lda #err_syntax
+    sta err_code
+    stz line_pos
+    rts
+
+@success
+    ; Null terminate tokbuf
+    lda #0
+    ldy tok_pos
+    sta (tokbuf),y
+    rts
+
+
+; ---------------------- REWRITE -----------------------------
 
 
 ; Consume label, mnemonic, or pseudo-op (if C=0)
@@ -804,175 +1338,6 @@ get_pseudoop_for_strbuf:
 +   iny
     inw code_ptr
     bra @next_token
-
-
-; Input: expr_result
-; Output: expr_result = expr_result * 10
-;   Overwrites expr_a
-;   Preserves Z
-expr_times_ten:
-    phz
-    ldq expr_result
-    rolq
-    stq expr_a
-    rolq
-    rolq
-    adcq expr_a
-    stq expr_result
-    plz
-    rts
-
-
-; Accept a number/char literal
-; Input: bas_ptr=line_addr, Z=line_pos
-; Output:
-;  C: 0=not found, Z/line_pos unchanged
-;  C: 1=found, expr_result; Z/line_pos advanced
-accept_literal:
-    lda #0
-    sta expr_result
-    sta expr_result+1
-    sta expr_result+2
-    sta expr_result+3
-
-    lda [bas_ptr],z
-    cmp #'\''
-    bne ++
-    ; Char literal
-    inz
-    lda [bas_ptr],z
-    tax
-    inz
-    lda [bas_ptr],z
-    cmp #'\''
-    lbne @not_found
-    stx expr_result
-    inz
-    lbra @found
-
-++  ldx #0
-    stx expr_b+1
-    stx expr_b+2
-    stx expr_b+3
-
-    cmp #'$'
-    lbeq @do_hex_literal
-    cmp #'%'
-    lbeq @do_binary_literal
-    cmp #'0'
-    lbcc @not_found
-    cmp #'9'+1
-    lbcc @do_decimal_literal
-
-@not_found
-    ldz (easyasm_base_page << 8) + line_pos
-    clc
-    rts
-
-@do_decimal_literal
-    cmp #'0'
-    lbcc @found
-    cmp #'9'+1
-    lbcs @found
-    jsr expr_times_ten
-    lda [bas_ptr],z
-    sec
-    sbc #'0'
-    sta expr_b
-    phz
-    ldq expr_b
-    clc
-    adcq expr_result
-    stq expr_result
-    plz
-    inz
-    lda [bas_ptr],z
-    lbra @do_decimal_literal
-
-@do_hex_literal
-    ; Set up first digit, confirm it's a hex digit
-    inz
-    lda [bas_ptr],z
-    cmp #'0'
-    lbcc @not_found
-    cmp #'9'+1
-    bcc +++
-    jsr to_lowercase
-    cmp #'A'
-    lbcc @not_found
-    cmp #'F'+1
-    lbcs @not_found
-
-+++
---- cmp #'0'
-    lbcc @found
-    cmp #'9'+1
-    bcs +
-    ; 0-9
-    sec
-    sbc #'0'
-    bra +++
-
-+   jsr to_lowercase
-    cmp #'A'
-    lbcc @found
-    cmp #'F'+1
-    lbcs @found
-    ; A-F
-    sec
-    sbc #'A'-10
-
-+++ sta expr_b
-    phz
-    clc
-    ldq expr_result
-    rolq
-    rolq
-    rolq
-    rolq
-    adcq expr_b
-    stq expr_result
-    plz
-    inz
-    lda [bas_ptr],z
-    bra ---
-
-@do_binary_literal
-    ; Set up first digit, confirm it's a binary digit
-    inz
-    lda [bas_ptr],z
-    cmp #'0'
-    beq +
-    cmp #'.'
-    beq +
-    cmp #'1'
-    beq +
-    cmp #'#'
-    lbne @not_found
-
-+
---- cmp #'1'
-    beq ++
-    cmp #'#'
-    beq ++
-    cmp #'0'
-    beq +
-    cmp #'.'
-    lbne @found
-+   ; 0
-    clc
-    bra +++
-++  ; 1
-    sec
-+++ rolq expr_result
-    inz
-    lda [bas_ptr],z
-    bra ---
-
-@found
-    stz line_pos
-    sec
-    rts
 
 
 ; Input: bas_ptr=line_addr, Z=line_pos
@@ -1421,307 +1786,547 @@ e05: !pet "is pseudoop",0
 
 
 ; ---------------------------------------------------------
-; Mnemonics tables
-
-; 00-03: lowercase text, left aligned, null padded
-; 04-05: addressing mode bitmask
-; 06-07: address of encoding list for supported addressing modes
-;            %11111111,
-;             ^ Implied (parameterless, or A/Q)
-;              ^ Immediate
-;               ^ Immedate word
-;                ^ Base-Page, branch relative, bit-test branch relative
-;                 ^ Base-Page X-Indexed
-;                  ^ Base-Page Y-Indexed
-;                   ^ Absolute, 16-bit branch relative
-;                    ^ Absolute X-Indexed
-;                      %11111111
-;                       ^ Absolute Y-Indexed
-;                        ^ Absolute Indirect
-;                         ^ Absolute Indirect X-Indexed
-;                          ^ Base-Page Indirect X-Indexed
-;                           ^ Base-Page Indirect Y-Indexed
-;                            ^ Base-Page Indirect Z-Indexed (or no index)
-;                             ^ 32-bit Base-Page Indirect Z-Indexed (or no index)
-;                              ^ Stack Relative Indirect, Y-Indexed
+; Mnemonics token list
+mnemonic_count = 138
 mnemonics:
-!pet "adc",0,%01011011,%10011110
-!word enc_adc
-!pet "adcq" ,%00010010,%00000110
-!word enc_adcq
-!pet "and",0,%01011011,%10011110
-!word enc_and
-!pet "andq" ,%00010010,%00000110
-!word enc_andq
-!pet "asl",0,%10011011,%00000000
-!word enc_asl
-!pet "aslq" ,%10011011,%00000000
-!word enc_aslq
-!pet "asr",0,%10011000,%00000000
-!word enc_asr
-!pet "asrq" ,%10011000,%00000000
-!word enc_asrq
-!pet "asw",0,%00000010,%00000000
-!word enc_asw
-!pet "bbr0" ,%00010000,%00000000
-!word enc_bbr0
-!pet "bbr1" ,%00010000,%00000000
-!word enc_bbr1
-!pet "bbr2" ,%00010000,%00000000
-!word enc_bbr2
-!pet "bbr3" ,%00010000,%00000000
-!word enc_bbr3
-!pet "bbr4" ,%00010000,%00000000
-!word enc_bbr4
-!pet "bbr5" ,%00010000,%00000000
-!word enc_bbr5
-!pet "bbr6" ,%00010000,%00000000
-!word enc_bbr6
-!pet "bbr7" ,%00010000,%00000000
-!word enc_bbr7
-!pet "bbs0" ,%00010000,%00000000
-!word enc_bbs0
-!pet "bbs1" ,%00010000,%00000000
-!word enc_bbs1
-!pet "bbs2" ,%00010000,%00000000
-!word enc_bbs2
-!pet "bbs3" ,%00010000,%00000000
-!word enc_bbs3
-!pet "bbs4" ,%00010000,%00000000
-!word enc_bbs4
-!pet "bbs5" ,%00010000,%00000000
-!word enc_bbs5
-!pet "bbs6" ,%00010000,%00000000
-!word enc_bbs6
-!pet "bbs7" ,%00010000,%00000000
-!word enc_bbs7
-!pet "bcc",0,%00010010,%00000000
-!word enc_bcc
-!pet "bcs",0,%00010010,%00000000
-!word enc_bcs
-!pet "beq",0,%00010010,%00000000
-!word enc_beq
-!pet "bit",0,%01011011,%00000000
-!word enc_bit
-!pet "bitq" ,%00010010,%00000000
-!word enc_bitq
-!pet "bmi",0,%00010010,%00000000
-!word enc_bmi
-!pet "bne",0,%00010010,%00000000
-!word enc_bne
-!pet "bpl",0,%00010010,%00000000
-!word enc_bpl
-!pet "bra",0,%00010010,%00000000
-!word enc_bra
-!pet "brk",0,%10000000,%00000000
-!word enc_brk
-!pet "bsr",0,%00000010,%00000000
-!word enc_bsr
-!pet "bvc",0,%00010010,%00000000
-!word enc_bvc
-!pet "bvs",0,%00010010,%00000000
-!word enc_bvs
-!pet "clc",0,%10000000,%00000000
-!word enc_clc
-!pet "cld",0,%10000000,%00000000
-!word enc_cld
-!pet "cle",0,%10000000,%00000000
-!word enc_cle
-!pet "cli",0,%10000000,%00000000
-!word enc_cli
-!pet "clv",0,%10000000,%00000000
-!word enc_clv
-!pet "cmp",0,%01011011,%10011110
-!word enc_cmp
-!pet "cmpq" ,%00010010,%00000110
-!word enc_cmpq
-!pet "cpq",0,%00010010,%00000110
-!word enc_cmpq
-!pet "cpx",0,%01010010,%00000000
-!word enc_cpx
-!pet "cpy",0,%01010010,%00000000
-!word enc_cpy
-!pet "cpz",0,%01010010,%00000000
-!word enc_cpz
-!pet "dec",0,%10011011,%00000000
-!word enc_dec
-!pet "deq",0,%10011011,%00000000
-!word enc_deq
-!pet "dew",0,%00010000,%00000000
-!word enc_dew
-!pet "dex",0,%10000000,%00000000
-!word enc_dex
-!pet "dey",0,%10000000,%00000000
-!word enc_dey
-!pet "dez",0,%10000000,%00000000
-!word enc_dez
-!pet "eom",0,%10000000,%00000000
-!word enc_eom
-!pet "eor",0,%01011011,%10011110
-!word enc_eor
-!pet "eorq" ,%00010010,%00000110
-!word enc_eorq
-!pet "inc",0,%10011011,%00000000
-!word enc_inc
-!pet "inq",0,%10011011,%00000000
-!word enc_inq
-!pet "inw",0,%00010000,%00000000
-!word enc_inw
-!pet "inx",0,%10000000,%00000000
-!word enc_inx
-!pet "iny",0,%10000000,%00000000
-!word enc_iny
-!pet "inz",0,%10000000,%00000000
-!word enc_inz
-!pet "jmp",0,%00000010,%01100000
-!word enc_jmp
-!pet "jsr",0,%00000010,%01100000
-!word enc_jsr
-!pet "lda",0,%01011011,%10011111
-!word enc_lda
-!pet "ldq",0,%00010010,%00000110
-!word enc_ldq
-!pet "ldx",0,%01010110,%10000000
-!word enc_ldx
-!pet "ldy",0,%01011011,%00000000
-!word enc_ldy
-!pet "ldz",0,%01000011,%00000000
-!word enc_ldz
-!pet "lsr",0,%10011011,%00000000
-!word enc_lsr
-!pet "lsrq" ,%10011011,%00000000
-!word enc_lsrq
-!pet "map",0,%10000000,%00000000
-!word enc_map
-!pet "neg",0,%10000000,%00000000
-!word enc_neg
-!pet "ora",0,%01011011,%10011110
-!word enc_ora
-!pet "orq",0,%00010010,%00000110
-!word enc_orq
-!pet "pha",0,%10000000,%00000000
-!word enc_pha
-!pet "php",0,%10000000,%00000000
-!word enc_php
-!pet "phw",0,%00100010,%00000000
-!word enc_phw
-!pet "phx",0,%10000000,%00000000
-!word enc_phx
-!pet "phy",0,%10000000,%00000000
-!word enc_phy
-!pet "phz",0,%10000000,%00000000
-!word enc_phz
-!pet "pla",0,%10000000,%00000000
-!word enc_pla
-!pet "plp",0,%10000000,%00000000
-!word enc_plp
-!pet "plx",0,%10000000,%00000000
-!word enc_plx
-!pet "ply",0,%10000000,%00000000
-!word enc_ply
-!pet "plz",0,%10000000,%00000000
-!word enc_plz
-!pet "resq" ,%00001001,%10011000
-!word enc_resq
-!pet "rmb0" ,%00010000,%00000000
-!word enc_rmb0
-!pet "rmb1" ,%00010000,%00000000
-!word enc_rmb1
-!pet "rmb2" ,%00010000,%00000000
-!word enc_rmb2
-!pet "rmb3" ,%00010000,%00000000
-!word enc_rmb3
-!pet "rmb4" ,%00010000,%00000000
-!word enc_rmb4
-!pet "rmb5" ,%00010000,%00000000
-!word enc_rmb5
-!pet "rmb6" ,%00010000,%00000000
-!word enc_rmb6
-!pet "rmb7" ,%00010000,%00000000
-!word enc_rmb7
-!pet "rol",0,%10011011,%00000000
-!word enc_rol
-!pet "rolq" ,%10011011,%00000000
-!word enc_rolq
-!pet "ror",0,%10011011,%00000000
-!word enc_ror
-!pet "rorq" ,%10011011,%00000000
-!word enc_rorq
-!pet "row",0,%00000010,%00000000
-!word enc_row
-!pet "rsvq" ,%00001001,%10011001
-!word enc_rsvq
-!pet "rti",0,%10000000,%00000000
-!word enc_rti
-!pet "rts",0,%11000000,%00000000
-!word enc_rts
-!pet "sbc",0,%01011011,%10011110
-!word enc_sbc
-!pet "sbcq" ,%00010010,%00000110
-!word enc_sbcq
-!pet "sec",0,%10000000,%00000000
-!word enc_sec
-!pet "sed",0,%10000000,%00000000
-!word enc_sed
-!pet "see",0,%10000000,%00000000
-!word enc_see
-!pet "sei",0,%10000000,%00000000
-!word enc_sei
-!pet "smb0" ,%00010000,%00000000
-!word enc_smb0
-!pet "smb1" ,%00010000,%00000000
-!word enc_smb1
-!pet "smb2" ,%00010000,%00000000
-!word enc_smb2
-!pet "smb3" ,%00010000,%00000000
-!word enc_smb3
-!pet "smb4" ,%00010000,%00000000
-!word enc_smb4
-!pet "smb5" ,%00010000,%00000000
-!word enc_smb5
-!pet "smb6" ,%00010000,%00000000
-!word enc_smb6
-!pet "smb7" ,%00010000,%00000000
-!word enc_smb7
-!pet "sta",0,%00011011,%10011111
-!word enc_sta
-!pet "stq",0,%00010010,%00000110
-!word enc_stq
-!pet "stx",0,%00010110,%10000000
-!word enc_stx
-!pet "sty",0,%00011011,%00000000
-!word enc_sty
-!pet "stz",0,%00011011,%00000000
-!word enc_stz
-!pet "tab",0,%10000000,%00000000
-!word enc_tab
-!pet "tax",0,%10000000,%00000000
-!word enc_tax
-!pet "tay",0,%10000000,%00000000
-!word enc_tay
-!pet "taz",0,%10000000,%00000000
-!word enc_taz
-!pet "tba",0,%10000000,%00000000
-!word enc_tba
-!pet "trb",0,%00010010,%00000000
-!word enc_trb
-!pet "tsb",0,%00010010,%00000000
-!word enc_tsb
-!pet "tsx",0,%10000000,%00000000
-!word enc_tsx
-!pet "tsy",0,%10000000,%00000000
-!word enc_tsy
-!pet "txa",0,%10000000,%00000000
-!word enc_txa
-!pet "txs",0,%10000000,%00000000
-!word enc_txs
-!pet "tya",0,%10000000,%00000000
-!word enc_tya
-!pet "tys",0,%10000000,%00000000
-!word enc_tys
-!pet "tza",0,%10000000,%00000000
-!word enc_tza
+!pet "adc",0
+!pet "adcq",0
+!pet "and",0
+!pet "andq",0
+!pet "asl",0
+!pet "aslq",0
+!pet "asr",0
+!pet "asrq",0
+!pet "asw",0
+!pet "bbr0",0
+!pet "bbr1",0
+!pet "bbr2",0
+!pet "bbr3",0
+!pet "bbr4",0
+!pet "bbr5",0
+!pet "bbr6",0
+!pet "bbr7",0
+!pet "bbs0",0
+!pet "bbs1",0
+!pet "bbs2",0
+!pet "bbs3",0
+!pet "bbs4",0
+!pet "bbs5",0
+!pet "bbs6",0
+!pet "bbs7",0
+!pet "bcc",0
+!pet "bcs",0
+!pet "beq",0
+!pet "bit",0
+!pet "bitq",0
+!pet "bmi",0
+!pet "bne",0
+!pet "bpl",0
+!pet "bra",0
+!pet "brk",0
+!pet "bsr",0
+!pet "bvc",0
+!pet "bvs",0
+!pet "clc",0
+!pet "cld",0
+!pet "cle",0
+!pet "cli",0
+!pet "clv",0
+!pet "cmp",0
+!pet "cmpq",0
+!pet "cpq",0
+!pet "cpx",0
+!pet "cpy",0
+!pet "cpz",0
+!pet "dec",0
+!pet "deq",0
+!pet "dew",0
+!pet "dex",0
+!pet "dey",0
+!pet "dez",0
+!pet "eom",0
+!pet "eor",0
+!pet "eorq",0
+!pet "inc",0
+!pet "inq",0
+!pet "inw",0
+!pet "inx",0
+!pet "iny",0
+!pet "inz",0
+!pet "jmp",0
+!pet "jsr",0
+!pet "lda",0
+!pet "ldq",0
+!pet "ldx",0
+!pet "ldy",0
+!pet "ldz",0
+!pet "lsr",0
+!pet "lsrq",0
+!pet "map",0
+!pet "neg",0
+!pet "ora",0
+!pet "orq",0
+!pet "pha",0
+!pet "php",0
+!pet "phw",0
+!pet "phx",0
+!pet "phy",0
+!pet "phz",0
+!pet "pla",0
+!pet "plp",0
+!pet "plx",0
+!pet "ply",0
+!pet "plz",0
+!pet "resq",0
+!pet "rmb0",0
+!pet "rmb1",0
+!pet "rmb2",0
+!pet "rmb3",0
+!pet "rmb4",0
+!pet "rmb5",0
+!pet "rmb6",0
+!pet "rmb7",0
+!pet "rol",0
+!pet "rolq",0
+!pet "ror",0
+!pet "rorq",0
+!pet "row",0
+!pet "rsvq",0
+!pet "rti",0
+!pet "rts",0
+!pet "sbc",0
+!pet "sbcq",0
+!pet "sec",0
+!pet "sed",0
+!pet "see",0
+!pet "sei",0
+!pet "smb0",0
+!pet "smb1",0
+!pet "smb2",0
+!pet "smb3",0
+!pet "smb4",0
+!pet "smb5",0
+!pet "smb6",0
+!pet "smb7",0
+!pet "sta",0
+!pet "stq",0
+!pet "stx",0
+!pet "sty",0
+!pet "stz",0
+!pet "tab",0
+!pet "tax",0
+!pet "tay",0
+!pet "taz",0
+!pet "tba",0
+!pet "trb",0
+!pet "tsb",0
+!pet "tsx",0
+!pet "tsy",0
+!pet "txa",0
+!pet "txs",0
+!pet "tya",0
+!pet "tys",0
+!pet "tza",0
 !byte 0
+
+; Pseudo-op table
+; These tokens are preceded with a "!" character.
+pseudoops:
+po_to = mnemonic_count + 0
+!pet "to",0
+po_byte = mnemonic_count + 1
+!pet "byte",0
+po_8 = mnemonic_count + 2
+!pet "8",0
+po_word = mnemonic_count + 3
+!pet "word",0
+po_16 = mnemonic_count + 4
+!pet "16",0
+po_32 = mnemonic_count + 5
+!pet "32",0
+po_fill = mnemonic_count + 6
+!pet "fill",0
+po_pet = mnemonic_count + 7
+!pet "pet",0
+po_scr = mnemonic_count + 8
+!pet "scr",0
+po_source = mnemonic_count + 9
+!pet "source",0
+po_binary = mnemonic_count + 10
+!pet "binary",0
+po_warn = mnemonic_count + 11
+!pet "warn",0
+!byte 0
+last_po = po_warn + 1
+
+; Other keywords table
+; These tokens consist of letters, case insensitive, and must be surrounded
+; with "word boundaries."
+other_keywords:
+kw_div = last_po + 0
+!pet "div",0
+kw_xor = last_po + 1
+!pet "xor",0
+!byte 0
+last_kw = kw_xor + 1
+
+; Other tokens table
+; These tokens are lexed up to their length, in order, with no delimiters.
+other_tokens:
+tk_complement = last_kw + 0
+!pet "!",0
+tk_power = last_kw + 1
+!pet "^",0
+tk_minus = last_kw + 2
+!pet "-",0
+tk_multiply = last_kw + 3
+!pet "*",0
+tk_remainder = last_kw + 4
+!pet "%",0
+tk_plus = last_kw + 5
+!pet "+",0
+tk_lsr = last_kw + 6
+!pet ">>>",0
+tk_asr = last_kw + 7
+!pet ">>",0
+tk_asl = last_kw + 8
+!pet "<<",0
+tk_lt = last_kw + 9
+!pet "<",0
+tk_gt = last_kw + 10
+!pet ">",0
+tk_ampersand = last_kw + 11
+!pet "&",0
+tk_pipe = last_kw + 12
+!pet "|",0
+tk_comma = last_kw + 13
+!pet ",",0
+tk_hash = last_kw + 14
+!pet "#",0
+tk_lparen = last_kw + 15
+!pet "(",0
+tk_rparen = last_kw + 16
+!pet ")",0
+tk_lbracket = last_kw + 17
+!pet "[",0
+tk_rbracket = last_kw + 18
+!pet "]",0
+!byte 0
+last_tk = tk_rbracket + 1
+
+; Other token IDs
+tk_number_literal = last_tk + 0
+tk_string_literal = last_tk + 1
+tk_label_or_reg = last_tk + 2
+
+
+; ------------------------------------------------------------
+; Instruction encodings
+;
+; The addressing_modes table consists of one entry per instruction
+; mnemonic, four bytes per entry, in token ID order.
+;
+; The first two bytes are an addressing mode bitmask, one bit set for each
+; addressing mode supported by the instruction.
+;
+; The last two bytes are the code address for the encoding list. (See below,
+; starting with enc_adc.)
+;
+;     %11111111,
+;      ^ Implied (parameterless, or A/Q)
+;       ^ Immediate
+;        ^ Immedate word
+;         ^ Base-Page, branch relative, bit-test branch relative
+;          ^ Base-Page X-Indexed
+;           ^ Base-Page Y-Indexed
+;            ^ Absolute, 16-bit branch relative
+;             ^ Absolute X-Indexed
+;               %11111111
+;                ^ Absolute Y-Indexed
+;                 ^ Absolute Indirect
+;                  ^ Absolute Indirect X-Indexed
+;                   ^ Base-Page Indirect X-Indexed
+;                    ^ Base-Page Indirect Y-Indexed
+;                     ^ Base-Page Indirect Z-Indexed (or no index)
+;                      ^ 32-bit Base-Page Indirect Z-Indexed (or no index)
+;                       ^ Stack Relative Indirect, Y-Indexed
+addressing_modes:
+!byte %01011011,%10011110  ; adc
+!word enc_adc
+!byte %00010010,%00000110  ; adcq
+!word enc_adcq
+!byte %01011011,%10011110  ; and
+!word enc_and
+!byte %00010010,%00000110  ; andq
+!word enc_andq
+!byte %10011011,%00000000  ; asl
+!word enc_asl
+!byte %10011011,%00000000  ; aslq
+!word enc_aslq
+!byte %10011000,%00000000  ; asr
+!word enc_asr
+!byte %10011000,%00000000  ; asrq
+!word enc_asrq
+!byte %00000010,%00000000  ; asw
+!word enc_asw
+!byte %00010000,%00000000  ; bbr0
+!word enc_bbr0
+!byte %00010000,%00000000  ; bbr1
+!word enc_bbr1
+!byte %00010000,%00000000  ; bbr2
+!word enc_bbr2
+!byte %00010000,%00000000  ; bbr3
+!word enc_bbr3
+!byte %00010000,%00000000  ; bbr4
+!word enc_bbr4
+!byte %00010000,%00000000  ; bbr5
+!word enc_bbr5
+!byte %00010000,%00000000  ; bbr6
+!word enc_bbr6
+!byte %00010000,%00000000  ; bbr7
+!word enc_bbr7
+!byte %00010000,%00000000  ; bbs0
+!word enc_bbs0
+!byte %00010000,%00000000  ; bbs1
+!word enc_bbs1
+!byte %00010000,%00000000  ; bbs2
+!word enc_bbs2
+!byte %00010000,%00000000  ; bbs3
+!word enc_bbs3
+!byte %00010000,%00000000  ; bbs4
+!word enc_bbs4
+!byte %00010000,%00000000  ; bbs5
+!word enc_bbs5
+!byte %00010000,%00000000  ; bbs6
+!word enc_bbs6
+!byte %00010000,%00000000  ; bbs7
+!word enc_bbs7
+!byte %00010010,%00000000  ; bcc
+!word enc_bcc
+!byte %00010010,%00000000  ; bcs
+!word enc_bcs
+!byte %00010010,%00000000  ; beq
+!word enc_beq
+!byte %01011011,%00000000  ; bit
+!word enc_bit
+!byte %00010010,%00000000  ; bitq
+!word enc_bitq
+!byte %00010010,%00000000  ; bmi
+!word enc_bmi
+!byte %00010010,%00000000  ; bne
+!word enc_bne
+!byte %00010010,%00000000  ; bpl
+!word enc_bpl
+!byte %00010010,%00000000  ; bra
+!word enc_bra
+!byte %10000000,%00000000  ; brk
+!word enc_brk
+!byte %00000010,%00000000  ; bsr
+!word enc_bsr
+!byte %00010010,%00000000  ; bvc
+!word enc_bvc
+!byte %00010010,%00000000  ; bvs
+!word enc_bvs
+!byte %10000000,%00000000  ; clc
+!word enc_clc
+!byte %10000000,%00000000  ; cld
+!word enc_cld
+!byte %10000000,%00000000  ; cle
+!word enc_cle
+!byte %10000000,%00000000  ; cli
+!word enc_cli
+!byte %10000000,%00000000  ; clv
+!word enc_clv
+!byte %01011011,%10011110  ; cmp
+!word enc_cmp
+!byte %00010010,%00000110  ; cmpq
+!word enc_cmpq
+!byte %00010010,%00000110  ; cpq
+!word enc_cmpq
+!byte %01010010,%00000000  ; cpx
+!word enc_cpx
+!byte %01010010,%00000000  ; cpy
+!word enc_cpy
+!byte %01010010,%00000000  ; cpz
+!word enc_cpz
+!byte %10011011,%00000000  ; dec
+!word enc_dec
+!byte %10011011,%00000000  ; deq
+!word enc_deq
+!byte %00010000,%00000000  ; dew
+!word enc_dew
+!byte %10000000,%00000000  ; dex
+!word enc_dex
+!byte %10000000,%00000000  ; dey
+!word enc_dey
+!byte %10000000,%00000000  ; dez
+!word enc_dez
+!byte %10000000,%00000000  ; eom
+!word enc_eom
+!byte %01011011,%10011110  ; eor
+!word enc_eor
+!byte %00010010,%00000110  ; eorq
+!word enc_eorq
+!byte %10011011,%00000000  ; inc
+!word enc_inc
+!byte %10011011,%00000000  ; inq
+!word enc_inq
+!byte %00010000,%00000000  ; inw
+!word enc_inw
+!byte %10000000,%00000000  ; inx
+!word enc_inx
+!byte %10000000,%00000000  ; iny
+!word enc_iny
+!byte %10000000,%00000000  ; inz
+!word enc_inz
+!byte %00000010,%01100000  ; jmp
+!word enc_jmp
+!byte %00000010,%01100000  ; jsr
+!word enc_jsr
+!byte %01011011,%10011111  ; lda
+!word enc_lda
+!byte %00010010,%00000110  ; ldq
+!word enc_ldq
+!byte %01010110,%10000000  ; ldx
+!word enc_ldx
+!byte %01011011,%00000000  ; ldy
+!word enc_ldy
+!byte %01000011,%00000000  ; ldz
+!word enc_ldz
+!byte %10011011,%00000000  ; lsr
+!word enc_lsr
+!byte %10011011,%00000000  ; lsrq
+!word enc_lsrq
+!byte %10000000,%00000000  ; map
+!word enc_map
+!byte %10000000,%00000000  ; neg
+!word enc_neg
+!byte %01011011,%10011110  ; ora
+!word enc_ora
+!byte %00010010,%00000110  ; orq
+!word enc_orq
+!byte %10000000,%00000000  ; pha
+!word enc_pha
+!byte %10000000,%00000000  ; php
+!word enc_php
+!byte %00100010,%00000000  ; phw
+!word enc_phw
+!byte %10000000,%00000000  ; phx
+!word enc_phx
+!byte %10000000,%00000000  ; phy
+!word enc_phy
+!byte %10000000,%00000000  ; phz
+!word enc_phz
+!byte %10000000,%00000000  ; pla
+!word enc_pla
+!byte %10000000,%00000000  ; plp
+!word enc_plp
+!byte %10000000,%00000000  ; plx
+!word enc_plx
+!byte %10000000,%00000000  ; ply
+!word enc_ply
+!byte %10000000,%00000000  ; plz
+!word enc_plz
+!byte %00001001,%10011000  ; resq
+!word enc_resq
+!byte %00010000,%00000000  ; rmb0
+!word enc_rmb0
+!byte %00010000,%00000000  ; rmb1
+!word enc_rmb1
+!byte %00010000,%00000000  ; rmb2
+!word enc_rmb2
+!byte %00010000,%00000000  ; rmb3
+!word enc_rmb3
+!byte %00010000,%00000000  ; rmb4
+!word enc_rmb4
+!byte %00010000,%00000000  ; rmb5
+!word enc_rmb5
+!byte %00010000,%00000000  ; rmb6
+!word enc_rmb6
+!byte %00010000,%00000000  ; rmb7
+!word enc_rmb7
+!byte %10011011,%00000000  ; rol
+!word enc_rol
+!byte %10011011,%00000000  ; rolq
+!word enc_rolq
+!byte %10011011,%00000000  ; ror
+!word enc_ror
+!byte %10011011,%00000000  ; rorq
+!word enc_rorq
+!byte %00000010,%00000000  ; row
+!word enc_row
+!byte %00001001,%10011001  ; rsvq
+!word enc_rsvq
+!byte %10000000,%00000000  ; rti
+!word enc_rti
+!byte %11000000,%00000000  ; rts
+!word enc_rts
+!byte %01011011,%10011110  ; sbc
+!word enc_sbc
+!byte %00010010,%00000110  ; sbcq
+!word enc_sbcq
+!byte %10000000,%00000000  ; sec
+!word enc_sec
+!byte %10000000,%00000000  ; sed
+!word enc_sed
+!byte %10000000,%00000000  ; see
+!word enc_see
+!byte %10000000,%00000000  ; sei
+!word enc_sei
+!byte %00010000,%00000000  ; smb0
+!word enc_smb0
+!byte %00010000,%00000000  ; smb1
+!word enc_smb1
+!byte %00010000,%00000000  ; smb2
+!word enc_smb2
+!byte %00010000,%00000000  ; smb3
+!word enc_smb3
+!byte %00010000,%00000000  ; smb4
+!word enc_smb4
+!byte %00010000,%00000000  ; smb5
+!word enc_smb5
+!byte %00010000,%00000000  ; smb6
+!word enc_smb6
+!byte %00010000,%00000000  ; smb7
+!word enc_smb7
+!byte %00011011,%10011111  ; sta
+!word enc_sta
+!byte %00010010,%00000110  ; stq
+!word enc_stq
+!byte %00010110,%10000000  ; stx
+!word enc_stx
+!byte %00011011,%00000000  ; sty
+!word enc_sty
+!byte %00011011,%00000000  ; stz
+!word enc_stz
+!byte %10000000,%00000000  ; tab
+!word enc_tab
+!byte %10000000,%00000000  ; tax
+!word enc_tax
+!byte %10000000,%00000000  ; tay
+!word enc_tay
+!byte %10000000,%00000000  ; taz
+!word enc_taz
+!byte %10000000,%00000000  ; tba
+!word enc_tba
+!byte %00010010,%00000000  ; trb
+!word enc_trb
+!byte %00010010,%00000000  ; tsb
+!word enc_tsb
+!byte %10000000,%00000000  ; tsx
+!word enc_tsx
+!byte %10000000,%00000000  ; tsy
+!word enc_tsy
+!byte %10000000,%00000000  ; txa
+!word enc_txa
+!byte %10000000,%00000000  ; txs
+!word enc_txs
+!byte %10000000,%00000000  ; tya
+!word enc_tya
+!byte %10000000,%00000000  ; tys
+!word enc_tys
+!byte %10000000,%00000000  ; tza
+!word enc_tza
 
 ; Encoding lists
 ; Single-byte encodings for each supported addressing mode, msb to lsb in the bitfield
@@ -1877,36 +2482,8 @@ enc_tys : !byte $2b
 enc_tza : !byte $6b
 
 
-; ---------------------------------------------------------
-; Pseudo-op table
-
-pseudoops:
-po_to = 1
-!pet "to",0
-po_byte = 2
-!pet "byte",0
-po_8 = 3
-!pet "8",0
-po_word = 4
-!pet "word",0
-po_16 = 5
-!pet "16",0
-po_32 = 6
-!pet "32",0
-po_fill = 7
-!pet "fill",0
-po_pet = 8
-!pet "pet",0
-po_scr = 9
-!pet "scr",0
-po_source = 10
-!pet "source",0
-po_binary = 11
-!pet "binary",0
-po_warn = 12
-!pet "warn",0
-!byte 0
-
+; ------------------------------------------------------------
+; Screen code translation table
 ; Index: PETSCII code, value: screen code
 ; Untranslatable characters become spaces.
 scr_table:
@@ -2694,6 +3271,6 @@ run_test_suite_cmd:
 
 ; ---------------------------------------------------------
 
-!if * >= strbuf {
+!if * >= max_end_of_program {
     !error "EasyAsm code is too large, * = ", *
 }
