@@ -26,7 +26,7 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 26
+* = $100 - 32
 
 pass            *=*+1
 program_counter *=*+2
@@ -865,7 +865,7 @@ accept_literal:
     lbcc @do_decimal_literal
 
 @not_found
-    ldz line_pos
+    ldz (easyasm_base_page << 8) + line_pos
     clc
     rts
 
@@ -1016,7 +1016,7 @@ accept_expression:
     and #!F_EXPR_BRACKET_MASK
     ora #F_EXPR_BRACKET_ZERO
     sta expr_flags
-+++ ldz line_pos
++++ ldz (easyasm_base_page << 8) + line_pos
 
 ; TODO: a real expression parser
 ;   Only support number literals as expressions for now
@@ -1037,9 +1037,9 @@ is_expr_16bit:
     ora expr_result+2
     ora expr_result+3
     bne +
-    sec
+    clc
     rts
-+   clc
++   sec
     rts
 
 
@@ -1049,6 +1049,12 @@ is_expr_16bit:
 ;  C: 0=not found, Z/line_pos unchanged
 ;  C: 1=found, expr_result=operand, X/Y=addr mode bit, Z/line_pos advanced
 accept_addressing_operand:
+    lda #0
+    sta expr_result
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+
     jsr accept_whitespace_and_comment
     lda [bas_ptr],z
     bne +
@@ -1061,6 +1067,8 @@ accept_addressing_operand:
 
 +   cmp #'#'
     bne +++
+    inz
+    jsr accept_whitespace_and_comment
     ; Immediate
     jsr accept_expression
     lbcc @exit_fail
@@ -1075,14 +1083,16 @@ accept_addressing_operand:
     rts
 
 +++ jsr accept_expression
-    bcc +++
+    lbcc +++
     jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
     bne ++
     ; Expression followed by end of line.
     lda expr_flags
     and #F_EXPR_BRACKET_MASK
     cmp #F_EXPR_BRACKET_PAREN
     bne +
+    ; TODO: support ($ff) as an alias for ($ff),z?
     ldx #%00000000  ; Absolute Indirect
     ldy #%01000000
     stz line_pos
@@ -1103,19 +1113,21 @@ accept_addressing_operand:
 
 ++  cmp #','
     lbne @exit_fail
+    inz
+    jsr accept_whitespace_and_comment
     ; Expression folowed by comma.
     lda expr_flags
     and #F_EXPR_BRACKET_MASK
     cmp #F_EXPR_BRACKET_PAREN
     bne ++
     ; With parens...
-    inz
-    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
     jsr to_lowercase
     cmp #'Y'
     bne +
     ldx #%00000000
     ldy #%00001000  ; Base-page Indirect Y-Indexed
+    inz
     stz line_pos
     sec
     rts
@@ -1123,6 +1135,7 @@ accept_addressing_operand:
     lbne @exit_fail
     ldx #%00000000
     ldy #%00000100  ; Base-page Indirect Z-Indexed
+    inz
     stz line_pos
     sec
     rts
@@ -1130,20 +1143,20 @@ accept_addressing_operand:
 ++  cmp #F_EXPR_BRACKET_SQUARE
     bne ++
     ; With square brackets...
-    inz
-    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
     jsr to_lowercase
     cmp #'Z'
     lbne @exit_fail
     ldx #%00000000
     ldy #%00000010  ; 32-bit Base-page Indirect Z-Indexed
+    inz
     stz line_pos
     sec
     rts
 
 ++  ; Without parens...
     inz
-    jsr accept_whitespace_and_comment
+    lda [bas_ptr],z
     jsr to_lowercase
     cmp #'X'
     bne ++
@@ -1151,11 +1164,13 @@ accept_addressing_operand:
     bcs +
     ldx #%00001000  ; Base-page X-Indexed
     ldy #%00000000
+    inz
     stz line_pos
     sec
     rts
 +   ldx #%00000001  ; Absolute X-Indexed
     ldy #%00000000
+    inz
     stz line_pos
     sec
     rts
@@ -1166,11 +1181,13 @@ accept_addressing_operand:
     bcs +
     ldx #%00000100  ; Base-page Y-Indexed
     ldy #%00000000
+    inz
     stz line_pos
     sec
     rts
 +   ldx #%00000000  ; Absolute Y-Indexed
     ldy #%10000000
+    inz
     stz line_pos
     sec
     rts
@@ -1187,7 +1204,7 @@ accept_addressing_operand:
     cmp #','
     lbne @exit_fail
     inz
-    lda [bas_ptr],z
+    jsr accept_whitespace_and_comment
     jsr to_lowercase
     cmp #'X'
     beq +
@@ -1227,10 +1244,12 @@ accept_addressing_operand:
     bra ++
 +   ldy #%00100000  ; Absolute Indirect X-Indexed
 ++  sec
+    inz
+    stz line_pos
     rts
 
 @exit_fail
-    ldz line_pos
+    ldz (easyasm_base_page << 8) + line_pos
     clc
     rts
 
@@ -2261,7 +2280,6 @@ test_get_pseudoop_for_strbuf_5: !pet "lda",0
 
 !if .ec {
     bcs +
-    +print_strlit_line "... fail ec should be 1, is 0"
     brk
 +   lda #<.eval
     ldx #>.eval
@@ -2270,17 +2288,14 @@ test_get_pseudoop_for_strbuf_5: !pet "lda",0
     cpq expr_result
     beq +
     ldq expr_result
-    +print_strlit_line "... wrong expr-result"
     brk
 +   lda line_pos
     cmp #.epos
     beq +
-    +print_strlit_line "... wrong line-pos"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "... fail ec should be 0, is 1"
     brk
 +
 }
@@ -2316,6 +2331,131 @@ test_accept_literal_25: !pet "$Fg",0
 test_accept_literal_26: !pet "%12",0
 test_accept_literal_27: !pet "56a",0
 test_accept_literal_28: !pet 0
+
+!macro test_accept_addressing_operand .tnum, .lineaddr, .ec, .eresult, .ex, .ey, .epos {
+    +test_start .tnum
+    lda #<.lineaddr
+    sta bas_ptr
+    lda #>.lineaddr
+    sta bas_ptr+1
+    lda #$05
+    sta bas_ptr+2   ; test data in bank 5
+    ldz #0
+    stz line_pos
+    jsr accept_addressing_operand
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail ec should be 1, is 0"
+    brk
++   lda expr_result
+    cmp #<.eresult
+    beq +
+    +print_strlit_line "... fail result byte 0"
+    brk
++   lda expr_result+1
+    cmp #>.eresult
+    beq +
+    +print_strlit_line "... fail result byte 1"
+    brk
++   lda expr_result+2
+    cmp #^.eresult
+    beq +
+    +print_strlit_line "... fail result byte 2"
+    brk
++   lda expr_result+3
+    cmp #<(.eresult >>> 24)
+    beq +
+    +print_strlit_line "... fail result byte 3"
+    brk
++   cpx #.ex
+    beq +
+    +print_strlit_line "... fail x"
+    brk
++   cpy #.ey
+    beq +
+    +print_strlit_line "... fail y"
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    +print_strlit_line "... fail line-pos"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail ec should be 0, is 1"
+    brk
++
+}
+
+    +test_end
+}
+
+test_accept_addressing_operand_1: !pet "   ",0
+test_accept_addressing_operand_2: !pet 0
+test_accept_addressing_operand_3: !pet "     ; comment",0
+
+test_accept_addressing_operand_4: !pet "#$ff",0
+test_accept_addressing_operand_5: !pet "#$ff  ; comment",0
+test_accept_addressing_operand_6: !pet "#255",0
+test_accept_addressing_operand_7: !pet "#%01010101",0
+test_accept_addressing_operand_8: !pet "#$10ff",0
+test_accept_addressing_operand_9: !pet "#$00ff",0
+test_accept_addressing_operand_10: !pet "#256",0
+
+test_accept_addressing_operand_11: !pet "$ff",0
+test_accept_addressing_operand_12: !pet "$ff,x",0
+test_accept_addressing_operand_13: !pet "$FF,X",0
+test_accept_addressing_operand_14: !pet "  $ff  ,  x  ",0
+test_accept_addressing_operand_15: !pet "$ff,y",0
+test_accept_addressing_operand_16: !pet "$FF,Y",0
+test_accept_addressing_operand_17: !pet "  $ff  ,  y",0
+
+test_accept_addressing_operand_18: !pet "$ffff",0
+test_accept_addressing_operand_19: !pet "$00ff",0
+
+test_accept_addressing_operand_20: !pet "$ffff,x",0
+test_accept_addressing_operand_21: !pet "$fFFf,X",0
+test_accept_addressing_operand_22: !pet "$ffff  ,  x",0
+
+test_accept_addressing_operand_23: !pet "$ffff,y",0
+test_accept_addressing_operand_24: !pet "$fFFf,Y",0
+test_accept_addressing_operand_25: !pet "$ffff  ,  y",0
+
+test_accept_addressing_operand_26: !pet "($ffff)",0
+test_accept_addressing_operand_27: !pet "(  $fFFf  )",0
+
+test_accept_addressing_operand_28: !pet "($ffff,x)",0
+test_accept_addressing_operand_29: !pet "(  $fFFf  ,  X  )",0
+
+test_accept_addressing_operand_30: !pet "($ff,x)",0
+test_accept_addressing_operand_31: !pet "($FF,X)",0
+test_accept_addressing_operand_32: !pet "(  $ff  ,  x  )",0
+
+test_accept_addressing_operand_33: !pet "($ff),y",0
+test_accept_addressing_operand_34: !pet "($FF),Y",0
+test_accept_addressing_operand_35: !pet "(  $ff  )  ,  y",0
+
+test_accept_addressing_operand_36: !pet "($ff),z",0
+test_accept_addressing_operand_37: !pet "($FF),Z",0
+test_accept_addressing_operand_38: !pet "(  $ff  )  ,  z",0
+test_accept_addressing_operand_39: !pet "($ff)  ; comment",0
+
+test_accept_addressing_operand_40: !pet "[$ff],z",0
+test_accept_addressing_operand_41: !pet "[$fF],Z",0
+test_accept_addressing_operand_42: !pet "[  $ff  ]  ,  z",0
+test_accept_addressing_operand_43: !pet "[$ff]  ; comment",0
+
+test_accept_addressing_operand_44: !pet "(123,sp),y",0
+test_accept_addressing_operand_45: !pet "(123,Sp),Y",0
+test_accept_addressing_operand_46: !pet "(  123  ,  sp  )  ,  y",0
+
+test_accept_addressing_operand_47: !pet "($ff",0
+test_accept_addressing_operand_48: !pet "[$ff",0
+test_accept_addressing_operand_49: !pet "(123,s),y",0
+test_accept_addressing_operand_50: !pet "(123,sp)y",0
+test_accept_addressing_operand_51: !pet "(123,sp)",0
 
 
 !macro test_assemble_line .tnum, .lineaddr, .ecode, .epos {
@@ -2498,9 +2638,33 @@ run_test_suite_cmd:
     +test_accept_literal $17, test_accept_literal_23, 0, 0, 0
     +test_accept_literal $18, test_accept_literal_24, 0, 0, 0
     +test_accept_literal $19, test_accept_literal_25, 1, $F, 2
-    +test_accept_literal $1a, test_accept_literal_26, 1, %1, 2
+    +test_accept_literal $1a, test_accept_literal_26, 1, %0001, 2
     +test_accept_literal $1b, test_accept_literal_27, 1, 56, 2
     +test_accept_literal $1c, test_accept_literal_28, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "accept-addressing-operand"
+                                                                        ;  C  R  X    Y  L
+    +test_accept_addressing_operand $01, test_accept_addressing_operand_1, 1, 0, 128, 0, 3
+    +test_accept_addressing_operand $02, test_accept_addressing_operand_2, 1, 0, 128, 0, 0
+    +test_accept_addressing_operand $03, test_accept_addressing_operand_3, 1, 0, 128, 0, 14
+
+    +test_accept_addressing_operand $04, test_accept_addressing_operand_4, 1, $ff, 64, 0, 4
+    +test_accept_addressing_operand $05, test_accept_addressing_operand_5, 1, $ff, 64, 0, 4
+    +test_accept_addressing_operand $06, test_accept_addressing_operand_6, 1, 255, 64, 0, 4
+    +test_accept_addressing_operand $07, test_accept_addressing_operand_7, 1, %01010101, 64, 0, 10
+    +test_accept_addressing_operand $08, test_accept_addressing_operand_8, 1, $10ff, 32, 0, 6
+    +test_accept_addressing_operand $09, test_accept_addressing_operand_9, 1, $00ff, 32, 0, 6
+    +test_accept_addressing_operand $0A, test_accept_addressing_operand_10, 1, 256, 32, 0, 4
+
+    +test_accept_addressing_operand $0B, test_accept_addressing_operand_11, 1, 255, 16, 0, 3
+    +test_accept_addressing_operand $0C, test_accept_addressing_operand_12, 1, 255, 8, 0, 5
+    +test_accept_addressing_operand $0D, test_accept_addressing_operand_13, 1, 255, 8, 0, 5
+    +test_accept_addressing_operand $0E, test_accept_addressing_operand_14, 1, 255, 8, 0, 11
+    +test_accept_addressing_operand $0F, test_accept_addressing_operand_15, 1, 255, 4, 0, 5
+    +test_accept_addressing_operand $10, test_accept_addressing_operand_16, 1, 255, 4, 0, 5
+    +test_accept_addressing_operand $11, test_accept_addressing_operand_17, 1, 255, 4, 0, 11
+
 
     +print_chr chr_cr
     +print_strlit_line "assemble-line"
