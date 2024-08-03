@@ -960,6 +960,7 @@ tokenize_other_keywords:
     sec  ; Must not immediately precede an identifier character.
     jsr find_in_token_list
     bcc @end
+    stx line_pos  ; new line pos
     tya
     clc
     adc #last_po  ; Y+last_po = keyword token ID
@@ -983,6 +984,7 @@ tokenize_other:
     clc  ; Allow an identifier character immediately after.
     jsr find_in_token_list
     bcc @end
+    stx line_pos  ; new line pos
     tya
     clc
     adc #last_kw  ; Y+last_kw = non-keyword token ID
@@ -2935,10 +2937,96 @@ test_tokenize_pseudoop_5: !pet "!toz  ",0
 test_tokenize_pseudoop_6: !pet "#!to#  ",0
 test_tokenize_pseudoop_7: !pet "to  ",0
 
+!macro test_tokenize_other_keywords .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_other_keywords
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_tokenize_other_keywords_1: !pet "div ",0
+test_tokenize_other_keywords_2: !pet "xor ",0
+test_tokenize_other_keywords_3: !pet "divz ",0
+test_tokenize_other_keywords_4: !pet "#div ",0
+
+!macro test_tokenize_other .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_other
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_tokenize_other_1: !pet "!ident", 0
+test_tokenize_other_2: !pet "^ident", 0
+test_tokenize_other_3: !pet ">>>ident", 0
+test_tokenize_other_4: !pet ">> >ident", 0
+test_tokenize_other_5: !pet "],z", 0
+test_tokenize_other_6: !pet "ident", 0
+
 
 ; TODO:
-;   test_tokenize_other_keywords
-;   test_tokenize_other
 ;   test_load_line_to_strbuf
 ;   test_tokenize
 
@@ -3075,6 +3163,22 @@ run_test_suite_cmd:
     +test_tokenize_pseudoop $05, test_tokenize_pseudoop_5, 0, 0, 0, 0
     +test_tokenize_pseudoop $06, test_tokenize_pseudoop_6, 1, 1, po_to, 4
     +test_tokenize_pseudoop $07, test_tokenize_pseudoop_7, 0, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-other-keywords"
+    +test_tokenize_other_keywords $01, test_tokenize_other_keywords_1, 0, 1, kw_div, 3
+    +test_tokenize_other_keywords $02, test_tokenize_other_keywords_2, 0, 1, kw_xor, 3
+    +test_tokenize_other_keywords $03, test_tokenize_other_keywords_3, 0, 0, 0, 0
+    +test_tokenize_other_keywords $04, test_tokenize_other_keywords_4, 1, 1, kw_div, 4
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-other"
+    +test_tokenize_other $01, test_tokenize_other_1, 0, 1, tk_complement, 1
+    +test_tokenize_other $02, test_tokenize_other_2, 0, 1, tk_power, 1
+    +test_tokenize_other $03, test_tokenize_other_3, 0, 1, tk_lsr, 3
+    +test_tokenize_other $04, test_tokenize_other_4, 0, 1, tk_asr, 2
+    +test_tokenize_other $05, test_tokenize_other_5, 0, 1, tk_rbracket, 1
+    +test_tokenize_other $06, test_tokenize_other_6, 0, 0, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
