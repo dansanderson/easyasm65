@@ -610,7 +610,8 @@ strbuf_cmp_code_ptr:
 ; Input: bas_ptr = line_addr, line_pos
 ; Output: line_pos advanced maybe; A=last read, Zero flag if zero
 accept_whitespace_and_comment:
-    ldz line_pos
+    lda line_pos
+    taz
 -   lda [bas_ptr],z
     tax
     cmp #chr_spc
@@ -635,7 +636,7 @@ accept_whitespace_and_comment:
 ;   C: 0=must start with letter, 1=allow non-letter start
 ; Output:
 ;   If found, C=1, Z advanced (line_pos not)
-;   If not found, C=0, Z = line_pos
+;   If not found, C=0, Z = unchanged
 ; TODO: should line_pos be the input for consistency, or am I really using Z
 ; distinct from line_pos?
 accept_ident:
@@ -644,7 +645,6 @@ accept_ident:
     lda [bas_ptr],z
     jsr is_letter
     bcs +
-    ldz line_pos
     clc
     rts
 +
@@ -679,7 +679,8 @@ expr_times_ten:
 ;  C: 0=not found, line_pos unchanged
 ;  C: 1=found; expr_result=value; line_pos advanced
 accept_literal:
-    ldz line_pos
+    lda line_pos
+    taz
 
     lda #0
     sta expr_result
@@ -918,8 +919,8 @@ tokenize_mnemonic:
 ;   If found, C=1, X=token number, line_pos advanced
 ;   If not found, C=0, line_pos unchanged
 tokenize_pseudoop:
-    ldz line_pos
-    lda (strbuf),z
+    ldx line_pos
+    lda strbuf,x
     cmp #'!'
     bne @not_found
     ldx line_pos
@@ -1000,7 +1001,7 @@ load_line_to_strbuf:
     ldz #4
 -   lda [bas_ptr],z
     jsr to_lowercase
-    sta (str_buf),y
+    sta strbuf,y
     beq +
     iny
     inz
@@ -1032,7 +1033,7 @@ tokenize:
 @tokenize_loop
     jsr accept_whitespace_and_comment
     cmp #0
-    beq @success
+    lbeq @success
 
     ; String literal
     cmp #chr_doublequote
@@ -1045,15 +1046,15 @@ tokenize:
     ; Push tk_string_literal, line_pos, length (z-line_pos)
     ldx tok_pos
     lda #tk_string_literal
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     tza
     sec
     sbc line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     stx tok_pos
     inz
@@ -1066,22 +1067,22 @@ tokenize:
     ; Push tk_number_literal, line_pos, expr_result (4 bytes)
     ldx tok_pos
     lda #tk_string_literal
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda expr_result
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda expr_result+1
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda expr_result+2
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda expr_result+3
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     stx tok_pos
     bra @tokenize_loop
@@ -1117,30 +1118,30 @@ tokenize:
     ; Push tk_label_or_reg, line_pos, length (z-line_pos)
     ldx tok_pos
     lda #tk_string_literal
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     tza
     sec
     sbc line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     stx tok_pos
-    bra @tokenize_loop
+    lbra @tokenize_loop
 
 @push_tok_pos_then_continue
     ; Push X, line_pos
     txa
     ldx tok_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     lda line_pos
-    sta (tokbuf),x
+    sta tokbuf,x
     inx
     stx tok_pos
-    bra @tokenize_loop
+    lbra @tokenize_loop
 
 @syntax_error
     lda #err_syntax
@@ -1151,8 +1152,8 @@ tokenize:
 @success
     ; Null terminate tokbuf
     lda #0
-    ldy tok_pos
-    sta (tokbuf),y
+    ldx tok_pos
+    sta tokbuf,x
     rts
 
 
@@ -2634,7 +2635,7 @@ test_strbuf_to_lowercase_1_out:  !pet "abc",0
     sta code_ptr
     lda #>.bstraddr
     sta code_ptr+1
-    ldz .maxlen
+    ldz #.maxlen
     ldx #0
     jsr strbuf_cmp_code_ptr
     cmp #.ea
@@ -2662,12 +2663,13 @@ test_strbuf_cmp_code_ptr_abcd:     !pet "abcd",0
     ldz #.pos
     stz line_pos
     jsr accept_whitespace_and_comment
-    ldz line_pos
 !if .ezero {
     beq +
     brk
 +
 }
+    lda line_pos
+    taz
     cpz #.epos
     beq +
     brk
@@ -2858,8 +2860,8 @@ run_test_suite_cmd:
     +print_strlit_line "strbuf-cmp-code-ptr"
     +test_strbuf_cmp_code_ptr $01, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abc, 3, $00, 3
     +test_strbuf_cmp_code_ptr $02, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abc, 6, $00, 3
-    +test_strbuf_cmp_code_ptr $03, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_acb, 3, $ff, 3
-    +test_strbuf_cmp_code_ptr $04, test_strbuf_cmp_code_ptr_acb, test_strbuf_cmp_code_ptr_abc, 3, $01, 3
+    +test_strbuf_cmp_code_ptr $03, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_acb, 3, $ff, 1
+    +test_strbuf_cmp_code_ptr $04, test_strbuf_cmp_code_ptr_acb, test_strbuf_cmp_code_ptr_abc, 3, $01, 1
     +test_strbuf_cmp_code_ptr $05, test_strbuf_cmp_code_ptr_abc, test_strbuf_cmp_code_ptr_abcd, 4, $ff, 3
     +test_strbuf_cmp_code_ptr $06, test_strbuf_cmp_code_ptr_abcd, test_strbuf_cmp_code_ptr_abc, 4, $01, 3
 
