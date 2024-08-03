@@ -315,6 +315,8 @@ The following are examples of syntax for the addressing modes. See the [MEGA65 C
 * `lsrq` : "quad register addressing" (implied "Q" argument)
 * `jmp ($fffe)` : indirect jump
 
+Multiple instructions can appear on a single line, separated by colons. `lda #0 : sta $d020`
+
 ### Values
 
 EasyAsm uses 32-bit signed integer values in expressions for arguments. When a value is assembled into an instruction or used by an assembler directive, it must be in the range expected by how it is used:
@@ -397,7 +399,7 @@ loop:
 
 The colon `:` is optional.
 
-A global label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), or Mega + `@` (an underscore-like character in PETSCII).
+A global label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), a dot (`.`), or Mega + `@` (an underscore-like character in PETSCII).
 
 > **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish. For example, Shift + G and Shift + T both appear as vertical lines in uppercase text mode.
 
@@ -472,6 +474,7 @@ EasyAsm supports the following operators, listed in precedence order:
 | `<v` | Low byte of | |
 | `>v` | High byte of | |
 | `^v` | Bank byte of | Up-arrow |
+| `^^v` | Megabyte byte of | Up-arrow |
 | `v & w` | Bitwise And | |
 | `v XOR w` | Bitwise Exclusive Or | |
 | `v \| w` | Bitwise Or | Mega + period |
@@ -479,6 +482,8 @@ EasyAsm supports the following operators, listed in precedence order:
 EasyAsm does not support fractional number values, and so does not have a fractional division operator (`/`).
 
 EasyAsm does not support Boolean values, and so does not have conditional operators. (This would primarily be used with conditional assembly, which EasyAsm also does not support.)
+
+The "megabyte" operator `^^` is exclusive to EasyAsm, as a companion to low (`<`), high (`>`), and bank (`^`) byte selectors. The megabyte operator selects the highest byte of a 32-bit value.
 
 The power operator is right-associative: `x^y^z` = `x^(y^z)`
 
@@ -526,7 +531,7 @@ If the address expression evaluates to a value larger than 255, then EasyAsm use
 
 If the address expression evaluates to a value between 0 and 255, EasyAsm disambiguates using the following procedure:
 
-1. If the address expression is a value literal *or* a symbol defined using a value literal, and the value has one or more leading zeroes, EasyAsm uses absolute mode: `$00fe` Otherwise it uses base page addressing: `$fe`
+1. If the address expression is a value literal *or* a symbol defined using a value literal, and the value literal has one or more leading zeroes, EasyAsm uses absolute mode: `$00fe` Otherwise it uses base page addressing: `$fe`
 2. If the value can be calculated in the first pass of the assembler, i.e. all symbols in the expression are defined earlier in the source text, EasyAsm uses base page addressing: `$fc+earlierlabel`
 3. Otherwise EasyAsm assumes absolute addressing, to be calculated in a subsequent pass: `$fc+laterlabel`
 
@@ -801,7 +806,6 @@ EasyAsm has the following limitations compared to the Acme assembler.
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
 * No octal literals
 * No way to set a "pseudo-PC"
-* Only one statement per line
 
 ### Features exclusive to EasyAsm
 
@@ -812,6 +816,7 @@ Here is a quick summary of features available in EasyAsm that are not available 
 * Double quote characters not allowed in double-quoted strings
 * `!to "...", runnable`
 * Assemble to multiple files from one source file, with multiple `!to` directives
+* The "megabyte" (`^^`) selector operator
 
 
 ## Building EasyAsm

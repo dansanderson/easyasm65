@@ -2045,43 +2045,45 @@ tk_complement = last_kw + 0
 !pet "!",0
 tk_power = last_kw + 1
 !pet "^",0
-tk_minus = last_kw + 2
+tk_megabyte = last_kw + 2
+!pet "^^",0
+tk_minus = last_kw + 3
 !pet "-",0
-tk_multiply = last_kw + 3
+tk_multiply = last_kw + 4
 !pet "*",0
-tk_remainder = last_kw + 4
+tk_remainder = last_kw + 5
 !pet "%",0
-tk_plus = last_kw + 5
+tk_plus = last_kw + 6
 !pet "+",0
-tk_lsr = last_kw + 6
+tk_lsr = last_kw + 7
 !pet ">>>",0
-tk_asr = last_kw + 7
+tk_asr = last_kw + 8
 !pet ">>",0
-tk_asl = last_kw + 8
+tk_asl = last_kw + 9
 !pet "<<",0
-tk_lt = last_kw + 9
+tk_lt = last_kw + 10
 !pet "<",0
-tk_gt = last_kw + 10
+tk_gt = last_kw + 11
 !pet ">",0
-tk_ampersand = last_kw + 11
+tk_ampersand = last_kw + 12
 !pet "&",0
-tk_pipe = last_kw + 12
+tk_pipe = last_kw + 13
 !pet "|",0
-tk_comma = last_kw + 13
+tk_comma = last_kw + 14
 !pet ",",0
-tk_hash = last_kw + 14
+tk_hash = last_kw + 15
 !pet "#",0
-tk_colon = last_kw + 15
+tk_colon = last_kw + 16
 !pet ":",0
-tk_equal = last_kw + 16
+tk_equal = last_kw + 17
 !pet "=",0
-tk_lparen = last_kw + 17
+tk_lparen = last_kw + 18
 !pet "(",0
-tk_rparen = last_kw + 18
+tk_rparen = last_kw + 19
 !pet ")",0
-tk_lbracket = last_kw + 19
+tk_lbracket = last_kw + 20
 !pet "[",0
-tk_rbracket = last_kw + 20
+tk_rbracket = last_kw + 21
 !pet "]",0
 !byte 0
 last_tk = tk_rbracket + 1
