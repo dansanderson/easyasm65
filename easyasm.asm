@@ -896,7 +896,7 @@ find_in_token_list:
 
 
 ; Tokenize mnemonic.
-; Input: bas_ptr = line_addr, strbuf = lowercase line, Z/line_pos at start
+; Input: strbuf = lowercase line, line_pos at first char
 ; Output:
 ;   If found, C=1, X=token number, line_pos advanced
 ;   If not found, C=0, line_pos unchanged
@@ -909,9 +909,9 @@ tokenize_mnemonic:
     sec  ; Must not immediately precede an identifier character.
     jsr find_in_token_list
     bcc @end
-    tya  ; Y = mnemonic token ID
-    tax
-    sec
+    stx line_pos  ; new line pos
+    tya
+    tax  ; X = mnemonic token ID
 @end
     rts
 
@@ -2808,10 +2808,6 @@ test_accept_literal_28: !pet 0
     sta code_ptr
     lda #>mnemonics
     sta code_ptr+1
-    lda #5
-    sta code_ptr+2
-    lda #0
-    sta code_ptr+3
 
     ; Copy .str to strbuf
     ldx #0
@@ -2830,20 +2826,16 @@ test_accept_literal_28: !pet 0
     jsr find_in_token_list
 !if .ec {
     bcs +
-    +print_strlit_line "...fail, expected carry set"
     brk
 +   cpy #.eentry
     beq +
-    +print_strlit_line "...fail, wrong entry"
     brk
 +   cpx #.epos
     beq +
-    +print_strlit_line "...fail, wrong pos"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "...fail, expected carry clear"
     brk
 +
 }
@@ -2859,8 +2851,45 @@ test_find_in_token_list_5: !pet "adcz  ",0
 test_find_in_token_list_6: !pet "adc#  ",0
 test_find_in_token_list_7: !pet "#adc#  ",0
 
+!macro test_tokenize_mnemonic .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_mnemonic
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
 ; TODO:
-;   test_tokenize_mnemonic
 ;   test_tokenize_pseudoop
 ;   test_tokenize_other_keywords
 ;   test_tokenize_other
@@ -2980,6 +3009,16 @@ run_test_suite_cmd:
     +test_find_in_token_list $07, test_find_in_token_list_6, 0, 0, 1, 0, 3
     +test_find_in_token_list $08, test_find_in_token_list_6, 0, 1, 1, 0, 3
     +test_find_in_token_list $09, test_find_in_token_list_7, 1, 1, 1, 0, 4
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-mnemonic"
+    +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3
+    +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4
+    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 137, 3
+    +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0
+    +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0
+    +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3
+    +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 0, 4
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
