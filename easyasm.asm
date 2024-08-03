@@ -995,22 +995,26 @@ tokenize_other:
 
 
 ; Load a full source line into strbuf, lowercased.
+;
+; This leaves the first four bytes of strbuf untouched to maintain an index
+; correspondence with line_addr, so line_pos can index into both of them.
+; Tokens are stored with line locations based on line_pos.
+;
 ; Input: line_addr
 ; Output: line_addr copied to strbuf, lowercased
 load_line_to_strbuf:
     lda line_addr
     sta bas_ptr
     lda line_addr+1
-    sta bas_ptr
+    sta bas_ptr+1
     ldy #4
     ldz #4
 -   lda [bas_ptr],z
+    beq +
     jsr to_lowercase
     sta strbuf,y
-    beq +
     iny
     inz
-    beq +
     bra -
 +   rts
 
@@ -3025,9 +3029,37 @@ test_tokenize_other_4: !pet ">> >ident", 0
 test_tokenize_other_5: !pet "],z", 0
 test_tokenize_other_6: !pet "ident", 0
 
+!macro test_load_line_to_strbuf .tnum, .str, .estr {
+    +test_start .tnum
+
+    ; Fake assembly location in bank 5
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+    lda #<(.str - 4)
+    sta line_addr
+    lda #>(.str - 4)
+    sta line_addr+1
+    jsr load_line_to_strbuf
+
+    ldx #4-1
+-   inx
+    lda .estr-4,x
+    beq +
+    cmp strbuf,x
+    beq -
+    +print_strlit_line "...fail, wrong strbuf"
+    brk
++
+
+    +test_end
+}
+
+test_load_line_to_strbuf_1:  !pet "AbC",0
+test_load_line_to_strbuf_1e: !pet "abc",0
 
 ; TODO:
-;   test_load_line_to_strbuf
 ;   test_tokenize
 
 
@@ -3179,6 +3211,11 @@ run_test_suite_cmd:
     +test_tokenize_other $04, test_tokenize_other_4, 0, 1, tk_asr, 2
     +test_tokenize_other $05, test_tokenize_other_5, 0, 1, tk_rbracket, 1
     +test_tokenize_other $06, test_tokenize_other_6, 0, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-load-line-to-strbuf"
+    +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
+    +test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
