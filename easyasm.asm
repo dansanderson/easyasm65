@@ -2025,13 +2025,17 @@ tk_comma = last_kw + 13
 !pet ",",0
 tk_hash = last_kw + 14
 !pet "#",0
-tk_lparen = last_kw + 15
+tk_colon = last_kw + 15
+!pet ":",0
+tk_equal = last_kw + 16
+!pet "=",0
+tk_lparen = last_kw + 17
 !pet "(",0
-tk_rparen = last_kw + 16
+tk_rparen = last_kw + 18
 !pet ")",0
-tk_lbracket = last_kw + 17
+tk_lbracket = last_kw + 19
 !pet "[",0
-tk_rbracket = last_kw + 18
+tk_rbracket = last_kw + 20
 !pet "]",0
 !byte 0
 last_tk = tk_rbracket + 1
@@ -3090,7 +3094,7 @@ test_load_line_to_strbuf_1e: !pet "abc",0
     jsr tokenize
 
 !if .eerror {
-    lda error_code
+    lda err_code
     cmp #.eerror
     beq +
     +print_strlit_line "...fail, wrong error code"
@@ -3124,7 +3128,7 @@ test_tokenize_1e: !byte 0
 test_tokenize_2: !pet "    ; comment only",0
 test_tokenize_2e: !byte 0
 test_tokenize_3: !pet "\"string literal\"",0
-test_tokenize_3e: !byte tk_string_literal, 4, 14
+test_tokenize_3e: !byte tk_string_literal, 4, 14, 0
 test_tokenize_4: !pet "12345",0
 test_tokenize_4e:
     !byte tk_number_literal, 4
@@ -3136,24 +3140,58 @@ test_tokenize_5e:
     !32 $deadbeef
     !byte 0
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 137, 4
+test_tokenize_6e: !byte 137, 4, 0
 test_tokenize_7: !pet "!wOrD",0
-test_tokenize_7e: !byte po_word, 4
+test_tokenize_7e: !byte po_word, 4, 0
 test_tokenize_8: !pet "xOr",0
-test_tokenize_8e: !byte kw_xor, 4
+test_tokenize_8e: !byte kw_xor, 4, 0
 test_tokenize_9: !pet ">>>",0
-test_tokenize_9e: !byte tk_lsr, 4
+test_tokenize_9e: !byte tk_lsr, 4, 0
 test_tokenize_10: !pet "label",0
-test_tokenize_10e: !byte tk_label_or_reg, 4, 5
+test_tokenize_10e: !byte tk_label_or_reg, 4, 5, 0
 test_tokenize_11: !pet "@label",0
-test_tokenize_11e: !byte tk_label_or_reg, 4, 6
+test_tokenize_11e: !byte tk_label_or_reg, 4, 6, 0
+test_tokenize_12: !pet "label: lda (45, sp), y  ; comment",0
+test_tokenize_12e:
+    !byte tk_label_or_reg, 4, 5
+    !byte tk_colon, 9
+    !byte 66, 11
+    !byte tk_lparen, 15
+    !byte tk_number_literal, 16
+    !32 45
+    !byte tk_comma, 18
+    !byte tk_label_or_reg, 20, 2
+    !byte tk_rparen, 22
+    !byte tk_comma, 23
+    !byte tk_label_or_reg, 25, 1
+    !byte 0
+test_tokenize_13: !pet "label = *+4",0
+test_tokenize_13e:
+    !byte tk_label_or_reg, 4, 5
+    !byte tk_equal, 10
+    !byte tk_multiply, 12
+    !byte tk_plus, 13
+    !byte tk_number_literal, 14
+    !32 4
+    !byte 0
+test_tokenize_14: !pet "* = $d000",0
+test_tokenize_14e:
+    !byte tk_multiply, 4
+    !byte tk_equal, 6
+    !byte tk_number_literal, 8
+    !32 $d000
+    !byte 0
+test_tokenize_15: !pet "!to \"lda\", runnable",0
+test_tokenize_15e:
+    !byte po_to, 4
+    !byte tk_string_literal, 8, 3
+    !byte tk_comma, 13
+    !byte tk_label_or_reg, 15, 8
+    !byte 0
 test_tokenize_last:
 
-; TODO:
-; syntax error
-; valid instruction lines
-; valid assignment lines
-; stress quoted strings
+test_tokenize_error_1: !pet "$$$",0
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3321,7 +3359,12 @@ run_test_suite_cmd:
     +test_tokenize $08, test_tokenize_8, test_tokenize_8e, test_tokenize_9, 0, 0
     +test_tokenize $09, test_tokenize_9, test_tokenize_9e, test_tokenize_10, 0, 0
     +test_tokenize $0A, test_tokenize_10, test_tokenize_10e, test_tokenize_11, 0, 0
-    +test_tokenize $0B, test_tokenize_11, test_tokenize_11e, test_tokenize_last, 0, 0
+    +test_tokenize $0B, test_tokenize_11, test_tokenize_11e, test_tokenize_12, 0, 0
+    +test_tokenize $0C, test_tokenize_error_1, 0, 0, 1, 4
+    +test_tokenize $0D, test_tokenize_12, test_tokenize_12e, test_tokenize_13, 0, 0
+    +test_tokenize $0E, test_tokenize_13, test_tokenize_13e, test_tokenize_14, 0, 0
+    +test_tokenize $0F, test_tokenize_14, test_tokenize_14e, test_tokenize_15, 0, 0
+    +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_last, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
