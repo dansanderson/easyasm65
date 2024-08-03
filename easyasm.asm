@@ -926,7 +926,6 @@ tokenize_pseudoop:
     lda strbuf,x
     cmp #'!'
     bne @not_found
-    ldx line_pos
     inx
     lda #<pseudoops
     sta code_ptr
@@ -935,6 +934,7 @@ tokenize_pseudoop:
     sec  ; Must not immediately precede an identifier character.
     jsr find_in_token_list
     bcc @not_found
+    stx line_pos  ; new line pos
     tya
     clc
     adc #mnemonic_count  ; Y+mnemonic_count = pseudoop token ID
@@ -2889,8 +2889,54 @@ test_find_in_token_list_7: !pet "#adc#  ",0
     +test_end
 }
 
+!macro test_tokenize_pseudoop .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_pseudoop
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_tokenize_pseudoop_1: !pet "!to  ",0
+test_tokenize_pseudoop_2: !pet "!byte  ",0
+test_tokenize_pseudoop_3: !pet "!warn  ",0
+test_tokenize_pseudoop_4: !pet "!zzz  ",0
+test_tokenize_pseudoop_5: !pet "!toz  ",0
+test_tokenize_pseudoop_6: !pet "#!to#  ",0
+test_tokenize_pseudoop_7: !pet "to  ",0
+
+
 ; TODO:
-;   test_tokenize_pseudoop
 ;   test_tokenize_other_keywords
 ;   test_tokenize_other
 ;   test_load_line_to_strbuf
@@ -3019,6 +3065,16 @@ run_test_suite_cmd:
     +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0
     +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3
     +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 0, 4
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-pseudoop"
+    +test_tokenize_pseudoop $01, test_tokenize_pseudoop_1, 0, 1, po_to, 3
+    +test_tokenize_pseudoop $02, test_tokenize_pseudoop_2, 0, 1, po_byte, 5
+    +test_tokenize_pseudoop $03, test_tokenize_pseudoop_3, 0, 1, po_warn, 5
+    +test_tokenize_pseudoop $04, test_tokenize_pseudoop_4, 0, 0, 0, 0
+    +test_tokenize_pseudoop $05, test_tokenize_pseudoop_5, 0, 0, 0, 0
+    +test_tokenize_pseudoop $06, test_tokenize_pseudoop_6, 1, 1, po_to, 4
+    +test_tokenize_pseudoop $07, test_tokenize_pseudoop_7, 0, 0, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
