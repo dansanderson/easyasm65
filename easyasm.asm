@@ -695,7 +695,13 @@ expr_times_ten:
 ; Output:
 ;  C: 0=not found, line_pos unchanged
 ;  C: 1=found; expr_result=value; line_pos advanced
+;  expr_flags F_EXPR_BRACKET_ZERO bit set if hex or dec literal has a leading zero
 accept_literal:
+    ; Init expr zero flag to 0.
+    lda expr_flags
+    and #!F_EXPR_BRACKET_ZERO
+    sta expr_flags
+
     lda line_pos
     taz
 
@@ -742,6 +748,15 @@ accept_literal:
 
 @do_decimal_literal
     cmp #'0'
+    bne +
+    pha
+    lda expr_flags
+    ora #F_EXPR_BRACKET_ZERO
+    sta expr_flags
+    pla
++
+@do_decimal_literal_loop
+    cmp #'0'
     lbcc @found
     cmp #'9'+1
     lbcs @found
@@ -758,7 +773,7 @@ accept_literal:
     plz
     inz
     lda [bas_ptr],z
-    lbra @do_decimal_literal
+    lbra @do_decimal_literal_loop
 
 @do_hex_literal
     ; Set up first digit, confirm it's a hex digit
@@ -766,16 +781,23 @@ accept_literal:
     lda [bas_ptr],z
     cmp #'0'
     lbcc @not_found
-    cmp #'9'+1
-    bcc +++
+    bne +
+    pha
+    lda expr_flags
+    ora #F_EXPR_BRACKET_ZERO
+    sta expr_flags
+    pla
++   cmp #'9'+1
+    bcc +
     jsr to_lowercase
     cmp #'A'
     lbcc @not_found
     cmp #'F'+1
     lbcs @not_found
++
 
-+++
---- cmp #'0'
+@do_hex_literal_loop
+    cmp #'0'
     lbcc @found
     cmp #'9'+1
     bcs +
@@ -806,7 +828,7 @@ accept_literal:
     plz
     inz
     lda [bas_ptr],z
-    bra ---
+    bra @do_hex_literal_loop
 
 @do_binary_literal
     ; Set up first digit, confirm it's a binary digit
@@ -2786,7 +2808,7 @@ test_accept_ident_2: !pet "label", chr_backarrow, "12", chr_megaat, "3  ",0
 test_accept_ident_3: !pet "0label",0
 test_accept_ident_4: !pet "!label",0
 
-!macro test_accept_literal .tnum, .lineaddr, .ec, .eval, .epos {
+!macro test_accept_literal .tnum, .lineaddr, .ec, .eval, .epos, .ezeroflag {
     +test_start .tnum
     lda #<.lineaddr
     sta bas_ptr
@@ -2816,6 +2838,18 @@ test_accept_ident_4: !pet "!label",0
 +
 } else {
     bcc +
+    brk
++
+}
+
+    lda expr_flags
+    and #F_EXPR_BRACKET_ZERO
+!if .ezeroflag {
+    bne +
+    brk
++
+} else {
+    beq +
     brk
 +
 }
@@ -3290,34 +3324,34 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "accept-literal"
-    +test_accept_literal $01, test_accept_literal_1, 1, 88, 3
-    +test_accept_literal $02, test_accept_literal_2, 1, '\'', 3
-    +test_accept_literal $03, test_accept_literal_3, 1, $0, 2
-    +test_accept_literal $04, test_accept_literal_4, 1, $1, 2
-    +test_accept_literal $05, test_accept_literal_5, 1, $f, 2
-    +test_accept_literal $06, test_accept_literal_6, 1, $F, 2
-    +test_accept_literal $07, test_accept_literal_7, 1, $deadbeef, 9
-    +test_accept_literal $08, test_accept_literal_8, 1, $DEadbeEF, 9
-    +test_accept_literal $09, test_accept_literal_9, 1, $000a, 5
-    +test_accept_literal $0a, test_accept_literal_10, 1, $1000, 5
-    +test_accept_literal $0b, test_accept_literal_11, 1, %0000, 2
-    +test_accept_literal $0c, test_accept_literal_12, 1, %0001, 2
-    +test_accept_literal $0d, test_accept_literal_13, 1, %0101, 5
-    +test_accept_literal $0e, test_accept_literal_14, 1, %1010, 5
-    +test_accept_literal $0f, test_accept_literal_15, 1, %.#.#, 5
-    +test_accept_literal $10, test_accept_literal_16, 1, %#.#., 5
-    +test_accept_literal $11, test_accept_literal_17, 1, %....##..####....##..####....####, 33
-    +test_accept_literal $12, test_accept_literal_18, 1, 0, 1
-    +test_accept_literal $13, test_accept_literal_19, 1, 9, 1
-    +test_accept_literal $14, test_accept_literal_20, 1, 1234567890, 10
-    +test_accept_literal $15, test_accept_literal_21, 1, 0123, 4
-    +test_accept_literal $16, test_accept_literal_22, 0, 0, 0
-    +test_accept_literal $17, test_accept_literal_23, 0, 0, 0
-    +test_accept_literal $18, test_accept_literal_24, 0, 0, 0
-    +test_accept_literal $19, test_accept_literal_25, 1, $F, 2
-    +test_accept_literal $1a, test_accept_literal_26, 1, %0001, 2
-    +test_accept_literal $1b, test_accept_literal_27, 1, 56, 2
-    +test_accept_literal $1c, test_accept_literal_28, 0, 0, 0
+    +test_accept_literal $01, test_accept_literal_1, 1, 88, 3, 0
+    +test_accept_literal $02, test_accept_literal_2, 1, '\'', 3, 0
+    +test_accept_literal $03, test_accept_literal_3, 1, $0, 2, 1
+    +test_accept_literal $04, test_accept_literal_4, 1, $1, 2, 0
+    +test_accept_literal $05, test_accept_literal_5, 1, $f, 2, 0
+    +test_accept_literal $06, test_accept_literal_6, 1, $F, 2, 0
+    +test_accept_literal $07, test_accept_literal_7, 1, $deadbeef, 9, 0
+    +test_accept_literal $08, test_accept_literal_8, 1, $DEadbeEF, 9, 0
+    +test_accept_literal $09, test_accept_literal_9, 1, $000a, 5, 1
+    +test_accept_literal $0a, test_accept_literal_10, 1, $1000, 5, 0
+    +test_accept_literal $0b, test_accept_literal_11, 1, %0000, 2, 0
+    +test_accept_literal $0c, test_accept_literal_12, 1, %0001, 2, 0
+    +test_accept_literal $0d, test_accept_literal_13, 1, %0101, 5, 0
+    +test_accept_literal $0e, test_accept_literal_14, 1, %1010, 5, 0
+    +test_accept_literal $0f, test_accept_literal_15, 1, %.#.#, 5, 0
+    +test_accept_literal $10, test_accept_literal_16, 1, %#.#., 5, 0
+    +test_accept_literal $11, test_accept_literal_17, 1, %....##..####....##..####....####, 33, 0
+    +test_accept_literal $12, test_accept_literal_18, 1, 0, 1, 1
+    +test_accept_literal $13, test_accept_literal_19, 1, 9, 1, 0
+    +test_accept_literal $14, test_accept_literal_20, 1, 1234567890, 10, 0
+    +test_accept_literal $15, test_accept_literal_21, 1, 0123, 4, 1
+    +test_accept_literal $16, test_accept_literal_22, 0, 0, 0, 0
+    +test_accept_literal $17, test_accept_literal_23, 0, 0, 0, 0
+    +test_accept_literal $18, test_accept_literal_24, 0, 0, 0, 0
+    +test_accept_literal $19, test_accept_literal_25, 1, $F, 2, 0
+    +test_accept_literal $1a, test_accept_literal_26, 1, %0001, 2, 0
+    +test_accept_literal $1b, test_accept_literal_27, 1, 56, 2, 0
+    +test_accept_literal $1c, test_accept_literal_28, 0, 0, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "find-in-token-list"
