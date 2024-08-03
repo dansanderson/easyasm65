@@ -1139,7 +1139,7 @@ tokenize:
     ; Push tk_label_or_reg, line_pos, length (z-line_pos)
     ; TODO: add to/look up in symbol table, store table index and not label name?
     ldx tok_pos
-    lda #tk_string_literal
+    lda #tk_label_or_reg
     sta tokbuf,x
     inx
     lda line_pos
@@ -1151,6 +1151,7 @@ tokenize:
     sta tokbuf,x
     inx
     stx tok_pos
+    stz line_pos
     lbra @tokenize_loop
 
 @push_tok_pos_then_continue
@@ -3142,10 +3143,13 @@ test_tokenize_8: !pet "xOr",0
 test_tokenize_8e: !byte kw_xor, 4
 test_tokenize_9: !pet ">>>",0
 test_tokenize_9e: !byte tk_lsr, 4
+test_tokenize_10: !pet "label",0
+test_tokenize_10e: !byte tk_label_or_reg, 4, 5
+test_tokenize_11: !pet "@label",0
+test_tokenize_11e: !byte tk_label_or_reg, 4, 6
 test_tokenize_last:
 
 ; TODO:
-; label
 ; syntax error
 ; valid instruction lines
 ; valid assignment lines
@@ -3315,7 +3319,9 @@ run_test_suite_cmd:
     +test_tokenize $06, test_tokenize_6, test_tokenize_6e, test_tokenize_7, 0, 0
     +test_tokenize $07, test_tokenize_7, test_tokenize_7e, test_tokenize_8, 0, 0
     +test_tokenize $08, test_tokenize_8, test_tokenize_8e, test_tokenize_9, 0, 0
-    +test_tokenize $09, test_tokenize_9, test_tokenize_9e, test_tokenize_last, 0, 0
+    +test_tokenize $09, test_tokenize_9, test_tokenize_9e, test_tokenize_10, 0, 0
+    +test_tokenize $0A, test_tokenize_10, test_tokenize_10e, test_tokenize_11, 0, 0
+    +test_tokenize $0B, test_tokenize_11, test_tokenize_11e, test_tokenize_last, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
