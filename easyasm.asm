@@ -79,6 +79,8 @@ dmaimm = $d707
 ; Character constants
 chr_cr = 13
 chr_spc = 32
+chr_shiftspc = 160
+chr_tab = 9
 chr_uparrow = 94
 chr_backarrow = 95
 chr_megaat = 164
@@ -540,6 +542,21 @@ is_secondary_ident_char:
     rts
 +++ jmp is_letter
 
+; Test whether A is whitespace on a line
+; (Does not include CR.)
+; Input: A=char
+; Output: C: 0=no 1=yes
+is_space:
+    cmp #chr_spc
+    beq +
+    cmp #chr_shiftspc
+    beq +
+    cmp #chr_tab
+    beq +
+    clc
+    bra ++
++   sec
+++  rts
 
 ; Input: A=char
 ; Output: A=lowercase letter, or original char if not letter
@@ -614,8 +631,8 @@ accept_whitespace_and_comment:
     taz
 -   lda [bas_ptr],z
     tax
-    cmp #chr_spc
-    bne +
+    jsr is_space
+    bcc +
     inz
     bra -
 +   cmp #';'
@@ -2726,6 +2743,13 @@ test_accept_whitespace_and_comment_space_then_stuff:
     !pet "   stuff", 0
 +   !word 0
 
+test_accept_whitespace_and_comment_other_spaces:
+    !word +
+    !word 12345
+    !pet "  ", chr_shiftspc, chr_tab, "  stuff", 0
++   !word 0
+
+
 !macro test_accept_ident .tnum, .basptr, .c, .ec, .ez {
     +test_start .tnum
     lda #<.basptr
@@ -3254,6 +3278,7 @@ run_test_suite_cmd:
     +test_accept_whitespace_and_comment $01, test_accept_whitespace_and_comment_empty_line, 4, 4, 1
     +test_accept_whitespace_and_comment $02, test_accept_whitespace_and_comment_comment, 4, 4+test_accept_whitespace_and_comment_comment_length, 1
     +test_accept_whitespace_and_comment $03, test_accept_whitespace_and_comment_space_then_stuff, 4, 7, 0
+    +test_accept_whitespace_and_comment $04, test_accept_whitespace_and_comment_other_spaces, 4, 10, 0
 
     +print_chr chr_cr
     +print_strlit_line "accept-ident"
