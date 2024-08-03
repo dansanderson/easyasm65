@@ -1117,10 +1117,15 @@ tokenize:
     phz
     jsr accept_literal
     plz
-    bcc +
+    bcc +++
     ; Push tk_number_literal, line_pos, expr_result (4 bytes)
-    ldx tok_pos
-    lda #tk_number_literal
+    lda expr_flags
+    and #F_EXPR_BRACKET_ZERO
+    beq +
+    lda #tk_number_literal_leading_zero
+    bra ++
++   lda #tk_number_literal
+++  ldx tok_pos
     sta tokbuf,x
     inx
     stz tokbuf,x
@@ -1140,7 +1145,7 @@ tokenize:
     stx tok_pos
     bra @tokenize_loop
 
-+   ; Mnemonic
++++ ; Mnemonic
     phz  ; TODO: tokenize routines should put Z back to start?
     jsr tokenize_mnemonic
     plz
@@ -2081,8 +2086,9 @@ last_tk = tk_rbracket + 1
 
 ; Other token IDs
 tk_number_literal = last_tk + 0
-tk_string_literal = last_tk + 1
-tk_label_or_reg = last_tk + 2
+tk_number_literal_leading_zero = last_tk + 1
+tk_string_literal = last_tk + 2
+tk_label_or_reg = last_tk + 3
 
 
 ; ------------------------------------------------------------
@@ -3246,6 +3252,12 @@ test_tokenize_15e:
     !byte tk_comma, 13
     !byte tk_label_or_reg, 15, 8
     !byte 0
+test_tokenize_16: !pet "lda $000a",0
+test_tokenize_16e:
+    !byte 66, 4
+    !byte tk_number_literal_leading_zero, 8
+    !32 $000a
+    !byte 0
 test_tokenize_last:
 
 test_tokenize_error_1: !pet "$$$",0
@@ -3423,7 +3435,8 @@ run_test_suite_cmd:
     +test_tokenize $0D, test_tokenize_12, test_tokenize_12e, test_tokenize_13, 0, 0
     +test_tokenize $0E, test_tokenize_13, test_tokenize_13e, test_tokenize_14, 0, 0
     +test_tokenize $0F, test_tokenize_14, test_tokenize_14e, test_tokenize_15, 0, 0
-    +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_last, 0, 0
+    +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_16, 0, 0
+    +test_tokenize $11, test_tokenize_16, test_tokenize_16e, test_tokenize_last, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
