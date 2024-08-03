@@ -1260,13 +1260,16 @@ tokenize:
 
 init_symtable:
     ; Set first symbol table entry to null terminator
-    ldq attic_symbol_table
+    lda #<attic_symbol_table
+    ldx #>attic_symbol_table
+    ldy #^attic_symbol_table
+    ldz #$08
     stq attic_ptr
-    lda #0
-    tax
-    tay
-    taz
-    stq [attic_ptr]
+    dez
+-   lda #0
+    sta [attic_ptr],z
+    dez
+    bpl -
 
     ; Set name pointer to beginning of names region
     lda #<attic_symbol_names
@@ -1287,7 +1290,10 @@ init_symtable:
 ; - bas_ptr and X preserved
 find_symbol:
     phx
-    ldq attic_symbol_table
+    lda #<attic_symbol_table
+    ldx #>attic_symbol_table
+    ldy #^attic_symbol_table
+    ldz #$08
     stq attic_ptr
     plx
 
@@ -1367,12 +1373,12 @@ find_or_add_symbol:
     rts
 +   plx
     phx
-    ; Test for (symtbl_next_entry + X + 1) < attic_symbol_names_end
-    lda symtbl_next_entry
+    ; Test for (symtbl_next_name + X + 1) < attic_symbol_names_end
+    lda symtbl_next_name
     sta expr_a
-    lda symtbl_next_entry+1
+    lda symtbl_next_name+1
     sta expr_a+1
-    lda symtbl_next_entry+2
+    lda symtbl_next_name+2
     sta expr_a+2
     lda #$08
     sta expr_a+3
@@ -1470,7 +1476,7 @@ get_symbol_value:
     lda #4
     adcq attic_ptr
     stq expr_a
-    ldq [expr_a],z
+    ldq [expr_a]
     clc
     rts
 
@@ -2982,6 +2988,126 @@ test_tokenize_last:
 test_tokenize_error_1: !pet "$$$",0
 
 
+test_symbol_table:
+    !byte <attic_symbol_names, >attic_symbol_names, ^attic_symbol_names
+    !byte 0
+    !32 12345
+    !byte 0,0,0,0,0,0,0,0
+test_symbol_table_end:
+test_symbol_table_last_addr = test_symbol_table_end-test_symbol_table+attic_symbol_table-SYMTBL_ENTRY_SIZE
+test_symbol_names:
+    !pet "label",0
+test_symbol_names_end:
+
+test_set_up_symbol_data:
+    jsr init_symtable
+
+    lda #<test_symbol_table
+    sta code_ptr
+    lda #>test_symbol_table
+    sta code_ptr+1
+    lda #<attic_symbol_table
+    ldx #>attic_symbol_table
+    ldy #^attic_symbol_table
+    ldz #$08
+    stq attic_ptr
+    ldy #0
+    ldz #0
+-   lda (code_ptr),y
+    sta [attic_ptr],z
+    inw code_ptr
+    inw attic_ptr
+    lda code_ptr+1
+    cmp #>test_symbol_names
+    bcc -
+    lda code_ptr
+    cmp #<test_symbol_names
+    bcc -
+
+    lda #<test_symbol_names
+    sta code_ptr
+    lda #>test_symbol_names
+    sta code_ptr+1
+    lda #<attic_symbol_names
+    ldx #>attic_symbol_names
+    ldy #^attic_symbol_names
+    ldz #$08
+    stq attic_ptr
+    ldy #0
+    ldz #0
+-   lda (code_ptr),y
+    sta [attic_ptr],z
+    inw code_ptr
+    inw attic_ptr
+    lda code_ptr+1
+    cmp #>test_symbol_names_end
+    bcc -
+    lda code_ptr
+    cmp #<test_symbol_names_end
+    bcc -
+    lda attic_ptr
+    sta symtbl_next_name
+    lda attic_ptr+1
+    sta symtbl_next_name+1
+    lda attic_ptr+2
+    sta symtbl_next_name+2
+    rts
+
+!macro test_find_symbol .tnum, .str, .length, .ec, .eatticptr {
+    +test_start .tnum
+
+    jsr test_set_up_symbol_data
+
+    ; Fake assembly location in bank 5
+    lda #<.str
+    sta bas_ptr
+    lda #>.str
+    sta bas_ptr+1
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+
+    ldx #.length
+    jsr find_symbol
+
+    ; (C set = fail)
+!if .ec {
+    bcs +
+    +print_strlit_line "...fail, expected carry set"
+    brk
++
+    lda #<test_symbol_table_last_addr
+    ldx #>test_symbol_table_last_addr
+    ldy #^test_symbol_table_last_addr
+    ldz #$08
+    cpq attic_ptr
+    beq +
+    +print_strlit_line "...fail, wrong attic ptr (not found case)"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "...fail, expected carry clear"
+    brk
++
+    lda #<.eatticptr
+    ldx #>.eatticptr
+    ldy #^.eatticptr
+    ldz #$08
+    cpq attic_ptr
+    beq +
+    +print_strlit_line "...fail, wrong attic ptr (found case)"
+    brk
++
+}
+
+    +test_end
+}
+
+test_find_symbol_1: !pet "label = 999",0
+
+
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
@@ -3157,6 +3283,10 @@ run_test_suite_cmd:
     +test_tokenize $0F, test_tokenize_14, test_tokenize_14e, test_tokenize_15, 0, 0
     +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_16, 0, 0
     +test_tokenize $11, test_tokenize_16, test_tokenize_16e, test_tokenize_last, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-find-symbol"
+    +test_find_symbol $01, test_find_symbol_1, 5, 0, attic_symbol_table
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
