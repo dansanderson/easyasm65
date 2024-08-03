@@ -862,25 +862,28 @@ find_in_token_list:
 
     ldx find_start_pos
     jsr strbuf_cmp_code_ptr
-    beq @found_prefix
+    bne +
+    ; Item of length N has matched N characters in strbuf.
+    ; Word boundary not requested? Accept prefix.
+    lda find_word_boundary
+    beq @find_success
+    ; Word boundary requested, next strbuf char must be non-word char.
+    lda strbuf,x
+    jsr is_secondary_ident_char
+    bcc @find_success
+    ; strbuf has more word chars, so this is not a match.
++
 
     clc
-    lda code_ptr
-    adc find_item_length
+    lda find_item_length
+    inc  ; null terminator
+    adc code_ptr
     sta code_ptr
     lda #0
     adc code_ptr+1
     sta code_ptr+1
     inc find_item_count
     bra @next_item
-
-@found_prefix
-    inx
-    lda find_word_boundary
-    beq @find_success
-    lda strbuf,x
-    jsr is_secondary_ident_char
-    bcs @find_fail
 
 @find_success
     sec
@@ -2798,9 +2801,65 @@ test_accept_literal_26: !pet "%12",0
 test_accept_literal_27: !pet "56a",0
 test_accept_literal_28: !pet 0
 
+!macro test_find_in_token_list .tnum, .str, .pos, .word_boundary, .ec, .eentry, .epos {
+    +test_start .tnum
+
+    lda #<mnemonics
+    sta code_ptr
+    lda #>mnemonics
+    sta code_ptr+1
+    lda #5
+    sta code_ptr+2
+    lda #0
+    sta code_ptr+3
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+!if .word_boundary {
+    sec
+} else {
+    clc
+}
+    jsr find_in_token_list
+!if .ec {
+    bcs +
+    +print_strlit_line "...fail, expected carry set"
+    brk
++   cpy #.eentry
+    beq +
+    +print_strlit_line "...fail, wrong entry"
+    brk
++   cpx #.epos
+    beq +
+    +print_strlit_line "...fail, wrong pos"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "...fail, expected carry clear"
+    brk
++
+}
+
+    +test_end
+}
+
+test_find_in_token_list_1: !pet "adc  ",0
+test_find_in_token_list_2: !pet "adcq  ",0
+test_find_in_token_list_3: !pet "tza  ",0
+test_find_in_token_list_4: !pet "zzz  ",0
+test_find_in_token_list_5: !pet "adcz  ",0
+test_find_in_token_list_6: !pet "adc#  ",0
+test_find_in_token_list_7: !pet "#adc#  ",0
 
 ; TODO:
-;   test_find_in_token_list
 ;   test_tokenize_mnemonic
 ;   test_tokenize_pseudoop
 ;   test_tokenize_other_keywords
@@ -2909,6 +2968,18 @@ run_test_suite_cmd:
     +test_accept_literal $1a, test_accept_literal_26, 1, %0001, 2
     +test_accept_literal $1b, test_accept_literal_27, 1, 56, 2
     +test_accept_literal $1c, test_accept_literal_28, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "find-in-token-list"
+    +test_find_in_token_list $01, test_find_in_token_list_1, 0, 1, 1, 0, 3
+    +test_find_in_token_list $02, test_find_in_token_list_2, 0, 1, 1, 1, 4
+    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 137, 3
+    +test_find_in_token_list $04, test_find_in_token_list_4, 0, 1, 0, 0, 0
+    +test_find_in_token_list $05, test_find_in_token_list_5, 0, 0, 1, 0, 3
+    +test_find_in_token_list $06, test_find_in_token_list_5, 0, 1, 0, 0, 0
+    +test_find_in_token_list $07, test_find_in_token_list_6, 0, 0, 1, 0, 3
+    +test_find_in_token_list $08, test_find_in_token_list_6, 0, 1, 1, 0, 3
+    +test_find_in_token_list $09, test_find_in_token_list_7, 1, 1, 1, 0, 4
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
