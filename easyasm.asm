@@ -2989,14 +2989,41 @@ test_tokenize_error_1: !pet "$$$",0
 
 
 test_symbol_table:
+    ; label
     !byte <attic_symbol_names, >attic_symbol_names, ^attic_symbol_names
     !byte 0
     !32 12345
+    ; Alpha
+    !byte <(attic_symbol_names+6), >(attic_symbol_names+6), ^(attic_symbol_names+6)
+    !byte 0
+    !32 23456
+    ; Alph
+    !byte <(attic_symbol_names+12), >(attic_symbol_names+12), ^(attic_symbol_names+12)
+    !byte 0
+    !32 34567
+    ; Beta
+    !byte <(attic_symbol_names+17), >(attic_symbol_names+17), ^(attic_symbol_names+17)
+    !byte 0
+    !32 45678
+    ; BetaZ
+    !byte <(attic_symbol_names+22), >(attic_symbol_names+22), ^(attic_symbol_names+22)
+    !byte 0
+    !32 56789
+    ; GAMMA
+    !byte <(attic_symbol_names+28), >(attic_symbol_names+28), ^(attic_symbol_names+28)
+    !byte 0
+    !32 99999
+    ; (END)
     !byte 0,0,0,0,0,0,0,0
 test_symbol_table_end:
 test_symbol_table_last_addr = test_symbol_table_end-test_symbol_table+attic_symbol_table-SYMTBL_ENTRY_SIZE
 test_symbol_names:
     !pet "label",0
+    !pet "Alpha",0
+    !pet "Alph",0
+    !pet "Beta",0
+    !pet "BetaZ",0
+    !pet "GAMMA",0
 test_symbol_names_end:
 
 test_set_up_symbol_data:
@@ -3106,7 +3133,12 @@ test_set_up_symbol_data:
 }
 
 test_find_symbol_1: !pet "label = 999",0
-
+test_find_symbol_2: !pet "Alpha",0
+test_find_symbol_3: !pet "Alph",0
+test_find_symbol_4: !pet "Beta",0
+test_find_symbol_5: !pet "BetaZ",0
+test_find_symbol_6: !pet "GAMMA",0
+test_find_symbol_7: !pet "GAMMB",0
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3286,7 +3318,13 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "test-find-symbol"
-    +test_find_symbol $01, test_find_symbol_1, 5, 0, attic_symbol_table
+    +test_find_symbol $01, test_find_symbol_1, 5, 0, attic_symbol_table+(8*0)
+    +test_find_symbol $02, test_find_symbol_2, 5, 0, attic_symbol_table+(8*1)
+    +test_find_symbol $03, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
+    +test_find_symbol $04, test_find_symbol_4, 4, 0, attic_symbol_table+(8*3)
+    +test_find_symbol $05, test_find_symbol_5, 5, 0, attic_symbol_table+(8*4)
+    +test_find_symbol $06, test_find_symbol_6, 5, 0, attic_symbol_table+(8*5)
+    +test_find_symbol $07, test_find_symbol_7, 5, 1, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
