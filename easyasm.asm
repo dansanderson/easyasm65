@@ -26,12 +26,14 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 33
+* = $100 - 36
 
 pass            *=*+1
 program_counter *=*+2
 asm_flags       *=*+1
 F_ASM_PC_DEFINED = %00000001
+
+symtbl_next_name *=*+3
 
 expr_a          *=*+4
 expr_b          *=*+4
@@ -39,9 +41,13 @@ expr_result     *=*+4
 expr_flags      *=*+1
 F_EXPR_BRACKET_MASK   = %00000011
 F_EXPR_BRACKET_NONE   = %00000000
+; - Entire expression surrounded by parentheses
 F_EXPR_BRACKET_PAREN  = %00000001
+; - Entire expression surrounded by square brackets
 F_EXPR_BRACKET_SQUARE = %00000010
+; - Hex/dec number literal with leading zero, or symbol assigned such a literal with =
 F_EXPR_BRACKET_ZERO   = %00000011
+; - Expr contains undefined symbol
 F_EXPR_UNDEFINED      = %00000100
 
 tok_pos         *=*+1   ; Offset of tokbuf
@@ -58,9 +64,29 @@ bas_ptr         *=*+4   ; 32-bit pointer, bank 0
 
 
 ; Attic map
-attic_easyasm_stash = $08700000
-attic_source_stash  = attic_easyasm_stash + $6000
-attic_data          = attic_source_stash + $d700
+attic_easyasm_stash = $08700000                    ; 0.0000-0.5FFF
+attic_source_stash  = attic_easyasm_stash + $6000  ; 0.6000-1.36FF
+attic_symbol_table  = attic_source_stash + $d700   ; 1.3700-1.56FF (8 KB)
+attic_symbol_names  = attic_symbol_table + $2000   ; 1.5700-1.B6FF (24 KB)
+attic_symbol_names_end = attic_symbol_names + $6000
+attic_data          = attic_symbol_names + $6000   ; 1.B700...
+
+; Symbol table constraints
+;
+; - Symbol table entries are 8 bytes: (name_ptr_24, flags_8, value_32)
+; - 1023 symbols maximum (8KB of entries + list terminator)
+; - Average name length of 23 for all 1023 symbols (24KB of names)
+;
+; For comparison, the BASIC 65 source file has 3301 symbols with an average
+; name length of 15. The source file is 521,778 bytes long, which is >11x the
+; maximum size of an EasyAsm source file. So 32KB of symbol data for EasyAsm
+; is probably overkill.
+SYMTBL_ENTRY_SIZE = 8
+SYMTBL_MAX_ENTRIES = (attic_symbol_names-attic_symbol_table) / SYMTBL_ENTRY_SIZE
+; - Symbol is defined in the current pass; value is valid
+F_SYMTBL_DEFINED  = %00000001
+; - Symbol was assigned a number literal with leading zeroes
+F_SYMTBL_LEADZERO = %00000010
 
 
 ; Other memory
@@ -130,10 +156,7 @@ id_string:
 
 ; Initialize
 ; - Assume entry conditions (B, bank 5, MAP)
-; - Preserve CPU registers
 init:
-    pha
-
     ; Init pointer banks
     lda #attic_easyasm_stash >> 24
     sta attic_ptr+3
@@ -143,7 +166,9 @@ init:
     sta bas_ptr+3
     sta bas_ptr+2
 
-    pla
+    ; Init symbol table
+    jsr init_symtable
+
     rts
 
 
@@ -151,7 +176,9 @@ init:
 ; MAPL = (E)500  MAPH = (8)300  B = $1Exx
 ; A = dispatch index (1-indexed)
 dispatch:
+    pha
     jsr init
+    pla
     dec
     asl
     tax   ; X = (A-1)*2
@@ -1227,465 +1254,254 @@ tokenize:
     rts
 
 
-; ---------------------- REWRITE -----------------------------
+; ------------------------------------------------------------
+; Symbol table
+; ------------------------------------------------------------
+
+init_symtable:
+    ; Set first symbol table entry to null terminator
+    ldq attic_symbol_table
+    stq attic_ptr
+    lda #0
+    tax
+    tay
+    taz
+    stq [attic_ptr]
+
+    ; Set name pointer to beginning of names region
+    lda #<attic_symbol_names
+    sta symtbl_next_name
+    lda #>attic_symbol_names
+    sta symtbl_next_name+1
+    lda #^attic_symbol_names
+    sta symtbl_next_name+2
+
+    rts
 
 
-; Consume label, mnemonic, or pseudo-op (if C=0)
-; Input:
-;   bas_ptr = line_addr, Z = line_pos
-;   C: 0=accept pseudo-op, 1=no pseudo-op
+; Find a symbol table entry for a name
+; Input: bas_ptr=name, X=length (< 254)
 ; Output:
-;   C: 0=not found, line_pos unchanged
-;   C: 1=found, Z/line_pos advanced
-accept_label_mnemonic_pseudoop:
-    lda [bas_ptr],z
+; - C=0 found, attic_ptr=entry address
+; - C=1 not found, attic_ptr=next available table entry
+; - bas_ptr and X preserved
+find_symbol:
+    phx
+    ldq attic_symbol_table
+    stq attic_ptr
+    plx
 
-    bcc +
-    cmp #'!'           ; Pseudoops not allowed here
-    beq accept_fail
-    bra ++
+@symbol_find_loop
+    ; attic_ptr = current entry
+    ldz #2
+    lda [attic_ptr],z
+    beq @not_found
 
-+   cmp #'!'
-    bne ++
-    inz
-    sec
-    jmp accept_ident
+    ; expr_a = current name ptr
+    sta expr_a+2
+    dez
+    lda [attic_ptr],z
+    sta expr_a+1
+    dez
+    lda [attic_ptr],z
+    sta expr_a
+    lda #$08
+    sta expr_a+3
 
-++  cmp #'@'
-    bne +
-    inz
+    ; Compare (expr_a) == (bas_ptr) up to length X
+    txa
+    taz
+    dez
+-   lda [expr_a],z
+    cmp [bas_ptr],z
+    bne @next_symbol
+    dez
+    bpl -
+    ; (expr_a+length) == 0
+    txa
+    taz
+    lda [expr_a],z
+    bne @next_symbol
+    ; Found.
     clc
-    jmp accept_ident
-
-    ; If start is + or -, must be a sequence of + or - up to space, colon, or EOL.
-+   cmp #'+'
-    bne +
--   inz
-    lda [bas_ptr],z
-    cmp #'+'
-    beq -
-    bra @check_rel_end
-
-+   cmp #'-'
-    bne +
--   inz
-    lda [bas_ptr],z
-    cmp #'-'
-    beq -
-
-@check_rel_end
-    lda [bas_ptr],z
-    beq accept_success   ; end of line
-    cmp #chr_spc
-    beq accept_success   ; space
-    cmp #':'
-    beq accept_success   ; colon
-    bra accept_fail
-
-    ; Otherwise expect an identifier.
-+   clc
-    jmp accept_ident
-
-
-; Input: Z = new line position
-; Output: line_pos advanced, C=1
-accept_success
-    stz line_pos
-    sec
     rts
 
-; Output: line_pos untouched, C=0
-accept_fail
-    clc
-    rts
-
-
-; Input: bas_ptr, Z=start pos, line_pos=end pos+1
-; Output:
-;   strbuf contains substring of code, null-terminated
-;   Z = line_pos = end pos+1
-code_to_strbuf:
-    ldx #0        ; strbuf index
--   lda [bas_ptr],z
-    sta strbuf,x
-    inx
-    inz
-    cpz line_pos
-    bcc -
-    lda #0        ; null terminate
-    sta strbuf,x
-    rts
-
-
-; Input: strbuf is candidate string, lowercased
-; Output:
-;   C=1: is mnemonic, code_ptr=mnemonic table row
-;   C=0: is not mnemonic
-get_mnemonic_for_strbuf:
-    lda #<mnemonics
-    sta code_ptr
-    lda #>mnemonics
-    sta code_ptr+1
-
-    ; code_ptr = beginning of row
-@next_row
+@next_symbol
+    phx
+    lda #8
+    ldx #0
     ldy #0
-    lda (code_ptr),y
-    bne +
-    ; No match in table. Exit C=0.
-    clc
-    rts
-+
-    ldz #4
-    ldx #0
-    jsr strbuf_cmp_code_ptr
-    bne +
-    ; Full match. Exit C=1, code_ptr=row.
-    sec
-    rts
-+
-    lda code_ptr    ; advance row
-    clc
-    adc #8
-    sta code_ptr
-    lda code_ptr+1
-    adc #0
-    sta code_ptr+1
-    bra @next_row
-
-
-; Input: strbuf is candidate string, lowercased
-; Output:
-;   C=1: is pseudoop, A=pseudoop number
-;   C=0: is not pseudoop
-get_pseudoop_for_strbuf:
-    ; X = buffer index; strbuf,x = buffer char
-    ldx #0
-    lda strbuf,x
-    cmp #'!'          ; confirm leading '!'
-    beq +
-    clc
-    rts
-+
-    lda #<pseudoops
-    sta code_ptr
-    lda #>pseudoops
-    sta code_ptr+1
-
-    ; Y = current pseudoop number
-    ; (Z=0. All table reads via code_ptr+0.)
-    ldy #1
-
-@next_token
     ldz #0
-    lda (code_ptr),z
-    bne +
-    ; No matches. Exit with C=0.
     clc
+    adcq attic_ptr
+    stq attic_ptr
+    plx
+    bra @symbol_find_loop
+
+@not_found
+    sec
+    rts
+
+
+; Find or add a symbol table entry for a name
+; Input: bas_ptr=name, X=length (< 254)
+; Output:
+; - C=0 found or added, attic_ptr=entry address
+; - C=1 out of memory error
+find_or_add_symbol:
+    jsr find_symbol
+    bcs +
+    rts
++   ; attic_ptr is the null terminator in the symbol list
+    ; Is there room for another symbol table entry here?
+    phx
+    lda #<(attic_symbol_names-SYMTBL_ENTRY_SIZE)
+    ldx #>(attic_symbol_names-SYMTBL_ENTRY_SIZE)
+    ldy #^(attic_symbol_names-SYMTBL_ENTRY_SIZE)
+    ldz #$08
+    cpq attic_ptr
+    bne +
+    ; Out of memory: no more symbol table entries.
+    plx
+    sec
+    rts
++   plx
+    phx
+    ; Test for (symtbl_next_entry + X + 1) < attic_symbol_names_end
+    lda symtbl_next_entry
+    sta expr_a
+    lda symtbl_next_entry+1
+    sta expr_a+1
+    lda symtbl_next_entry+2
+    sta expr_a+2
+    lda #$08
+    sta expr_a+3
+    lda #0
+    tay
+    taz
+    txa
+    ldx #0
+    inc
+    adcq expr_a
+    stq expr_a
+    lda #<attic_symbol_names_end
+    ldx #>attic_symbol_names_end
+    ldy #^attic_symbol_names_end
+    ldz #$08
+    cpq expr_a
+    bcc +
+    ; Out of memory: not enough room for symbol name.
+    plx
+    sec
     rts
 +
+    ; (Name length is on the stack.)
 
-    ldz #$ff
-    ldx #1
+    ; Create new table entry, and null terminator.
+    ldz #0
+    lda symtbl_next_name
+    sta [attic_ptr],z
+    inz
+    lda symtbl_next_name+1
+    sta [attic_ptr],z
+    inz
+    lda symtbl_next_name+2
+    sta [attic_ptr],z
+    inz
+    ldx #13  ; Zero flags, value, and all of next entry (null terminator).
+    lda #0
+-   sta [attic_ptr],z
+    inz
+    dex
+    bne -
+
+    ; Copy name from bas_ptr, length X, to symtbl_next_name.
+    plx
+    lda symtbl_next_name
+    sta attic_ptr
+    lda symtbl_next_name+1
+    sta attic_ptr+1
+    lda symtbl_next_name+2
+    sta attic_ptr+2
+    txa
+    taz
+    dez
+-   lda [bas_ptr],z
+    sta [attic_ptr],z
+    dez
+    bpl -
+    txa
+    taz
+    lda #0
+    sta [attic_ptr],z
+
+    ; Store new symtbl_next_name.
+    tay
+    taz
+    txa
+    ldx #0
+    inc    ; Q = name length + 1
+    clc
+    adcq attic_ptr
+    stq symtbl_next_name
+
+    ; Success.
+    clc
+    rts
+
+
+; Gets a symbol's 32-bit value
+; Input: attic_ptr=symbol table entry
+; Output:
+;   C=0 defined, Q=value
+;   C=1 undefined
+get_symbol_value:
+    ldz #3
+    lda [attic_ptr],z
+    and #F_SYMTBL_DEFINED
+    bne +
+    ; Undefined.
+    sec
+    rts
++   lda #0
+    tax
+    tay
+    taz
+    lda #4
+    adcq attic_ptr
+    stq expr_a
+    ldq [expr_a],z
+    clc
+    rts
+
+
+; Gets a symbol's 32-bit value
+; Input: attic_ptr=symbol table entry, Q=value
+; Output: attic_ptr+4=Q
+; This does not validate inputs.
+set_symbol_value:
+    pha
+    phx
     phy
-    jsr strbuf_cmp_code_ptr
-    bne +
-    ; Matched up to end. Exit with C=1, A=pseudoop number.
+    phz
+    lda #0
+    tax
+    tay
+    taz
+    lda #4
+    adcq attic_ptr
+    stq expr_a
+    plz
+    ply
+    plx
     pla
-    sec
-    rts
-+   ply
-
--   ldz #0
-    lda (code_ptr),z
-    beq +
-    inw code_ptr
-    bra -
-+   iny
-    inw code_ptr
-    bra @next_token
-
-
-; Input: bas_ptr=line_addr, Z=line_pos
-; Output:
-;  C: 0=not found, Z/line_pos unchanged
-;  C: 1=found, expr_flags, expr_result, Z/line_pos advanced
-accept_expression:
-    lda #0
-    sta expr_flags
-
-    ; Remember a starting bracket, leading zero in hex or dec literal
-    lda [bas_ptr],z
-    cmp #'('
-    bne +
-    lda expr_flags
-    and #!F_EXPR_BRACKET_MASK
-    ora #F_EXPR_BRACKET_PAREN
-    sta expr_flags
-    bra +++
-+   cmp #'['
-    bne +
-    lda expr_flags
-    and #!F_EXPR_BRACKET_MASK
-    ora #F_EXPR_BRACKET_SQUARE
-    sta expr_flags
-    bra +++
-+   cmp #'$'  ; Hex literal with two leading zeros may be 16-bit addr
-    bne +
-    inz
-    lda [bas_ptr],z
-    cmp #'0'
-    bne +++
-    inz
-    lda [bas_ptr],z
-    cmp #'0'
-    beq ++
-    bra +++
-+   cmp #'0'  ; Dec literal with leading zero may be 16-bit addr
-    bne +++
-++  lda expr_flags
-    and #!F_EXPR_BRACKET_MASK
-    ora #F_EXPR_BRACKET_ZERO
-    sta expr_flags
-+++ lda line_pos
-    taz
-
-; TODO: a real expression parser
-;   Only support number literals as expressions for now
-    jmp accept_literal
-
-
-; Expression should be treated as 16-bit
-; Input: expr_flags, expr_result
-; Output:
-;   C: 0=expr is 8-bit
-;   C: 1=expr is 16-bit
-is_expr_16bit:
-    lda expr_flags
-    and #F_EXPR_BRACKET_MASK
-    cmp #F_EXPR_BRACKET_ZERO
-    beq +
-    lda expr_result+1
-    ora expr_result+2
-    ora expr_result+3
-    bne +
-    clc
-    rts
-+   sec
+    stq [expr_a]
     rts
 
 
-; Accept an addressing-operand expression
-; Input: bas_ptr=line_addr, Z=line_pos
-; Output:
-;  C: 0=not found, Z/line_pos unchanged
-;  C: 1=found, expr_result=operand, X/Y=addr mode bit, Z/line_pos advanced
-accept_addressing_operand:
-    lda #0
-    sta expr_result
-    sta expr_result+1
-    sta expr_result+2
-    sta expr_result+3
-
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-    bne +
-    ; Implied
-    ldx #%10000000
-    ldy #%00000000
-    stz line_pos
-    sec
-    rts
-
-+   cmp #'#'
-    bne +++
-    inz
-    jsr accept_whitespace_and_comment
-    ; Immediate
-    jsr accept_expression
-    lbcc @exit_fail
-+   jsr is_expr_16bit
-    bcs +
-    ldx #%01000000  ; Immediate 8-bit
-    bra ++
-+   ldx #%00100000  ; Immediate 16-bit
-++  ldy #%00000000
-    stz line_pos
-    sec
-    rts
-
-+++ jsr accept_expression
-    lbcc +++
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-    bne ++
-    ; Expression followed by end of line.
-    lda expr_flags
-    and #F_EXPR_BRACKET_MASK
-    cmp #F_EXPR_BRACKET_PAREN
-    bne +
-    ; TODO: support ($ff) as an alias for ($ff),z?
-    ldx #%00000000  ; Absolute Indirect
-    ldy #%01000000
-    stz line_pos
-    sec
-    rts
-+   jsr is_expr_16bit
-    bcs +
-    ldx #%00010000  ; Base-page, branch relative, bit-test branch relative
-    ldy #%00000000
-    stz line_pos
-    sec
-    rts
-+   ldx #%00000010  ; Absolute, 16-bit branch relative
-    ldy #%00000000
-    stz line_pos
-    sec
-    rts
-
-++  cmp #','
-    lbne @exit_fail
-    inz
-    jsr accept_whitespace_and_comment
-    ; Expression folowed by comma.
-    lda expr_flags
-    and #F_EXPR_BRACKET_MASK
-    cmp #F_EXPR_BRACKET_PAREN
-    bne ++
-    ; With parens...
-    lda [bas_ptr],z
-    jsr to_lowercase
-    cmp #'Y'
-    bne +
-    ldx #%00000000
-    ldy #%00001000  ; Base-page Indirect Y-Indexed
-    inz
-    stz line_pos
-    sec
-    rts
-+   cmp #'Z'
-    lbne @exit_fail
-    ldx #%00000000
-    ldy #%00000100  ; Base-page Indirect Z-Indexed
-    inz
-    stz line_pos
-    sec
-    rts
-
-++  cmp #F_EXPR_BRACKET_SQUARE
-    bne ++
-    ; With square brackets...
-    lda [bas_ptr],z
-    jsr to_lowercase
-    cmp #'Z'
-    lbne @exit_fail
-    ldx #%00000000
-    ldy #%00000010  ; 32-bit Base-page Indirect Z-Indexed
-    inz
-    stz line_pos
-    sec
-    rts
-
-++  ; Without parens...
-    inz
-    lda [bas_ptr],z
-    jsr to_lowercase
-    cmp #'X'
-    bne ++
-    jsr is_expr_16bit
-    bcs +
-    ldx #%00001000  ; Base-page X-Indexed
-    ldy #%00000000
-    inz
-    stz line_pos
-    sec
-    rts
-+   ldx #%00000001  ; Absolute X-Indexed
-    ldy #%00000000
-    inz
-    stz line_pos
-    sec
-    rts
-
-++  cmp #'Y'
-    lbne @exit_fail
-    jsr is_expr_16bit
-    bcs +
-    ldx #%00000100  ; Base-page Y-Indexed
-    ldy #%00000000
-    inz
-    stz line_pos
-    sec
-    rts
-+   ldx #%00000000  ; Absolute Y-Indexed
-    ldy #%10000000
-    inz
-    stz line_pos
-    sec
-    rts
-
-+++ ; (<expr>,X) or (<expr>,SP),Y
-    lda [bas_ptr],z
-    cmp #'('
-    lbne @exit_fail
-    inz
-    jsr accept_whitespace_and_comment
-    jsr accept_expression
-    lbcc @exit_fail
-    jsr accept_whitespace_and_comment
-    cmp #','
-    lbne @exit_fail
-    inz
-    jsr accept_whitespace_and_comment
-    jsr to_lowercase
-    cmp #'X'
-    beq +
-    cmp #'S'
-    lbne @exit_fail
-    inz
-    lda [bas_ptr],z
-    jsr to_lowercase
-    cmp #'P'
-    lbne @exit_fail
-    jsr accept_whitespace_and_comment
-    cmp #')'
-    lbne @exit_fail
-    jsr accept_whitespace_and_comment
-    cmp #','
-    lbne @exit_fail
-    jsr accept_whitespace_and_comment
-    cmp #'Y'
-    lbne @exit_fail
-    ; (<expr>,SP),Y
-    ; TODO: range check expression value? on last pass?
-    stz line_pos
-    ldx #%00000000  ; Stack Relative Indirect, Y-Indexed
-    ldy #%00000001
-    sec
-    rts
-
-+   jsr accept_whitespace_and_comment
-    cmp #')'
-    lbne @exit_fail
-    ; (<expr>,X)
-    stz line_pos
-    ldx #%00000000
-    jsr is_expr_16bit
-    bcs +
-    ldy #%00010000  ; Base-page Indirect X-Indexed
-    bra ++
-+   ldy #%00100000  ; Absolute Indirect X-Indexed
-++  sec
-    inz
-    stz line_pos
-    rts
-
-@exit_fail
-    lda line_pos
-    taz
-    clc
-    rts
-
+; ------------------------------------------------------------
+; Assembler
+; ------------------------------------------------------------
 
 ; Input: line_addr
 ; Output: err_code, line_pos
@@ -1698,110 +1514,14 @@ assemble_line:
     lda line_addr+1
     sta bas_ptr+1
 
-    ; Start line pos at first character
-    ; (0=next addr word, 2=line number word)
-    ldz #4
-    stz line_pos
-
-    ; Handle empty or comment-only lines.
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-    bne +
+    jsr tokenize
+    lda err_code
+    beq +
+    ; Error return
     rts
 +
-    ; Accept a label, menmonic, or pseudoop.
-    phz
-    jsr accept_label_mnemonic_pseudoop
-    plz
-    bcs +
-    ; Something starts this line, but it's not a label, mnemonic, or pseudoop.
-    lda #err_syntax
-    sta err_code
-    rts
 
-+   jsr assemble_mnemonic_or_pseudoop
-    bcc +
-    rts
-+
-    ; This is a label.
-    jsr code_to_strbuf   ; strbuf = label
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-    cmp #':'
-    bne +
-    ; Ignore a single colon after a line-starting label.
-    inz
-    jsr accept_whitespace_and_comment
-    lda [bas_ptr],z
-+   cmp #0
-    bne +
-    ; Positional label on a line by itself.
-    ; TODO: Handle label positional assignment.
-    ; TODO: Handle relative label assignment.
-    lda #3 ; DEBUG
-    sta err_code
-    rts
-
-+   cmp #'='
-    bne +
-    ; Label assignment.
-    ; TODO: Expect expression.
-    inz
-    lda #2 ; DEBUG
-    sta err_code
-    rts
-
-+   ; Positional label on a line with other stuff.
-    ; TODO: Handle label positional assignment.
-    ; TODO: Handle relative label assignment.
-
-    ; Accept a mnemonic or pseudoop, and handle it.
-    phz
-    jsr accept_label_mnemonic_pseudoop
-    plz
-    bcc +
-    phz
-    jsr assemble_mnemonic_or_pseudoop
-    plz
-    bcc +
-    rts
-
-+   ; Something follows the label, but it's not a mnemonic or pseudoop.
-    stz line_pos
-    lda #err_syntax
-    sta err_code
-    rts
-
-
-; Input: Z-to-line_pos is candidate
-; Output:
-;   C=0: text is neither mnemonic nor pseudoop
-;   C=1: assembled mnemonic or pseudoop, Z/line_pos advanced
-assemble_mnemonic_or_pseudoop:
-    ; Z-to-line_pos is label, mnemonic, or pseudoop. Disambiguate...
-    jsr code_to_strbuf
-    jsr strbuf_to_lowercase
-    jsr get_mnemonic_for_strbuf
-    bcs @assemble_mnemonic
-    jsr get_pseudoop_for_strbuf
-    bcs @assemble_pseudoop
-    clc
-+   rts
-
-@assemble_mnemonic
-    ; A=start pos, Y=end pos (+1)
-    ; TODO: handle mnemonic
-    lda #4 ; DEBUG
-    sta err_code
-    sec
-    rts
-
-@assemble_pseudoop
-    ; A=start pos, Y=end pos (+1)
-    ; TODO: handle pseudoop
-    lda #5 ; DEBUG
-    sta err_code
-    sec
+    ; TODO: Parse and assemble tokbuf.
     rts
 
 
@@ -1833,24 +1553,19 @@ assemble_source:
     jsr print_error
 
 @end_of_program
+    ; TODO: Print assembly status.
     rts
 
 
 ; ---------------------------------------------------------
 ; Error message strings
 
-; Error code constants
-err_syntax = 1
-
 err_message_tbl:
-!word e01,e02,e03,e04,e05
+!word e01
 
 err_messages:
+err_syntax = 1
 e01: !pet "syntax error",0
-e02: !pet "is label expression assignment",0
-e03: !pet "is label pc assignment",0
-e04: !pet "is mnemonic",0
-e05: !pet "is pseudoop",0
 
 
 ; ---------------------------------------------------------
