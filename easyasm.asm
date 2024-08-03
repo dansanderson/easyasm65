@@ -718,7 +718,8 @@ accept_literal:
     lbcc @do_decimal_literal
 
 @not_found
-    ldz (easyasm_base_page << 8) + line_pos
+    lda line_pos
+    taz
     clc
     rts
 
@@ -1016,7 +1017,8 @@ load_line_to_strbuf:
     iny
     inz
     bra -
-+   rts
++   sta strbuf,y  ; store null terminator in strbuf too
+    rts
 
 
 ; Tokenize a full line.
@@ -1047,7 +1049,8 @@ tokenize:
     ; String literal
     cmp #chr_doublequote
     bne +
-    ldz line_pos
+    lda line_pos
+    taz
 -   inz
     lda [bas_ptr],z
     cmp #chr_doublequote
@@ -1063,6 +1066,7 @@ tokenize:
     tza
     sec
     sbc line_pos
+    dec
     sta tokbuf,x
     inx
     stx tok_pos
@@ -1071,15 +1075,16 @@ tokenize:
     bra @tokenize_loop
 
 +   ; Numeric literal
+    phz
     jsr accept_literal
+    plz
     bcc +
     ; Push tk_number_literal, line_pos, expr_result (4 bytes)
     ldx tok_pos
-    lda #tk_string_literal
+    lda #tk_number_literal
     sta tokbuf,x
     inx
-    lda line_pos
-    sta tokbuf,x
+    stz tokbuf,x
     inx
     lda expr_result
     sta tokbuf,x
@@ -1097,24 +1102,31 @@ tokenize:
     bra @tokenize_loop
 
 +   ; Mnemonic
+    phz  ; TODO: tokenize routines should put Z back to start?
     jsr tokenize_mnemonic
+    plz
     bcs @push_tok_pos_then_continue
 
     ; Pseudoop
+    phz
     jsr tokenize_pseudoop
+    plz
     bcs @push_tok_pos_then_continue
 
     ; Keyword
+    phz
     jsr tokenize_other_keywords
+    plz
     bcs @push_tok_pos_then_continue
 
     ; Non-keyword token
     ; Note: This tokenizes relative labels (---, +++) as punctuation tokens.
+    phz
     jsr tokenize_other
+    plz
     bcs @push_tok_pos_then_continue
 
     ; Label
-    ldz line_pos
     lda [bas_ptr],z
     cmp #'@'
     bne +
@@ -1125,6 +1137,7 @@ tokenize:
 ++  jsr accept_ident
     bcc @syntax_error
     ; Push tk_label_or_reg, line_pos, length (z-line_pos)
+    ; TODO: add to/look up in symbol table, store table index and not label name?
     ldx tok_pos
     lda #tk_string_literal
     sta tokbuf,x
@@ -1146,8 +1159,9 @@ tokenize:
     ldx tok_pos
     sta tokbuf,x
     inx
+    stz tokbuf,x
     lda line_pos
-    sta tokbuf,x
+    taz
     inx
     stx tok_pos
     lbra @tokenize_loop
@@ -1386,7 +1400,8 @@ accept_expression:
     and #!F_EXPR_BRACKET_MASK
     ora #F_EXPR_BRACKET_ZERO
     sta expr_flags
-+++ ldz (easyasm_base_page << 8) + line_pos
++++ lda line_pos
+    taz
 
 ; TODO: a real expression parser
 ;   Only support number literals as expressions for now
@@ -1619,7 +1634,8 @@ accept_addressing_operand:
     rts
 
 @exit_fail
-    ldz (easyasm_base_page << 8) + line_pos
+    lda line_pos
+    taz
     clc
     rts
 
@@ -3049,7 +3065,6 @@ test_tokenize_other_6: !pet "ident", 0
     beq +
     cmp strbuf,x
     beq -
-    +print_strlit_line "...fail, wrong strbuf"
     brk
 +
 
@@ -3059,9 +3074,82 @@ test_tokenize_other_6: !pet "ident", 0
 test_load_line_to_strbuf_1:  !pet "AbC",0
 test_load_line_to_strbuf_1e: !pet "abc",0
 
-; TODO:
-;   test_tokenize
+!macro test_tokenize .tnum, .str, .etokbuf, .etokbuf_end, .eerror, .eerror_pos {
+    +test_start .tnum
 
+    ; Fake assembly location in bank 5
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+    lda #<(.str - 4)
+    sta line_addr
+    lda #>(.str - 4)
+    sta line_addr+1
+    jsr tokenize
+
+!if .eerror {
+    lda error_code
+    cmp #.eerror
+    beq +
+    +print_strlit_line "...fail, wrong error code"
+    brk
++   lda line_pos
+    cmp #.eerror_pos
+    beq +
+    +print_strlit_line "...fail, wrong error pos"
+    brk
++
+} else {
+    ldx #.etokbuf_end-.etokbuf
+-   dex
+    lda .etokbuf,x
+    cmp tokbuf,x
+    bne +
+    cpx #0
+    beq ++
+    bra -
++
+    +print_strlit_line "...fail, wrong tokbuf"
+    brk
+++
+}
+
+    +test_end
+}
+
+test_tokenize_1: !pet 0
+test_tokenize_1e: !byte 0
+test_tokenize_2: !pet "    ; comment only",0
+test_tokenize_2e: !byte 0
+test_tokenize_3: !pet "\"string literal\"",0
+test_tokenize_3e: !byte tk_string_literal, 4, 14
+test_tokenize_4: !pet "12345",0
+test_tokenize_4e:
+    !byte tk_number_literal, 4
+    !32 12345
+    !byte 0
+test_tokenize_5: !pet "$DeAdBeEf",0
+test_tokenize_5e:
+    !byte tk_number_literal, 4
+    !32 $deadbeef
+    !byte 0
+test_tokenize_6: !pet "tZa",0
+test_tokenize_6e: !byte 137, 4
+test_tokenize_7: !pet "!wOrD",0
+test_tokenize_7e: !byte po_word, 4
+test_tokenize_8: !pet "xOr",0
+test_tokenize_8e: !byte kw_xor, 4
+test_tokenize_9: !pet ">>>",0
+test_tokenize_9e: !byte tk_lsr, 4
+test_tokenize_last:
+
+; TODO:
+; label
+; syntax error
+; valid instruction lines
+; valid assignment lines
+; stress quoted strings
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3216,6 +3304,18 @@ run_test_suite_cmd:
     +print_strlit_line "tokenize-load-line-to-strbuf"
     +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
     +test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize"
+    +test_tokenize $01, test_tokenize_1, test_tokenize_1e, test_tokenize_2, 0, 0
+    +test_tokenize $02, test_tokenize_2, test_tokenize_2e, test_tokenize_3, 0, 0
+    +test_tokenize $03, test_tokenize_3, test_tokenize_3e, test_tokenize_4, 0, 0
+    +test_tokenize $04, test_tokenize_4, test_tokenize_4e, test_tokenize_5, 0, 0
+    +test_tokenize $05, test_tokenize_5, test_tokenize_5e, test_tokenize_6, 0, 0
+    +test_tokenize $06, test_tokenize_6, test_tokenize_6e, test_tokenize_7, 0, 0
+    +test_tokenize $07, test_tokenize_7, test_tokenize_7e, test_tokenize_8, 0, 0
+    +test_tokenize $08, test_tokenize_8, test_tokenize_8e, test_tokenize_9, 0, 0
+    +test_tokenize $09, test_tokenize_9, test_tokenize_9e, test_tokenize_last, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
