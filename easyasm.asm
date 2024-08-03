@@ -537,6 +537,8 @@ is_secondary_ident_char:
 +   cmp #chr_backarrow
     beq ++
     cmp #chr_megaat
+    beq ++
+    cmp #'.'
     bne +++
 ++  sec
     rts
@@ -3303,6 +3305,7 @@ run_test_suite_cmd:
     +test_is_secondary_ident_char $0E, '@', 0
     +test_is_secondary_ident_char $0F, ']', 0
     +test_is_secondary_ident_char $10, $e1, 0
+    +test_is_secondary_ident_char $11, '.', 1
 
     +print_chr chr_cr
     +print_strlit_line "strbuf-to-lowercase"
