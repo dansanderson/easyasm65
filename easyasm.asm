@@ -499,8 +499,8 @@ print_error:
     ldz #0
     ldx #0
 -   lda [bas_ptr],z
-    beq +
     sta strbuf,x
+    beq +
     inz
     inx
     bra -
@@ -1517,6 +1517,8 @@ set_symbol_value:
 
 ; Input: line_addr
 ; Output: err_code, line_pos
+;  C=0 success, continue
+;  C=1 stop assembly (err_code=0 end of program, other on error)
 assemble_line:
     lda #0
     sta err_code
@@ -1526,14 +1528,135 @@ assemble_line:
     lda line_addr+1
     sta bas_ptr+1
 
+    ldz #0
+    lda [bas_ptr],z
+    inz
+    ora [bas_ptr],z
+    bne +
+    ; End of program
+    sec
+    rts
++
     jsr tokenize
     lda err_code
     beq +
     ; Error return
+    sec
     rts
 +
 
     ; TODO: Parse and assemble tokbuf.
+    ; DEBUG: print source line, with line number
+    ldz #3
+    lda [bas_ptr],z
+    tax
+    dez
+    lda [bas_ptr],z
+    ldy #0
+    ldz #0
+    clc                    ; request unsigned
+    jsr print_dec32
+    lda #chr_spc
+    +kcall bsout
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    ldz #0
+    ldx #0
+-   lda [bas_ptr],z
+    sta strbuf,x
+    beq +
+    inz
+    inx
+    bra -
++   ldx #<strbuf
+    ldy #>strbuf
+    jsr print_cstr
+    lda #chr_cr
+    +kcall bsout
+
+    ; DEBUG: print tokbuf as hex values
+    ldx #0
+@print_tokbuf_loop
+    lda tokbuf,x
+    lbeq @end_tokbuf
+
+    cmp #tk_string_literal
+    bne +
+    +kprimm_start
+    !pet "[str l:",0
+    +kprimm_end
+    inx
+    inx
+    lda tokbuf,x
+    jsr print_hex8
+    +kprimm_start
+    !pet "]",0
+    +kprimm_end
+    inx
+    bra @print_tokbuf_loop
+
++   cmp #tk_number_literal
+    bne +
+    +kprimm_start
+    !pet "[lit v:",0
+    +kprimm_end
+    inx
+    inx
+    lda tokbuf,x
+    sta expr_b
+    inx
+    lda tokbuf,x
+    sta expr_b+1
+    inx
+    lda tokbuf,x
+    sta expr_b+2
+    inx
+    lda tokbuf,x
+    sta expr_b+3
+    phx
+    ldq expr_b
+    jsr print_dec32
+    plx
+    +kprimm_start
+    !pet "]",0
+    +kprimm_end
+    inx
+    lbra @print_tokbuf_loop
+
++   cmp #tk_label_or_reg
+    bne +
+    +kprimm_start
+    !pet "[label l:",0
+    +kprimm_end
+    inx
+    inx
+    lda tokbuf,x
+    jsr print_hex8
+    +kprimm_start
+    !pet "]",0
+    +kprimm_end
+    inx
+    lbra @print_tokbuf_loop
+
++
+    +kprimm_start
+    !pet "[tok ",0
+    +kprimm_end
+    jsr print_hex8
+    inx
+    inx
+    +kprimm_start
+    !pet "]",0
+    +kprimm_end
+    lbra @print_tokbuf_loop
+
+@end_tokbuf
+    lda #chr_cr
+    +kcall bsout
+
+    clc
     rts
 
 
@@ -1543,29 +1666,25 @@ assemble_source:
     lda #>(source_start+1)
     sta line_addr+1
 
+    ; DEBUG: single pass to print source tokenized, detect lexer errors
 @line_loop
-    ldy #0
-    lda (line_addr),y
-    iny
-    ora (line_addr),y
-    bne +
-    bra @end_of_program
-+   jsr assemble_line
-    lda err_code
-    bne @found_error
-    ldy #0
-    lda (line_addr),y
+    jsr assemble_line
+    bcs +
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    ldz #0
+    lda [bas_ptr],z
     sta line_addr
-    iny
-    lda (line_addr),y
+    inz
+    lda [bas_ptr],z
     sta line_addr+1
     bra @line_loop
-
-@found_error
++   lda err_code
+    beq @end_of_program
     jsr print_error
-
 @end_of_program
-    ; TODO: Print assembly status.
     rts
 
 
