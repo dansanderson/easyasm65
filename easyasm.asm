@@ -153,7 +153,6 @@ chr_doublequote = 34
 id_string:
     !pet "easyasm v0.1",0
 
-
 ; Initialize
 ; - Assume entry conditions (B, bank 5, MAP)
 init:
@@ -178,21 +177,94 @@ init:
 dispatch:
     pha
     jsr init
+    txa
+    tay  ; Y = argument
     pla
-    dec
+
+; A = menu option or 0 for menu, Y = argument (reserved)
+invoke_menu_option:
     asl
-    tax   ; X = (A-1)*2
+    tax   ; X = A*2
     jmp (dispatch_jump,x)
 dispatch_jump:
+    !word do_menu
     !word assemble_to_memory_cmd
     !word assemble_to_disk_cmd
     !word restore_source_cmd
     !word run_test_suite_cmd
 
+do_banner:
+    +kprimm_start
+    !pet "                                           ",13
+    !pet "*** ",0
+    +kprimm_end
+    ldx #<id_string
+    ldy #>id_string
+    jsr print_cstr
+    +kprimm_start
+    !pet ", by dddaaannn ***         ",13,0
+    +kprimm_end
+    rts
+
+asciikey = $d610
+do_menu:
+    lda #147
+    +kcall bsout
+    jsr do_banner
+
+    ; Flush keyboard buffer
+-   sta asciikey
+    lda asciikey
+    bne -
+
+    +kprimm_start
+    !pet "https://github.com/dansanderson/easyasm65  ",13
+    !pet "                                           ",13
+    !pet " 1. assemble to memory                     ",13
+    !pet " 2. assemble to disk                       ",13
+    !pet " 3. restore source                         ",13,0
+    +kprimm_end
+    +kprimm_start
+    !pet " run/stop: close menu                      ",13
+    !pet "                                           ",13
+    !pet " your choice? ",15,191,143,"                            ",13
+    !pet 145,29,29,29,29,29,29,29,29,29,29,29,29,29,29,0
+    +kprimm_end
+
+-   lda asciikey
+    beq -
+    sta asciikey
+    cmp #3  ; Stop key
+    beq @exit_menu
+    cmp #'1'
+    bcc -
+    cmp #'3'+1
+    bcs -
+
+    +kcall bsout
+    pha
+    lda #chr_cr
+    +kcall bsout
+    +kcall bsout
+    pla
+    sec
+    sbc #'1'-1
+    ldy #0
+    jmp invoke_menu_option
+
+@exit_menu
+    +kprimm_start
+    !pet "stop",13,0
+    +kprimm_end
+    lda #0
+    sta $0091  ; Suppress Break Error (naughty!)
+    rts
+
 
 assemble_to_memory_cmd:
+    jsr do_banner
     +kprimm_start
-    !pet "debug: assemble to memory",13,0
+    !pet "assemble to memory",13,13,0
     +kprimm_end
 
     jsr stash_source
@@ -204,8 +276,9 @@ assemble_to_memory_cmd:
 
 
 assemble_to_disk_cmd:
+    jsr do_banner
     +kprimm_start
-    !pet "debug: assemble to disk",13,0
+    !pet "assemble to disk",13,13,0
     +kprimm_end
 
     jsr stash_source
@@ -216,12 +289,17 @@ assemble_to_disk_cmd:
 
 
 restore_source_cmd:
+    jsr do_banner
+    +kprimm_start
+    !pet "restore source",13,13,0
+    +kprimm_end
+
     ; Safety check: probably never stashed source before
     ldz #0
-    lda #>attic_source_stash
-    sta attic_ptr+2
     lda #<attic_source_stash
-    sta attic_ptr+3
+    sta attic_ptr
+    lda #>attic_source_stash
+    sta attic_ptr+1
     lda [attic_ptr],z
     bne +++
 

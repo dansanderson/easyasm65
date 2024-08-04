@@ -28,19 +28,12 @@ EXPECTED_END_OF_DISPATCH = $1e5f
 
 * = $1e00
 
-    ; $1E00: Assemble to memory.
-    lda #$01
-    !byte $2c    ; "bit" instruction skip trick
-    ; $1E03: Assemble to disk.
-    lda #$02
-    !byte $2c
-    ; $1E06: Restore source.
-    lda #$03
-    !byte $2c
-    ; $1E09: (private) Run test suite.
-    lda #$04
-
+    ; $1E00: Launch menu.
+    lda #$00
+    ldx #$00
+    ; $1E04: Run menu option A, argument X.
     pha
+    phx
 
     ; Copy EasyAsm from $8700000 to $52000
     lda #0
@@ -70,6 +63,7 @@ EXPECTED_END_OF_DISPATCH = $1e5f
     lda #$1e
     tab
 
+    plx
     pla
     jsr $2000     ; $52000, EasyAsm dispatch
 

@@ -9,8 +9,8 @@ Features:
 * Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
 * Assembles to memory for testing, or to disk files for distribution.
 * Can produce a single-file bootstrap loader as part of your program.
-* Can store multiple memory segments compactly, with bootstrap code that positions segments automatically.
-* Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code manually after an abnormal exit.
+* Can store multiple memory segments on disk compactly in a single file, with bootstrap code that positions segments automatically.
+* Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. You can restore source code manually after an abnormal exit.
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
@@ -23,17 +23,23 @@ This is EasyAsm version 0.1.
 Release 0.1:
 * Single segment programs only: one `!to` and up to one `* = ...` per source file
 
-Roadmap:
+1.0 roadmap:
 * `!binary`
 * `!source`
 * `runnable` with custom PC (single relocatable segment)
 * Multi-segment programs with `!to "...", cbm` and `raw`; multiple `* = ...` allowed; gaps filled on disk
 * Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
 * Multi-file output, multiple `!to` allowed
-* Freezable mode that uses bank 5 if it's already there
-* List symbol definitions
-* List disassembly alongside source code
+* Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
+* List symbol definitions to file
+* List assembly alongside source code to file
 * Automatic 16-bit branch instructions
+
+Far future:
+* Macros
+* Conditional assembly
+* Conditional expressions
+* A nice built-in editor
 
 ## An important note
 
@@ -47,16 +53,12 @@ By design, EasyAsm does *not* force you to save your work to disk before testing
 
 * `RUN "EASYASM"` : install EasyAsm; erases program memory
 
-* `SYS $1E00` : assemble source code to memory, then run it
-* `SYS $1E03` : assemble source code to disk, per `!to` directive
-* `SYS $1E06` : restore source code after abnormal program exit
+* Press **Help** to launch the EasyAsm interactive menu
 
 * `EDIT ON` / `EDIT OFF` : enable/disable Edit mode; prompt is `OK.` when enabled
 * `DSAVE "..."` : save source file to disk; do this with Edit mode *enabled!*
 * `DSAVE "@..."` : save source file to disk, overwriting an existing file
 * `MONITOR` : start the Monitor from the `READY.`/`OK.` prompt
-
-Press the **Help** key to display a brief help message.
 
 ## Using EasyAsm
 
@@ -66,7 +68,7 @@ To activate EasyAsm, load and run the `EASYASM` program:
 RUN "EASYASM"
 ```
 
-EasyAsm installs itself in the MEGA65's upper memory, clears program memory, and returns to the `READY.` prompt.
+EasyAsm installs itself in the MEGA65's upper memory, clears program memory, configures the **Help** key, and returns to the `READY.` prompt.
 
 To create your assembly language source code, switch the MEGA65 to Edit mode:
 
@@ -97,9 +99,8 @@ DSAVE "SIMPLE.S"
 
 Assemble and run the program:
 
-```
-SYS $1E00
-```
+1. Press **Help**.
+2. Select option **1**.
 
 EasyAsm assembles the program, finds no errors, installs it into memory, then runs the program. The program changes the border color, then exits. EasyAsm notices the program has exited using `rts`, and restores the source code into the editor's memory. View the listing:
 
@@ -107,11 +108,10 @@ EasyAsm assembles the program, finds no errors, installs it into memory, then ru
 LIST
 ```
 
-To assemble the program to disk:
+Next, assemble the program to disk:
 
-```
-SYS $1E03
-```
+1. Press **Help**.
+2. Select option **2**.
 
 EasyAsm assembles the program again, finds no errors, then creates a new PRG file on disk. The `!TO` directive in the program tells EasyAsm that the PRG's filename is `SIMPLE`, and that EasyAsm should make the program "runnable."
 
@@ -164,11 +164,10 @@ LIST
 
 Uh oh, that's not the program source file! EasyAsm did not see the program exit with the `RTS` instruction, so it didn't get a chance to restore the source file.
 
-When this happens—and it will happen often—use this command to tell EasyAsm to bring back the source file:
+When this happens—and it will happen often—use menu option #3 to tell EasyAsm to bring back the source file:
 
-```
-SYS $1E06
-```
+1. Press **Help**.
+2. Select option **3**.
 
 ## Breaking to the Monitor
 
@@ -197,9 +196,8 @@ The Monitor can be especially useful for debugging an assembly language program 
 
 The Monitor is powerful, but sometimes tricky to use. For example, it is not always possible to resume a paused program, and you may have to exit the Monitor with the `X` command. In this case, you must ask EasyAsm to restore the program source file, as we did after interrupting the program with Run/Stop-Restore.
 
-```
-SYS $1E06
-```
+1. Press **Help**.
+2. Select option **3**.
 
 ## Edit mode tips and tricks
 
@@ -211,9 +209,9 @@ SYS $1E06
   * Use the F9 and F11 keys to display the listing as a scrolling display.
   * Use the built-in tools like `AUTO` and `RENUMBER` to manage line numbers.
 
-* Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. EasyAsm does not use line numbers for anything—it relies on labels to identify points in the program code—so this typically does not matter as it does in BASIC.
+* Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. EasyAsm does not use line numbers for anything—it relies on labels to identify points in the program code—so this typically does not matter.
 
-* Press **Mega+Shift** to toggle lowercase text mode, if you prefer lowercase for assembly language source files. In EasyAsm, labels and strings are case sensitive. Instructions, directives, and hexadecimal literals are not case sensitive.
+* Press **Mega+Shift** to toggle lowercase text mode, if you prefer lowercase for assembly language source files. In EasyAsm, labels and strings are case sensitive. Instructions, directives, register names, and hexadecimal literals are not case sensitive.
 
 * Edit mode supports entering PETSCII codes into strings similarly to BASIC. When you enter a double-quote (`"`), the editor goes into "quote mode," and PETSCII control codes can be typed as special characters. This works well for string literals in EasyAsm assembly language programs.
 
@@ -231,6 +229,29 @@ A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 | To display a file without loading it: | `LIST "FNAME"` | `TYPE "FNAME"` |
 
 
+## Invoking EasyAsm
+
+When you install EasyAsm, it configures the **Help** key to open the EasyAsm launch menu. In most cases, you can use this to invoke EasyAsm.
+
+EasyAsm uses the function key macro feature of the MEGA65 to configure the **Help** key, using `KEY 15` in the `AUTOBOOT.C65` file on the EasyAsm disk. If you would rather use the Help key for something else, such as to use your own macro, you can edit `AUTOBOOT.C65` to disable this, or assign it to a different function key.
+
+As an alternative to the **Help** macro, you can use the following command to open the EasyAsm interactive menu:
+
+```
+SYS $1E00
+```
+
+To invoke one of the menu options non-interactively without opening the menu, use this command, where `A` is the menu option number:
+
+```
+SYS $1E04,A,0
+```
+
+(The `0` is there to reserve space for an optional argument to pass to EasyAsm. If an argument is introduced in a future version, a script or tool that doesn't set this argument to 0 may accidentally set a random argument value.)
+
+A third-party tool that wishes to integrate with EasyAsm can perform the equivalent load and jump instructions to these addresses. Keep in mind that EasyAsm resets the memory map and base page to the KERNAL's setting when exiting.
+
+
 ## How EasyAsm uses memory
 
 EasyAsm tries to maintain a minimal memory footprint while you are editing your source code, and while your program is running. This allows you to use all the tools at your disposal for editing, and allows your program to use most of the computer, while still retaining a useful on-device workflow.
@@ -246,7 +267,7 @@ EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
 1. When you load and run `EASYASM` at the start of a session, it overwrites program memory with its installer code. After it is installed, it clears program memory.
 2. While you are editing source code in Edit mode, your source code occupies program memory. EasyAsm expects to find it there when you invoke the assembler.
-3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program to machine code, and installs your machine code in program memory. It runs from this location, as it would when a user loads and runs your program. If the program exits with `RTS`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
+3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program to machine code, and installs your machine code in program memory. It runs from this location, as it would when a user loads and runs your program. If the program exits with `rts`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
 
 > **Note:** EasyAsm keeps its own code in Attic RAM while not in use, and copies itself to bank 5 when performing operations. Attic RAM is not included in MEGA65 Freezer states. It is safe to use the Freezer during an EasyAsm session, but if you start a new session restored from a freeze state, you must run the EasyAsm installer again.
 
@@ -296,7 +317,7 @@ bbs0  bvc   eom   lbvc  phz   rti   sty
 
 EasyAsm supports explicit 16-bit branch instructions, using Acme syntax: `lbcc`, `lbcs`, `lbeq`, `lbmi`, `lbne`, `lbpl`, `lbra`, `lbsr`, `lbvc`, `lbvs` Neither EasyAsm nor Acme support automatic promotion of 8-bit branch instructions to 16-bit. The assembler will report an error if an 8-bit branch is too short.
 
-EasyAsm supports both `cpq` (Acme) and `cmpq` (Monitor, MEGA65 manual) and spellings of that instruction.
+EasyAsm supports both `cpq` (Acme) and `cmpq` (Monitor, MEGA65 manual) as spellings of that instruction.
 
 Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm, as you would for Acme or the Monitor. For example, to logical-shift right the accumulator, use `lsr`, not `lsr a`.
 
@@ -454,7 +475,7 @@ Relative labels can only be used directly as instruction address arguments, and 
 
 ### Expressions
 
-An argument's value can be calculated using a mathematical expression. An expression can be a number literal, a label, or one or two expressions combined with a mathematical operator. EasyAsm calculates the value of the expression when assembling the program.
+An argument's value or a label's value can be calculated using a mathematical expression. An expression can be a number literal, a label, or one or two expressions combined with a mathematical operator. EasyAsm calculates the value of the expression when assembling the program.
 
 EasyAsm supports the following operators, listed in precedence order:
 
@@ -531,9 +552,9 @@ If the address expression evaluates to a value larger than 255, then EasyAsm use
 
 If the address expression evaluates to a value between 0 and 255, EasyAsm disambiguates using the following procedure:
 
-1. If the address expression is a value literal *or* a symbol defined using a value literal, and the value literal has one or more leading zeroes, EasyAsm uses absolute mode: `$00fe` Otherwise it uses base page addressing: `$fe`
-2. If the value can be calculated in the first pass of the assembler, i.e. all symbols in the expression are defined earlier in the source text, EasyAsm uses base page addressing: `$fc+earlierlabel`
-3. Otherwise EasyAsm assumes absolute addressing, to be calculated in a subsequent pass: `$fc+laterlabel`
+1. If the address expression is a value literal *or* a symbol defined using a value literal, and the value literal has one or more leading zeroes, EasyAsm uses absolute addressing: `$00fe` Otherwise it uses base page addressing: `$fe`
+2. If the value can be calculated in the first pass of the assembler, i.e. all symbols in the expression are defined earlier in the source text, EasyAsm uses base page addressing: `$fc + earlierlabel`
+3. Otherwise EasyAsm assumes absolute addressing, to be calculated in a subsequent pass, even if the result is less than 256: `$fc + laterlabel`
 
 To clarify potential confusion in your source code, you can suffix the instruction mnemonic with `+1` to force base page addressing, or `+2` to for absolute addressing. If base page addressing is requested and the value is larger than 255, EasyAsm reports the error.
 
@@ -585,6 +606,8 @@ As an alternative, EasyAsm has a way to assemble multiple segments to disk as a 
 When assembling to memory, EasyAsm writes each segment to the requested memory locations.
 
 When assembling to disk, EasyAsm offers several options: writing a contiguous file, writing segments to separate files, or bundling segments into a runnable program.
+
+> **Tip:** The "runnable" file is the most convenient way to write a program that can be run with the `RUN` or `BOOT` command, which is how most users expect to invoke a program. EasyAsm generates the bootstrap code that you would normally have to include manually in an Acme program listing.
 
 ### Writing a contiguous file
 
@@ -685,6 +708,7 @@ change_border:
   rts
 ```
 
+
 ## Using disk drives
 
 Assembler directives that refer to files on disk (`!to`, `!source`, `!binary`) always use the current "default disk" unit. BASIC 65 initially sets this to unit 8. You can change the default disk with the `SET DEF` command.
@@ -693,7 +717,7 @@ Assembler directives that refer to files on disk (`!to`, `!source`, `!binary`) a
 SET DEF 9
 ```
 
-BASIC disk commands use this default, and allow overriding the default with the `U` argument. EasyAsm does not currently have a way to overriding the default selectively. Take care to set the default disk unit when managing files across multiple disks.
+BASIC disk commands use this default, and allow overriding the default with the `U` argument. EasyAsm does not currently have a way to override the default selectively. Take care to set the default disk unit when managing files across multiple disks.
 
 ```basic
 SET DEF 9
@@ -721,6 +745,10 @@ EasyAsm directives that refer to files on disk use the current "default disk" un
 
 ```
 !byte <val> [,<val> ...]
+!8 <val> [,<val> ...]
+!word <val> [,<val> ...]
+!16 <val> [,<val> ...]
+!32 <val> [,<val> ...]
 ```
 
 Assembles value expressions to data. `!byte` (or synonym `!8`) accepts 8-bit values. `!word` (or synonym `!16`) accepts 16-bit values. `!32` accepts 32-bit values. Multi-byte values are rendered as little-endian.
@@ -731,7 +759,7 @@ Assembles value expressions to data. `!byte` (or synonym `!8`) accepts 8-bit val
 !fill <amt> [, <val>]
 ```
 
-Assembles a given number of bytes of data. The default value is $00. If a byte value is provided, that value is used for every byte.
+Assembles a given number of bytes of data as multiple instances of a single byte value. The default value is $00. If a byte value is provided, that value is used for every byte.
 
 ### `!pet`, `!scr`
 
@@ -803,6 +831,7 @@ EasyAsm has the following limitations compared to the Acme assembler.
 * No zones (but "cheap" local symbols are supported)
 * No CPUs other than the 45GS02
 * No assembler directives (pseudo-ops) or directive aliases other than those listed
+* No mathematical functions or operators other than those listed
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
 * No octal literals
 * No way to set a "pseudo-PC"
