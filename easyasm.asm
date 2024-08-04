@@ -1354,6 +1354,7 @@ find_symbol:
 ; Output:
 ; - C=0 found or added, attic_ptr=entry address
 ; - C=1 out of memory error
+; - Uses expr_a
 find_or_add_symbol:
     jsr find_symbol
     bcs +
@@ -1373,7 +1374,7 @@ find_or_add_symbol:
     rts
 +   plx
     phx
-    ; Test for (symtbl_next_name + X + 1) < attic_symbol_names_end
+    ; Test for attic_symbol_names_end >= (symtbl_next_name + X + 1)
     lda symtbl_next_name
     sta expr_a
     lda symtbl_next_name+1
@@ -1395,7 +1396,7 @@ find_or_add_symbol:
     ldy #^attic_symbol_names_end
     ldz #$08
     cpq expr_a
-    bcc +
+    bcs +
     ; Out of memory: not enough room for symbol name.
     plx
     sec
@@ -1424,22 +1425,22 @@ find_or_add_symbol:
     ; Copy name from bas_ptr, length X, to symtbl_next_name.
     plx
     lda symtbl_next_name
-    sta attic_ptr
+    sta expr_a
     lda symtbl_next_name+1
-    sta attic_ptr+1
+    sta expr_a+1
     lda symtbl_next_name+2
-    sta attic_ptr+2
+    sta expr_a+2
     txa
     taz
     dez
 -   lda [bas_ptr],z
-    sta [attic_ptr],z
+    sta [expr_a],z
     dez
     bpl -
     txa
     taz
     lda #0
-    sta [attic_ptr],z
+    sta [expr_a],z
 
     ; Store new symtbl_next_name.
     tay
@@ -1448,7 +1449,7 @@ find_or_add_symbol:
     ldx #0
     inc    ; Q = name length + 1
     clc
-    adcq attic_ptr
+    adcq expr_a
     stq symtbl_next_name
 
     ; Success.
@@ -1476,6 +1477,7 @@ get_symbol_value:
     lda #4
     adcq attic_ptr
     stq expr_a
+    ldz #0
     ldq [expr_a]
     clc
     rts
@@ -1483,7 +1485,7 @@ get_symbol_value:
 
 ; Gets a symbol's 32-bit value
 ; Input: attic_ptr=symbol table entry, Q=value
-; Output: attic_ptr+4=Q
+; Output: entry value (attic_ptr+4)=Q, entry DEFINED flag set
 ; This does not validate inputs.
 set_symbol_value:
     pha
@@ -1502,6 +1504,10 @@ set_symbol_value:
     plx
     pla
     stq [expr_a]
+    ldz #3
+    lda [attic_ptr],z
+    ora F_SYMTBL_DEFINED
+    sta [attic_ptr],z
     rts
 
 
@@ -2991,27 +2997,27 @@ test_tokenize_error_1: !pet "$$$",0
 test_symbol_table:
     ; label
     !byte <attic_symbol_names, >attic_symbol_names, ^attic_symbol_names
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 12345
     ; Alpha
     !byte <(attic_symbol_names+6), >(attic_symbol_names+6), ^(attic_symbol_names+6)
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 23456
     ; Alph
     !byte <(attic_symbol_names+12), >(attic_symbol_names+12), ^(attic_symbol_names+12)
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 34567
     ; Beta
     !byte <(attic_symbol_names+17), >(attic_symbol_names+17), ^(attic_symbol_names+17)
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 45678
     ; BetaZ
     !byte <(attic_symbol_names+22), >(attic_symbol_names+22), ^(attic_symbol_names+22)
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 56789
     ; GAMMA
     !byte <(attic_symbol_names+28), >(attic_symbol_names+28), ^(attic_symbol_names+28)
-    !byte 0
+    !byte F_SYMTBL_DEFINED
     !32 99999
     ; (END)
     !byte 0,0,0,0,0,0,0,0
@@ -3139,6 +3145,154 @@ test_find_symbol_4: !pet "Beta",0
 test_find_symbol_5: !pet "BetaZ",0
 test_find_symbol_6: !pet "GAMMA",0
 test_find_symbol_7: !pet "GAMMB",0
+
+!macro test_find_or_add_symbol .tnum, .str, .length, .ec, .eatticptr {
+    +test_start .tnum
+
+    jsr test_set_up_symbol_data
+
+    ; Fake assembly location in bank 5
+    lda #<.str
+    sta bas_ptr
+    lda #>.str
+    sta bas_ptr+1
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+
+    ldx #.length
+    jsr find_or_add_symbol
+
+    ; (C set = fail)
+!if .ec {
+    bcs +
+    +print_strlit_line "...fail, expected carry set"
+    brk
++
+    ; TODO: confirm out of memory conditions
+} else {
+    bcc +
+    +print_strlit_line "...fail, expected carry clear"
+    brk
++
+    lda #<.eatticptr
+    ldx #>.eatticptr
+    ldy #^.eatticptr
+    ldz #$08
+    cpq attic_ptr
+    beq +
+    +print_strlit_line "...fail, wrong attic ptr (found case)"
+    brk
++
+    ; TODO: test symtbl_next_name has advanced
+}
+
+    +test_end
+}
+
+!macro test_get_symbol_value .tnum, .str, .length, .ec, .eq {
+    +test_start .tnum
+
+    jsr test_set_up_symbol_data
+
+    ; Fake assembly location in bank 5
+    lda #<.str
+    sta bas_ptr
+    lda #>.str
+    sta bas_ptr+1
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+
+    ldx #.length
+    jsr find_or_add_symbol
+    jsr get_symbol_value
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   cmp #<.eq
+    beq +
+    +print_strlit_line "... fail, wrong q (a)"
+    brk
++   cpx #>.eq
+    beq +
+    +print_strlit_line "... fail, wrong q (x)"
+    brk
++   cpy #^.eq
+    beq +
+    +print_strlit_line "... fail, wrong q (y)"
+    brk
++   cpz #<(.eq >>> 24)
+    beq +
+    +print_strlit_line "... fail, wrong q (z)"
+    brk
++
+}
+
+    +test_end
+}
+
+!macro test_set_symbol_value .tnum, .str, .length, .q {
+    +test_start .tnum
+
+    jsr test_set_up_symbol_data
+
+    ; Fake assembly location in bank 5
+    lda #<.str
+    sta bas_ptr
+    lda #>.str
+    sta bas_ptr+1
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+
+    ldx #.length
+    jsr find_or_add_symbol
+    lda #<.q
+    ldx #>.q
+    ldy #^.q
+    ldz #<(.q >>> 24)
+    jsr set_symbol_value
+
+    ldz #3
+    lda [attic_ptr],z
+    and #F_SYMTBL_DEFINED
+    bne +
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #<.q
+    beq +
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #>.q
+    beq +
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #^.q
+    beq +
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #<(.q >>> 24)
+    beq +
+    brk
++
+    +test_end
+}
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3325,6 +3479,21 @@ run_test_suite_cmd:
     +test_find_symbol $05, test_find_symbol_5, 5, 0, attic_symbol_table+(8*4)
     +test_find_symbol $06, test_find_symbol_6, 5, 0, attic_symbol_table+(8*5)
     +test_find_symbol $07, test_find_symbol_7, 5, 1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-find-or-add-symbol"
+    +test_find_or_add_symbol $01, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
+    +test_find_or_add_symbol $02, test_find_symbol_7, 5, 0, attic_symbol_table+(8*6)
+
+    +print_chr chr_cr
+    +print_strlit_line "test-get-symbol-value"
+    +test_get_symbol_value $01, test_find_symbol_2, 5, 0, 23456
+    +test_get_symbol_value $02, test_find_symbol_7, 5, 1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-set-symbol-value"
+    +test_set_symbol_value $01, test_find_symbol_2, 5, 98765
+    +test_set_symbol_value $02, test_find_symbol_7, 5, 87654
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
