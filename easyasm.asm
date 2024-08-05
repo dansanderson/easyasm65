@@ -1561,7 +1561,7 @@ set_symbol_value:
     stq [expr_a]
     ldz #3
     lda [attic_ptr],z
-    ora F_SYMTBL_DEFINED
+    ora #F_SYMTBL_DEFINED
     sta [attic_ptr],z
     rts
 
@@ -1572,22 +1572,19 @@ set_symbol_value:
 
 ; Initializes the segment table.
 init_segment_table:
+    ; (next_segment_byte_addr inits to top of table, for creation of first
+    ; segment in assemble_bytes.)
     lda #<attic_segments
     sta current_segment
+    sta next_segment_byte_addr
     lda #>attic_segments
     sta current_segment+1
+    sta next_segment_byte_addr+1
     lda #^attic_segments
     sta current_segment+2
+    sta next_segment_byte_addr+2
     lda #<(attic_segments >>> 24)
     sta current_segment+3
-
-    lda #<(attic_segments+4)
-    sta next_segment_byte_addr
-    lda #>(attic_segments+4)
-    sta next_segment_byte_addr+1
-    lda #^(attic_segments+4)
-    sta next_segment_byte_addr+2
-    lda #<((attic_segments + 4) >>> 24)
     sta next_segment_byte_addr+3
 
     lda #0
@@ -1690,9 +1687,14 @@ assemble_bytes:
     sec
     rts
 +
-
-    ; If program_counter != next_segment_pc, create a new segment header.
+    ; If current segment has empty header or program_counter != next_segment_pc,
+    ; create a new segment header.
     ; (segment_pc_16, length_16)
+    ldz #0
+    lda [current_segment],z
+    inz
+    ora [current_segment],z
+    beq +
     lda program_counter
     cmp next_segment_pc
     bne +
@@ -1715,6 +1717,14 @@ assemble_bytes:
     sta [next_segment_byte_addr],z
     ldq next_segment_byte_addr
     stq current_segment
+    lda #0
+    tax
+    tay
+    taz
+    lda #4
+    clc
+    adcq next_segment_byte_addr
+    stq next_segment_byte_addr
 
 ++  ; Write bytes to segment.
     lda expr_a
@@ -2095,7 +2105,7 @@ mnemonics:
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
-!byte $01, $03, $05, $07, $1D, $2D, $2E, $33, $3A, $3C, $44, $49, $4D, $62,
+!byte $01, $03, $05, $07, $1D, $2D, $2E, $33, $3A, $3C, $44, $49, $4D, $62
 !byte $64, $69, $77
 !byte 0
 
@@ -3223,12 +3233,10 @@ test_load_line_to_strbuf_1e: !pet "abc",0
     lda err_code
     cmp #.eerror
     beq +
-    +print_strlit_line "...fail, wrong error code"
     brk
 +   lda line_pos
     cmp #.eerror_pos
     beq +
-    +print_strlit_line "...fail, wrong error pos"
     brk
 +
 } else {
@@ -3266,11 +3274,11 @@ test_tokenize_5e:
     !32 $deadbeef
     !byte 0
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 137, 4, 0
+test_tokenize_6e: !byte 135, 4, 0
 test_tokenize_7: !pet "!wOrD",0
 test_tokenize_7e: !byte po_word, 4, 0
 test_tokenize_8: !pet "xOr",0
-test_tokenize_8e: !byte kw_xor, 4, 0
+test_tokenize_8e: !byte tk_label_or_reg, 4, 3, 0
 test_tokenize_9: !pet ">>>",0
 test_tokenize_9e: !byte tk_lsr, 4, 0
 test_tokenize_10: !pet "label",0
@@ -3438,7 +3446,6 @@ test_set_up_symbol_data:
     ; (C set = fail)
 !if .ec {
     bcs +
-    +print_strlit_line "...fail, expected carry set"
     brk
 +
     lda #<test_symbol_table_last_addr
@@ -3447,12 +3454,10 @@ test_set_up_symbol_data:
     ldz #$08
     cpq attic_ptr
     beq +
-    +print_strlit_line "...fail, wrong attic ptr (not found case)"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "...fail, expected carry clear"
     brk
 +
     lda #<.eatticptr
@@ -3461,7 +3466,6 @@ test_set_up_symbol_data:
     ldz #$08
     cpq attic_ptr
     beq +
-    +print_strlit_line "...fail, wrong attic ptr (found case)"
     brk
 +
 }
@@ -3498,13 +3502,11 @@ test_find_symbol_7: !pet "GAMMB",0
     ; (C set = fail)
 !if .ec {
     bcs +
-    +print_strlit_line "...fail, expected carry set"
     brk
 +
     ; TODO: confirm out of memory conditions
 } else {
     bcc +
-    +print_strlit_line "...fail, expected carry clear"
     brk
 +
     lda #<.eatticptr
@@ -3513,7 +3515,6 @@ test_find_symbol_7: !pet "GAMMB",0
     ldz #$08
     cpq attic_ptr
     beq +
-    +print_strlit_line "...fail, wrong attic ptr (found case)"
     brk
 +
     ; TODO: test symtbl_next_name has advanced
@@ -3543,28 +3544,22 @@ test_find_symbol_7: !pet "GAMMB",0
 
 !if .ec {
     bcs +
-    +print_strlit_line "... fail, expected carry set"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "... fail, expected carry clear"
     brk
 +   cmp #<.eq
     beq +
-    +print_strlit_line "... fail, wrong q (a)"
     brk
 +   cpx #>.eq
     beq +
-    +print_strlit_line "... fail, wrong q (x)"
     brk
 +   cpy #^.eq
     beq +
-    +print_strlit_line "... fail, wrong q (y)"
     brk
 +   cpz #<(.eq >>> 24)
     beq +
-    +print_strlit_line "... fail, wrong q (z)"
     brk
 +
 }
@@ -3684,8 +3679,50 @@ test_find_symbol_7: !pet "GAMMB",0
 ++
 }
 
-!if .pass == $ff {
-    ; validate segment memory: .pc (2), .x (2), 0, 1, 2, 3, ...
+!if .pass = $ff {
+    lda #<attic_segments
+    ldx #>attic_segments
+    ldy #^attic_segments
+    ldz #<(attic_segments >>> 24)
+    stq attic_ptr
+    ldz #0
+    lda [attic_ptr],z
+    cmp #<.pc
+    beq +
+    +print_strlit_line "... fail, wrong segment address (l)"
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #>.pc
+    beq +
+    +print_strlit_line "... fail, wrong segment address (h)"
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #<.x
+    beq +
+    +print_strlit_line "... fail, wrong segment length (l)"
+    brk
++   inz
+    lda [attic_ptr],z
+    cmp #>.x
+    beq +
+    +print_strlit_line "... fail, wrong segment length (h)"
+    brk
++   inz
+
+    ldy #.x
+    ldx #0
+-   txa
+    cmp [attic_ptr],z
+    beq +
+    +print_strlit_line "... fail, wrong segment data"
+    brk
++
+    inz
+    inx
+    dey
+    bne -
 }
 
     +test_end
@@ -3798,7 +3835,7 @@ run_test_suite_cmd:
     +print_strlit_line "find-in-token-list"
     +test_find_in_token_list $01, test_find_in_token_list_1, 0, 1, 1, 0, 3
     +test_find_in_token_list $02, test_find_in_token_list_2, 0, 1, 1, 1, 4
-    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 137, 3
+    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 135, 3
     +test_find_in_token_list $04, test_find_in_token_list_4, 0, 1, 0, 0, 0
     +test_find_in_token_list $05, test_find_in_token_list_5, 0, 0, 1, 0, 3
     +test_find_in_token_list $06, test_find_in_token_list_5, 0, 1, 0, 0, 0
@@ -3810,7 +3847,7 @@ run_test_suite_cmd:
     +print_strlit_line "tokenize-mnemonic"
     +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3
     +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4
-    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 137, 3
+    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 135, 3
     +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0
     +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0
     +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3
@@ -3892,7 +3929,7 @@ run_test_suite_cmd:
     +test_assemble_bytes $03, 0, $c000, 5, 0, $c005
     +test_assemble_bytes $04, $ff, $c000, 5, 0, $c005
     ; TODO: assemble_bytes, two writes with no PC change between (single segment)
-    ; TODO: assemble_btyes, two writes with PC change between (two segments)
+    ; TODO: assemble_bytes, two writes with PC change between (two segments)
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
