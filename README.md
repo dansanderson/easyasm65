@@ -30,15 +30,15 @@ Release 0.1:
 * Multi-segment programs with `!to "...", cbm` and `raw`; multiple `* = ...` allowed; gaps filled on disk
 * Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
 * Multi-file output, multiple `!to` allowed
-* Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
-* List symbol definitions to file
-* List assembly alongside source code to file
-* Automatic 16-bit branch instructions
 
 Far future:
+* Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
+* List symbol definitions to file
+* List disassembly alongside source code to file
 * Macros
 * Conditional assembly
 * Conditional expressions
+* Automatic 16-bit branch instructions
 * A nice built-in editor
 
 ## An important note

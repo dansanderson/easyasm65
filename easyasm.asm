@@ -1247,8 +1247,9 @@ tokenize:
     plz
     bcs @push_tok_pos_then_continue
 
+    ; TODO: tokenize relative labels
+
     ; Punctuation token
-    ; Note: This tokenizes relative labels (---, +++) as punctuation tokens.
     phz
     jsr tokenize_other
     plz
@@ -1265,7 +1266,6 @@ tokenize:
 ++  jsr accept_ident
     bcc @syntax_error
     ; Push tk_label_or_reg, line_pos, length (z-line_pos)
-    ; TODO: add to/look up in symbol table, store table index and not label name?
     ldx tok_pos
     lda #tk_label_or_reg
     sta tokbuf,x
@@ -1302,9 +1302,12 @@ tokenize:
     rts
 
 @success
-    ; Null terminate tokbuf
+    ; Null terminate tokbuf: 0, $ff (line_pos=$ff -> don't print error location)
     lda #0
     ldx tok_pos
+    sta tokbuf,x
+    inx
+    lda #$ff
     sta tokbuf,x
     rts
 
@@ -1773,6 +1776,553 @@ assemble_bytes:
 ; Assembler
 ; ------------------------------------------------------------
 
+; Input: A=token; tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced
+;   C=1 not found, tok_pos preserved
+expect_token:
+    sta expr_a
+    ldx tok_pos
+    lda tokbuf,x
+    cmp expr_a
+    bne @fail
+    inx
+    inx
+    stx tok_pos
+    clc
+    bra @end
+@fail
+    sec
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced; X=line_pos, Y=length
+;   C=1 not found, tok_pos preserved
+expect_label:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #tk_label_or_reg
+    bne @fail
+    inx
+    lda tokbuf,x
+    inx
+    ldy tokbuf,x
+    inx
+    stx tok_pos
+    tax
+    clc
+    bra @end
+@fail
+    sec
+@end
+    rts
+
+; Input: X/Y=code address of expected keyword; line_addr, tokbuf, tok_pos
+; Output:
+;   C=0 matched, tok_pos advanced
+;   C=1 not found, tok_pos preserved
+expect_keyword:
+    stx code_ptr
+    sty code_ptr+1
+    ldx tok_pos
+    phx
+    jsr expect_label
+    bcs @fail
+    txa
+    taz
+    ldx #0
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+-   lda [bas_ptr],z
+    sta strbuf,x
+    inz
+    inx
+    dey
+    bne -
+    lda #0
+    sta strbuf,x
+    jsr strbuf_to_lowercase
+    jsr strbuf_cmp_code_ptr
+    beq @succeed
+@fail
+    plx
+    stx tok_pos
+    sec
+    bra @end
+@succeed
+    plx
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, A=token ID, tok_pos advanced
+;   C=1 not found, tok_pos preserved
+expect_opcode:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #mnemonic_count
+    bcs @fail
+    inx
+    inx
+    stx tok_pos
+    clc
+    bra @end
+@fail
+    sec
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, A=token ID, tok_pos advanced
+;   C=1 not found, tok_pos preserved
+expect_pseudoop:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #po_to
+    bcc @fail
+    cmp #last_po+1
+    bcs @fail
+    inx
+    inx
+    stx tok_pos
+    clc
+    bra @end
+@fail
+    sec
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced; expr_result, expr_flags
+;   C=1 not found, tok_pos preserved
+expect_literal:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #tk_number_literal_leading_zero
+    bne +
+    lda #F_EXPR_BRACKET_ZERO
+    bra ++
++   cmp #tk_number_literal
+    bne @fail
+    lda #0
+++  sta expr_flags
+    lda tokbuf+2,x
+    sta expr_result
+    lda tokbuf+3,x
+    sta expr_result+1
+    lda tokbuf+4,x
+    sta expr_result+2
+    lda tokbuf+5,x
+    sta expr_result+3
+    lda #6
+    clc
+    adc tok_pos
+    sta tok_pos
+    lda #0
+    adc tok_pos+1
+    sta tok_pos+1
+    clc
+    bra @end
+@fail
+    sec
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced; expr_result, expr_flags
+;   C=1 not found, tok_pos preserved
+;     err_code>0, line_pos: report error in expression
+expect_expr:
+    ldx tok_pos
+    phx
+
+    ; TODO: real expression evaluator
+    ; This temporary expression parser accepts a literal or a label.
+
+    jsr expect_label
+    bcs +
+    txa
+    clc
+    adc line_addr
+    sta bas_ptr
+    lda #0
+    adc line_addr+1
+    sta bas_ptr+1
+    tya
+    tax  ; X = length
+    jsr find_or_add_symbol
+    bra @end
+
++   jsr expect_literal
+    bcs @fail
+    bra @end
+
+@fail
+    sec
+@end
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 success, label assigned, tok_pos advanced
+;   C=1 fail
+;     err_code=0 not a label assign statement, tok_pos not advanced
+;     err_code>0 fatal error with line_pos set
+assemble_pc_assign:
+    ldx tok_pos
+    phx
+
+    ; "*" "=" expr
+    lda #tk_multiply
+    jsr expect_token
+    lbcs statement_err_exit
+    lda #tk_equal
+    jsr expect_token
+    lbcs statement_err_exit
+    ldx tok_pos
+    lda tokbuf+1,x  ; expr line_pos
+    pha
+    jsr expect_expr
+    plz             ; Z = expr line_pos
+    lbcs statement_err_exit
+
+    lda expr_flags
+    and #F_EXPR_UNDEFINED
+    beq +
+    ; PC expression must be defined in first pass
+    stz line_pos
+    lda #err_pc_undef
+    sta err_code
+    lbra statement_err_exit
+
++   ; Value must be in address range
+    lda expr_result+2
+    ora expr_result+3
+    beq +
+    stz line_pos
+    lda #err_value_out_of_range
+    sta err_code
+    lbra statement_err_exit
+
++   ; Set PC
+    ldx expr_result
+    ldy expr_result+1
+    jsr set_pc
+    lbra statement_ok_exit
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 success; PC assigned, tok_pos advanced
+;     Z = 0: was equal-assign, end statement
+;     Z = 1: was PC assign, accept instruction or directive
+;   C=1 fail
+;     err_code=0 not a pc assign statement, tok_pos not advanced
+;     err_code>0 fatal error with line_pos set
+assemble_label:
+    ldx tok_pos
+    phx
+
+    ; TODO: <rel-label> (no "=")
+
+    ; <label> ["=" expr]
+    jsr expect_label
+    bcs statement_err_exit
+    stx expr_a     ; line_pos
+    sty expr_a+1   ; length
+    lda #tk_equal
+    jsr expect_token
+    bcs @label_without_equal
+    jsr expect_expr
+    bcc +
+    lda expr_a
+    sta line_pos
+    lda #err_syntax  ; expr required after "="
+    sta err_code
+    lbra statement_err_exit
+
++   ; Set label to expr, possibly undefined
+    lda expr_a
+    clc
+    adc line_addr
+    sta bas_ptr
+    lda #0
+    adc line_addr+1
+    sta bas_ptr+1
+    ldx expr_a+1
+    jsr find_or_add_symbol
+    lda expr_flags
+    and #F_EXPR_UNDEFINED
+    ldz #0
+    lbne statement_ok_exit  ; label expr is undefined; leave symbol undefined
+
+    ; label expr is defined, use value; propagate zero flag
+    ldq expr_result
+    jsr set_symbol_value
+    lda expr_flags
+    and #F_EXPR_BRACKET_ZERO
+    beq +
+    ldz #2
+    lda [attic_ptr],z
+    ora F_SYMTBL_LEADZERO
+    sta [attic_ptr],z
++   ldz #0
+    lbra statement_ok_exit
+
+@label_without_equal
+    ; Label without "=", set label to PC
+    ; PC undefined is an error
+    lda asm_flags
+    and #F_ASM_PC_DEFINED
+    bne +
+    lda expr_a
+    sta line_pos
+    lda #err_pc_undef
+    sta err_code
+    lbra statement_err_exit
++   lda program_counter
+    ldx program_counter+1
+    ldy #0
+    ldz #0
+    jsr set_symbol_value
+    ldz #1
+    lbra statement_ok_exit
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
+;   C=1 fail
+;     err_code>0 fatal error with line_pos set
+assemble_addressing_expr:
+    ldx tok_pos
+    phx
+
+    ; TODO: the rest of the owl
+    ; TODO: colon or end of line = Implicit
+
+    lbra statement_err_exit
+    lbra statement_ok_exit
+
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced, instruction bytes assembled to segment
+;   C=1 fail
+;     err_code>0 fatal error with line_pos set
+assemble_instruction:
+    ldx tok_pos
+    phx
+
+v_line_pos = expr_b         ; (byte)
+v_mnemonic_id = expr_b+1    ; (byte)
+v_buf_pos = expr_b+2        ; (byte)
+v_addr_mode = expr_a        ; (word)
+v_mode_rec_addr = expr_a+2  ; (word)
+v_supported_modes = code_ptr ; (word)
+
+    ; <opcode> <addr-expr>
+    lda tokbuf+1,x
+    sta v_line_pos  ; stash line_pos for errors
+    jsr expect_opcode
+    lbcs statement_err_exit
+    pha
+    jsr assemble_addressing_expr
+    pla
+    lbcs statement_err_exit
+
+    ; A=mnemonic ID, X/Y=addr mode flags, expr_result=operand (if any)
+    sta v_mnemonic_id
+    stx v_addr_mode
+    sty v_addr_mode+1
+
+    ; Locate addressing mode record for mnemonic
+    sta v_mode_rec_addr
+    lda #0
+    sta v_mode_rec_addr+1
+    row v_mode_rec_addr
+    row v_mode_rec_addr  ; v_mode_rec_addr = ID*4
+    lda #<addressing_modes
+    clc
+    adc v_mode_rec_addr
+    sta v_mode_rec_addr
+    lda #>addressing_modes
+    adc v_mode_rec_addr+1
+    sta v_mode_rec_addr+1  ; v_mode_rec_addr = address of mode record for mnemonic
+
+    ; Match addressing mode to opcode; error if not supported
+    ldy #0
+    lda v_addr_mode
+    and (v_mode_rec_addr),y
+    sta v_addr_mode
+    iny
+    lda v_addr_mode+1
+    and (v_mode_rec_addr),y
+    sta v_addr_mode  ; v_addr_mode = selected addressing mode, or 0 if not supported
+    ora v_addr_mode
+    bne +
+    ; Mode not supported.
+    lda v_line_pos
+    sta line_pos
+    lda #err_unsupported_addr_mode
+    sta err_code
+    lbra statement_err_exit
+
+    ; Start at beginning of strbuf.
+    lda #0
+    sta v_buf_pos
+
+    ; Assemble Q prefix
+    ;   q_mnemonics : 0-term'd list of mnemonic IDs
+    ;   Emit $42 $42
+    ldx #0
+-   lda q_mnemonics,x
+    beq ++
+    cmp v_mnemonic_id  ; mnemonic ID
+    beq +
+    inx
+    bra -
++   ; Is a Q instruction, emit $42 $42
+    ldx v_buf_pos
+    lda #$42
+    sta strbuf,x
+    inx
+    sta strbuf,x
+    inx
+    stx v_buf_pos
+
+++  ; Assemble 32-bit indirect prefix
+    ;   MODE_32BIT_INDIRECT
+    ;   Emit $EA
+    lda v_addr_mode+1
+    and #>MODE_32BIT_INDIRECT
+    beq ++
+    ; Is 32-bit indirect, emit $EA
+    ldx v_buf_pos
+    lda #$42
+    sta strbuf,x
+    inx
+    stx v_buf_pos
+
+++  ; Assemble instruction (mnemonic + mode) encoding
+    ;   addressing_modes: (mode_bits_16, enc_addr_16)
+    ;   Rotate mode_bits left, count Carry; index into enc_addr
+    ;   Emit encoding byte
+    ldy #0
+    lda (v_mode_rec_addr),y
+    sta v_supported_modes
+    iny
+    lda (v_mode_rec_addr),y
+    sta v_supported_modes+1
+    ldx #0
+-   row v_supported_modes
+    bcc +
+    inx
++   row v_addr_mode
+    bcc -
+    ; X = index into enc_addr
+    ldy #2
+    lda (v_mode_rec_addr),y
+    sta code_ptr  ; (yes this is aliased to v_supported_modes, it's ok)
+    iny
+    lda (v_mode_rec_addr),y
+    sta code_ptr+1
+    txa
+    tay
+    lda (code_ptr),y  ; A = the instruction encoding byte
+    ldx v_buf_pos
+    sta strbuf,x
+    inx
+    stx v_buf_pos
+
+    ; Assemble operand
+    ;   MODES_NO_OPERAND
+    ;   MODES_BYTE_OPERAND
+    ;   MODES_WORD_OPERAND
+    ldy #0
+    lda (v_mode_rec_addr),y
+    and #<MODES_WORD_OPERAND
+    sta v_supported_modes
+    iny
+    lda (v_mode_rec_addr),y
+    and #>MODES_WORD_OPERAND
+    ora v_supported_modes
+    beq +
+    ; Word operand: emit two expr_result bytes
+    ldx v_buf_pos
+    lda expr_result
+    sta strbuf,x
+    inx
+    lda expr_result+1
+    sta strbuf,x
+    inx
+    stx v_buf_pos
+    bra ++
++   ldy #0
+    lda (v_mode_rec_addr),y
+    and #<MODES_BYTE_OPERAND
+    sta v_supported_modes
+    iny
+    lda (v_mode_rec_addr),y
+    and #>MODES_BYTE_OPERAND
+    ora v_supported_modes
+    beq ++  ; No operand, emit no more bytes
+    ; Byte operand: emit one expr_result byte
+    ldx v_buf_pos
+    lda expr_result
+    sta strbuf,x
+    inx
+    stx v_buf_pos
+
+++  ; Add bytes to segment
+    ldx v_buf_pos
+    jsr assemble_bytes
+
+    lbra statement_ok_exit
+
+
+assemble_directive:
+    ldx tok_pos
+    phx
+
+    ; <pseudoop> arglist
+    jsr expect_pseudoop
+    lbcs statement_err_exit
+    ; A=token ID
+    ; TODO: handle specific directive; let directive parse the arg list
+
+    lbra statement_err_exit
+    lbra statement_ok_exit
+
+
+; Input: rollback tok_pos on stack
+statement_err_exit
+    plx  ; rollback
+    stx tok_pos
+    sec
+    rts
+
+; Input: rollback tok_pos on stack
+statement_ok_exit
+    plx  ; discard
+    clc
+    rts
+
+
 ; Input: line_addr
 ; Output: err_code, line_pos
 ;  C=0 success, continue
@@ -1803,135 +2353,73 @@ assemble_line:
     rts
 +
 
-    ; TODO: Parse and assemble tokbuf.
-    ; DEBUG: print source line, with line number
-    ldz #3
-    lda [bas_ptr],z
-    tax
-    dez
-    lda [bas_ptr],z
-    ldy #0
-    ldz #0
-    clc                    ; request unsigned
-    jsr print_dec32
-    lda #chr_spc
-    +kcall bsout
-    inw bas_ptr
-    inw bas_ptr
-    inw bas_ptr
-    inw bas_ptr
-    ldz #0
     ldx #0
--   lda [bas_ptr],z
-    sta strbuf,x
-    beq +
-    inz
-    inx
-    bra -
-+   ldx #<strbuf
-    ldy #>strbuf
-    jsr print_cstr
-    lda #chr_cr
-    +kcall bsout
+    stx tok_pos
 
-    ; DEBUG: print tokbuf as hex values
-    ldx #0
-@print_tokbuf_loop
+@tokbuf_loop
+    ldx tok_pos
     lda tokbuf,x
     lbeq @end_tokbuf
 
-    cmp #tk_string_literal
-    bne +
-    +kprimm_start
-    !pet "[str l:",0
-    +kprimm_end
-    inx
-    inx
-    lda tokbuf,x
-    jsr print_hex8
-    +kprimm_start
-    !pet "]",0
-    +kprimm_end
-    inx
-    bra @print_tokbuf_loop
+    jsr assemble_pc_assign
+    bcc @next_statement
+    lda err_code
+    bne @err_exit
 
-+   cmp #tk_number_literal
-    bne +
-    +kprimm_start
-    !pet "[lit v:",0
-    +kprimm_end
-    inx
-    inx
-    lda tokbuf,x
-    sta expr_b
-    inx
-    lda tokbuf,x
-    sta expr_b+1
-    inx
-    lda tokbuf,x
-    sta expr_b+2
-    inx
-    lda tokbuf,x
-    sta expr_b+3
-    phx
-    ldq expr_b
-    jsr print_dec32
-    plx
-    +kprimm_start
-    !pet "]",0
-    +kprimm_end
-    inx
-    lbra @print_tokbuf_loop
+    jsr assemble_label
+    bcs +
+    cpz #0
+    beq @next_statement
+    bra ++  ; label without equal can continue to instruction or directive
++   lda err_code
+    bne @err_exit
 
-+   cmp #tk_label_or_reg
-    bne +
-    +kprimm_start
-    !pet "[label l:",0
-    +kprimm_end
-    inx
-    inx
+++  jsr assemble_instruction
+    bcc @next_statement
+    lda err_code
+    bne @err_exit
+
+    ; No statement patterns match. Syntax error.
+    ldx tok_pos
+    lda tokbuf+1,x
+    sta line_pos
+    lda #err_syntax
+    bra @err_exit
+
+@next_statement
+    ; If colon, try another statement.
+    ; (This covers <label> ":" also.)
+    lda #tk_colon
+    jsr expect_token
+    lbeq @tokbuf_loop
+
+@must_end
+    ldx tok_pos
     lda tokbuf,x
-    jsr print_hex8
-    +kprimm_start
-    !pet "]",0
-    +kprimm_end
-    inx
-    lbra @print_tokbuf_loop
-
-+
-    +kprimm_start
-    !pet "[tok ",0
-    +kprimm_end
-    jsr print_hex8
-    inx
-    inx
-    +kprimm_start
-    !pet "]",0
-    +kprimm_end
-    lbra @print_tokbuf_loop
-
+    lbeq @end_tokbuf
+    lda #err_syntax
+    sta err_code
+    lda tokbuf+1,x
+    sta line_pos
+@err_exit
+    sec
 @end_tokbuf
-    lda #chr_cr
-    +kcall bsout
-
-    clc
     rts
 
 
-assemble_source:
+; Input: pass
+; Output:
+;   err_code = 0: one full assembly pass
+;   err_code > 0: error result
+do_assemble_pass:
     lda #<(source_start+1)
     sta line_addr
     lda #>(source_start+1)
     sta line_addr+1
 
-    lda #0
-    sta pass
-    jsr init_pass
-
-    ; DEBUG: single pass to print source tokenized, detect lexer errors
 @line_loop
     jsr assemble_line
-    bcs +
+    bcs @end
     lda line_addr
     sta bas_ptr
     lda line_addr+1
@@ -1943,10 +2431,29 @@ assemble_source:
     lda [bas_ptr],z
     sta line_addr+1
     bra @line_loop
-+   lda err_code
-    beq @end_of_program
+@end
+    rts
+
+
+; Input: source in BASIC region
+; Output:
+;   err_code = 0: segment table built successfully
+;   err_code > 0: error result
+assemble_source:
+    ; Do two assembly passes ($00, $FF), aborting for errors.
+    lda #0
+-   sta pass
+    jsr init_pass
+    jsr do_assemble_pass
+    lda err_code
+    bne @done
+    lda pass
+    cmp #$ff
+    beq @done
+    lda #$ff
+    bra -
+@done
     jsr print_error
-@end_of_program
     rts
 
 
@@ -1959,7 +2466,12 @@ err_message_tbl:
 err_messages:
 err_syntax = 1
 e01: !pet "syntax error",0
-
+err_pc_undef = 2
+e02: !pet "program counter undefined",0
+err_value_out_of_range = 3
+e03: !pet "value out of range",0
+err_unsupported_addr_mode = 4
+e04: !pet "unsupported addressing mode for instruction",0
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
@@ -2243,277 +2755,277 @@ MODES_BYTE_OPERAND  = %0101110000011111
 MODES_WORD_OPERAND  = %0010001111100000
 MODE_32BIT_INDIRECT = %0000000000000010
 addressing_modes:
-!byte %01011011,%10011110  ; adc
+!word %0101101110011110  ; adc
 !word enc_adc
-!byte %00010010,%00000110  ; adcq
+!word %0001001000000110  ; adcq
 !word enc_adcq
-!byte %01011011,%10011110  ; and
+!word %0101101110011110  ; and
 !word enc_and
-!byte %00010010,%00000110  ; andq
+!word %0001001000000110  ; andq
 !word enc_andq
-!byte %10011011,%00000000  ; asl
+!word %1001101100000000  ; asl
 !word enc_asl
-!byte %10011011,%00000000  ; aslq
+!word %1001101100000000  ; aslq
 !word enc_aslq
-!byte %10011000,%00000000  ; asr
+!word %1001100000000000  ; asr
 !word enc_asr
-!byte %10011000,%00000000  ; asrq
+!word %1001100000000000  ; asrq
 !word enc_asrq
-!byte %00000010,%00000000  ; asw
+!word %0000001000000000  ; asw
 !word enc_asw
-!byte %00010000,%00000000  ; bbr0
+!word %0001000000000000  ; bbr0
 !word enc_bbr0
-!byte %00010000,%00000000  ; bbr1
+!word %0001000000000000  ; bbr1
 !word enc_bbr1
-!byte %00010000,%00000000  ; bbr2
+!word %0001000000000000  ; bbr2
 !word enc_bbr2
-!byte %00010000,%00000000  ; bbr3
+!word %0001000000000000  ; bbr3
 !word enc_bbr3
-!byte %00010000,%00000000  ; bbr4
+!word %0001000000000000  ; bbr4
 !word enc_bbr4
-!byte %00010000,%00000000  ; bbr5
+!word %0001000000000000  ; bbr5
 !word enc_bbr5
-!byte %00010000,%00000000  ; bbr6
+!word %0001000000000000  ; bbr6
 !word enc_bbr6
-!byte %00010000,%00000000  ; bbr7
+!word %0001000000000000  ; bbr7
 !word enc_bbr7
-!byte %00010000,%00000000  ; bbs0
+!word %0001000000000000  ; bbs0
 !word enc_bbs0
-!byte %00010000,%00000000  ; bbs1
+!word %0001000000000000  ; bbs1
 !word enc_bbs1
-!byte %00010000,%00000000  ; bbs2
+!word %0001000000000000  ; bbs2
 !word enc_bbs2
-!byte %00010000,%00000000  ; bbs3
+!word %0001000000000000  ; bbs3
 !word enc_bbs3
-!byte %00010000,%00000000  ; bbs4
+!word %0001000000000000  ; bbs4
 !word enc_bbs4
-!byte %00010000,%00000000  ; bbs5
+!word %0001000000000000  ; bbs5
 !word enc_bbs5
-!byte %00010000,%00000000  ; bbs6
+!word %0001000000000000  ; bbs6
 !word enc_bbs6
-!byte %00010000,%00000000  ; bbs7
+!word %0001000000000000  ; bbs7
 !word enc_bbs7
-!byte %00010010,%00000000  ; bcc
+!word %0001001000000000  ; bcc
 !word enc_bcc
-!byte %00010010,%00000000  ; bcs
+!word %0001001000000000  ; bcs
 !word enc_bcs
-!byte %00010010,%00000000  ; beq
+!word %0001001000000000  ; beq
 !word enc_beq
-!byte %01011011,%00000000  ; bit
+!word %0101101100000000  ; bit
 !word enc_bit
-!byte %00010010,%00000000  ; bitq
+!word %0001001000000000  ; bitq
 !word enc_bitq
-!byte %00010010,%00000000  ; bmi
+!word %0001001000000000  ; bmi
 !word enc_bmi
-!byte %00010010,%00000000  ; bne
+!word %0001001000000000  ; bne
 !word enc_bne
-!byte %00010010,%00000000  ; bpl
+!word %0001001000000000  ; bpl
 !word enc_bpl
-!byte %00010010,%00000000  ; bra
+!word %0001001000000000  ; bra
 !word enc_bra
-!byte %10000000,%00000000  ; brk
+!word %1000000000000000  ; brk
 !word enc_brk
-!byte %00000010,%00000000  ; bsr
+!word %0000001000000000  ; bsr
 !word enc_bsr
-!byte %00010010,%00000000  ; bvc
+!word %0001001000000000  ; bvc
 !word enc_bvc
-!byte %00010010,%00000000  ; bvs
+!word %0001001000000000  ; bvs
 !word enc_bvs
-!byte %10000000,%00000000  ; clc
+!word %1000000000000000  ; clc
 !word enc_clc
-!byte %10000000,%00000000  ; cld
+!word %1000000000000000  ; cld
 !word enc_cld
-!byte %10000000,%00000000  ; cle
+!word %1000000000000000  ; cle
 !word enc_cle
-!byte %10000000,%00000000  ; cli
+!word %1000000000000000  ; cli
 !word enc_cli
-!byte %10000000,%00000000  ; clv
+!word %1000000000000000  ; clv
 !word enc_clv
-!byte %01011011,%10011110  ; cmp
+!word %0101101110011110  ; cmp
 !word enc_cmp
-!byte %00010010,%00000110  ; cmpq
+!word %0001001000000110  ; cmpq
 !word enc_cmpq
-!byte %00010010,%00000110  ; cpq
+!word %0001001000000110  ; cpq
 !word enc_cmpq
-!byte %01010010,%00000000  ; cpx
+!word %0101001000000000  ; cpx
 !word enc_cpx
-!byte %01010010,%00000000  ; cpy
+!word %0101001000000000  ; cpy
 !word enc_cpy
-!byte %01010010,%00000000  ; cpz
+!word %0101001000000000  ; cpz
 !word enc_cpz
-!byte %10011011,%00000000  ; dec
+!word %1001101100000000  ; dec
 !word enc_dec
-!byte %10011011,%00000000  ; deq
+!word %1001101100000000  ; deq
 !word enc_deq
-!byte %00010000,%00000000  ; dew
+!word %0001000000000000  ; dew
 !word enc_dew
-!byte %10000000,%00000000  ; dex
+!word %1000000000000000  ; dex
 !word enc_dex
-!byte %10000000,%00000000  ; dey
+!word %1000000000000000  ; dey
 !word enc_dey
-!byte %10000000,%00000000  ; dez
+!word %1000000000000000  ; dez
 !word enc_dez
-!byte %10000000,%00000000  ; eom
+!word %1000000000000000  ; eom
 !word enc_eom
-!byte %01011011,%10011110  ; eor
+!word %0101101110011110  ; eor
 !word enc_eor
-!byte %00010010,%00000110  ; eorq
+!word %0001001000000110  ; eorq
 !word enc_eorq
-!byte %10011011,%00000000  ; inc
+!word %1001101100000000  ; inc
 !word enc_inc
-!byte %10011011,%00000000  ; inq
+!word %1001101100000000  ; inq
 !word enc_inq
-!byte %00010000,%00000000  ; inw
+!word %0001000000000000  ; inw
 !word enc_inw
-!byte %10000000,%00000000  ; inx
+!word %1000000000000000  ; inx
 !word enc_inx
-!byte %10000000,%00000000  ; iny
+!word %1000000000000000  ; iny
 !word enc_iny
-!byte %10000000,%00000000  ; inz
+!word %1000000000000000  ; inz
 !word enc_inz
-!byte %00000010,%01100000  ; jmp
+!word %0000001001100000  ; jmp
 !word enc_jmp
-!byte %00000010,%01100000  ; jsr
+!word %0000001001100000  ; jsr
 !word enc_jsr
-!byte %01011011,%10011111  ; lda
+!word %0101101110011111  ; lda
 !word enc_lda
-!byte %00010010,%00000110  ; ldq
+!word %0001001000000110  ; ldq
 !word enc_ldq
-!byte %01010110,%10000000  ; ldx
+!word %0101011010000000  ; ldx
 !word enc_ldx
-!byte %01011011,%00000000  ; ldy
+!word %0101101100000000  ; ldy
 !word enc_ldy
-!byte %01000011,%00000000  ; ldz
+!word %0100001100000000  ; ldz
 !word enc_ldz
-!byte %10011011,%00000000  ; lsr
+!word %1001101100000000  ; lsr
 !word enc_lsr
-!byte %10011011,%00000000  ; lsrq
+!word %1001101100000000  ; lsrq
 !word enc_lsrq
-!byte %10000000,%00000000  ; map
+!word %1000000000000000  ; map
 !word enc_map
-!byte %10000000,%00000000  ; neg
+!word %1000000000000000  ; neg
 !word enc_neg
-!byte %01011011,%10011110  ; ora
+!word %0101101110011110  ; ora
 !word enc_ora
-!byte %00010010,%00000110  ; orq
+!word %0001001000000110  ; orq
 !word enc_orq
-!byte %10000000,%00000000  ; pha
+!word %1000000000000000  ; pha
 !word enc_pha
-!byte %10000000,%00000000  ; php
+!word %1000000000000000  ; php
 !word enc_php
-!byte %00100010,%00000000  ; phw
+!word %0010001000000000  ; phw
 !word enc_phw
-!byte %10000000,%00000000  ; phx
+!word %1000000000000000  ; phx
 !word enc_phx
-!byte %10000000,%00000000  ; phy
+!word %1000000000000000  ; phy
 !word enc_phy
-!byte %10000000,%00000000  ; phz
+!word %1000000000000000  ; phz
 !word enc_phz
-!byte %10000000,%00000000  ; pla
+!word %1000000000000000  ; pla
 !word enc_pla
-!byte %10000000,%00000000  ; plp
+!word %1000000000000000  ; plp
 !word enc_plp
-!byte %10000000,%00000000  ; plx
+!word %1000000000000000  ; plx
 !word enc_plx
-!byte %10000000,%00000000  ; ply
+!word %1000000000000000  ; ply
 !word enc_ply
-!byte %10000000,%00000000  ; plz
+!word %1000000000000000  ; plz
 !word enc_plz
-!byte %00010000,%00000000  ; rmb0
+!word %0001000000000000  ; rmb0
 !word enc_rmb0
-!byte %00010000,%00000000  ; rmb1
+!word %0001000000000000  ; rmb1
 !word enc_rmb1
-!byte %00010000,%00000000  ; rmb2
+!word %0001000000000000  ; rmb2
 !word enc_rmb2
-!byte %00010000,%00000000  ; rmb3
+!word %0001000000000000  ; rmb3
 !word enc_rmb3
-!byte %00010000,%00000000  ; rmb4
+!word %0001000000000000  ; rmb4
 !word enc_rmb4
-!byte %00010000,%00000000  ; rmb5
+!word %0001000000000000  ; rmb5
 !word enc_rmb5
-!byte %00010000,%00000000  ; rmb6
+!word %0001000000000000  ; rmb6
 !word enc_rmb6
-!byte %00010000,%00000000  ; rmb7
+!word %0001000000000000  ; rmb7
 !word enc_rmb7
-!byte %10011011,%00000000  ; rol
+!word %1001101100000000  ; rol
 !word enc_rol
-!byte %10011011,%00000000  ; rolq
+!word %1001101100000000  ; rolq
 !word enc_rolq
-!byte %10011011,%00000000  ; ror
+!word %1001101100000000  ; ror
 !word enc_ror
-!byte %10011011,%00000000  ; rorq
+!word %1001101100000000  ; rorq
 !word enc_rorq
-!byte %00000010,%00000000  ; row
+!word %0000001000000000  ; row
 !word enc_row
-!byte %10000000,%00000000  ; rti
+!word %1000000000000000  ; rti
 !word enc_rti
-!byte %11000000,%00000000  ; rts
+!word %1100000000000000  ; rts
 !word enc_rts
-!byte %01011011,%10011110  ; sbc
+!word %0101101110011110  ; sbc
 !word enc_sbc
-!byte %00010010,%00000110  ; sbcq
+!word %0001001000000110  ; sbcq
 !word enc_sbcq
-!byte %10000000,%00000000  ; sec
+!word %1000000000000000  ; sec
 !word enc_sec
-!byte %10000000,%00000000  ; sed
+!word %1000000000000000  ; sed
 !word enc_sed
-!byte %10000000,%00000000  ; see
+!word %1000000000000000  ; see
 !word enc_see
-!byte %10000000,%00000000  ; sei
+!word %1000000000000000  ; sei
 !word enc_sei
-!byte %00010000,%00000000  ; smb0
+!word %0001000000000000  ; smb0
 !word enc_smb0
-!byte %00010000,%00000000  ; smb1
+!word %0001000000000000  ; smb1
 !word enc_smb1
-!byte %00010000,%00000000  ; smb2
+!word %0001000000000000  ; smb2
 !word enc_smb2
-!byte %00010000,%00000000  ; smb3
+!word %0001000000000000  ; smb3
 !word enc_smb3
-!byte %00010000,%00000000  ; smb4
+!word %0001000000000000  ; smb4
 !word enc_smb4
-!byte %00010000,%00000000  ; smb5
+!word %0001000000000000  ; smb5
 !word enc_smb5
-!byte %00010000,%00000000  ; smb6
+!word %0001000000000000  ; smb6
 !word enc_smb6
-!byte %00010000,%00000000  ; smb7
+!word %0001000000000000  ; smb7
 !word enc_smb7
-!byte %00011011,%10011111  ; sta
+!word %0001101110011111  ; sta
 !word enc_sta
-!byte %00010010,%00000110  ; stq
+!word %0001001000000110  ; stq
 !word enc_stq
-!byte %00010110,%10000000  ; stx
+!word %0001011010000000  ; stx
 !word enc_stx
-!byte %00011011,%00000000  ; sty
+!word %0001101100000000  ; sty
 !word enc_sty
-!byte %00011011,%00000000  ; stz
+!word %0001101100000000  ; stz
 !word enc_stz
-!byte %10000000,%00000000  ; tab
+!word %1000000000000000  ; tab
 !word enc_tab
-!byte %10000000,%00000000  ; tax
+!word %1000000000000000  ; tax
 !word enc_tax
-!byte %10000000,%00000000  ; tay
+!word %1000000000000000  ; tay
 !word enc_tay
-!byte %10000000,%00000000  ; taz
+!word %1000000000000000  ; taz
 !word enc_taz
-!byte %10000000,%00000000  ; tba
+!word %1000000000000000  ; tba
 !word enc_tba
-!byte %00010010,%00000000  ; trb
+!word %0001001000000000  ; trb
 !word enc_trb
-!byte %00010010,%00000000  ; tsb
+!word %0001001000000000  ; tsb
 !word enc_tsb
-!byte %10000000,%00000000  ; tsx
+!word %1000000000000000  ; tsx
 !word enc_tsx
-!byte %10000000,%00000000  ; tsy
+!word %1000000000000000  ; tsy
 !word enc_tsy
-!byte %10000000,%00000000  ; txa
+!word %1000000000000000  ; txa
 !word enc_txa
-!byte %10000000,%00000000  ; txs
+!word %1000000000000000  ; txs
 !word enc_txs
-!byte %10000000,%00000000  ; tya
+!word %1000000000000000  ; tya
 !word enc_tya
-!byte %10000000,%00000000  ; tys
+!word %1000000000000000  ; tys
 !word enc_tys
-!byte %10000000,%00000000  ; tza
+!word %1000000000000000  ; tza
 !word enc_tza
 
 ; Encoding lists
