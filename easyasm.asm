@@ -3633,7 +3633,7 @@ test_find_symbol_7: !pet "GAMMB",0
 
 !macro test_assemble_bytes .tnum, .pass, .pc, .x, .ec, .epc {
     +test_start .tnum
-    jsr init_symbol_table
+    jsr init_segment_table
     lda #.pass
     sta pass
     jsr init_pass
@@ -3727,6 +3727,84 @@ test_find_symbol_7: !pet "GAMMB",0
 
     +test_end
 }
+
+!macro test_assemble_bytes_twice .tnum, .pass, .pc1, .pc2, .x, .epc, .edata, .edataend {
+    +test_start .tnum
+    jsr init_segment_table
+    lda #.pass
+    sta pass
+    jsr init_pass
+    ldx #<.pc1
+    ldy #>.pc1
+    jsr set_pc
+    +test_do_assemble_bytes .x
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++
+    ldx #<.pc2
+    ldy #>.pc2
+    jsr set_pc
+    +test_do_assemble_bytes .x
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++
+    lda program_counter
+    cmp #<.epc
+    bne +
+    lda program_counter+1
+    cmp #>.epc
+    bne +
+    bra ++
++   +print_strlit_line "... fail, wrong program-counter"
+    brk
+++
+    lda next_segment_pc
+    cmp #<.epc
+    bne +
+    lda next_segment_pc+1
+    cmp #>.epc
+    bne +
+    bra ++
++   +print_strlit_line "... fail, wrong next-segment-pc"
+    brk
+++
+!if .pass = $ff {
+    lda #<attic_segments
+    ldx #>attic_segments
+    ldy #^attic_segments
+    ldz #<(attic_segments >>> 24)
+    stq attic_ptr
+
+    ldx #.edataend-.edata-1
+-   txa
+    taz
+    lda .edata,x
+    cmp [attic_ptr],z
+    beq +
+    +print_strlit_line "... fail, wrong segment data"
+    brk
++
+    dex
+    bpl -
+}
+    +test_end
+}
+
+test_assemble_bytes_twice_1:
+    !word $c000
+    !word 10
+    !byte 0, 1, 2, 3, 4, 0, 1, 2, 3, 4
+test_assemble_bytes_twice_2:
+    !word $c000
+    !word 5
+    !byte 0, 1, 2, 3, 4
+    !word $d000
+    !word 5
+    !byte 0, 1, 2, 3, 4
+test_assemble_bytes_twice_2_end:
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3928,8 +4006,10 @@ run_test_suite_cmd:
     +test_assemble_bytes $02, 0, $c000, 0, 0, 0  ; zero length is ok
     +test_assemble_bytes $03, 0, $c000, 5, 0, $c005
     +test_assemble_bytes $04, $ff, $c000, 5, 0, $c005
-    ; TODO: assemble_bytes, two writes with no PC change between (single segment)
-    ; TODO: assemble_bytes, two writes with PC change between (two segments)
+    +test_assemble_bytes_twice $05, 0, $c000, $c005, 5, $c00a, 0, 0
+    +test_assemble_bytes_twice $06, 0, $c000, $d000, 5, $d005, 0, 0
+    +test_assemble_bytes_twice $07, $ff, $c000, $c005, 5, $c00a, test_assemble_bytes_twice_1, test_assemble_bytes_twice_2
+    +test_assemble_bytes_twice $08, $ff, $c000, $d000, 5, $d005, test_assemble_bytes_twice_2, test_assemble_bytes_twice_2_end
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
