@@ -26,12 +26,15 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 36
+* = $100 - 46
 
-pass            *=*+1
+pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
 asm_flags       *=*+1
 F_ASM_PC_DEFINED = %00000001
+current_segment *=*+4
+next_segment_pc *=*+2
+next_segment_byte_addr *=*+4
 
 symtbl_next_name *=*+3
 
@@ -69,7 +72,8 @@ attic_source_stash  = attic_easyasm_stash + $6000  ; 0.6000-1.36FF
 attic_symbol_table  = attic_source_stash + $d700   ; 1.3700-1.56FF (8 KB)
 attic_symbol_names  = attic_symbol_table + $2000   ; 1.5700-1.B6FF (24 KB)
 attic_symbol_names_end = attic_symbol_names + $6000
-attic_data          = attic_symbol_names + $6000   ; 1.B700...
+attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
+attic_segments_end  = attic_segments + $b000
 
 ; Symbol table constraints
 ;
@@ -165,8 +169,8 @@ init:
     sta bas_ptr+3
     sta bas_ptr+2
 
-    ; Init symbol table
-    jsr init_symtable
+    jsr init_symbol_table
+    jsr init_segment_table
 
     rts
 
@@ -227,7 +231,7 @@ do_menu:
     +kprimm_start
     !pet " run/stop: close menu                      ",13
     !pet "                                           ",13
-    !pet " your choice? ",15,191,143,"                            ",13
+    !pet " your choice? ",15,166,143,"                            ",13
     !pet 145,29,29,29,29,29,29,29,29,29,29,29,29,29,29,0
     +kprimm_end
 
@@ -1093,35 +1097,14 @@ tokenize_pseudoop:
     rts
 
 
-; Tokenize a non-mnemonic non-pseudoop keyword.
+; Tokenize punctuation tokens.
 ; Input: strbuf = lowercase line, line_pos at first char
 ; Output:
 ;   If found, C=1, X=token number, line_pos advanced
 ;   If not found, C=0, line_pos unchanged
-tokenize_other_keywords:
-    ldx line_pos
-    lda #<other_keywords
-    sta code_ptr
-    lda #>other_keywords
-    sta code_ptr+1
-    sec  ; Must not immediately precede an identifier character.
-    jsr find_in_token_list
-    bcc @end
-    stx line_pos  ; new line pos
-    tya
-    clc
-    adc #last_po  ; Y+last_po = keyword token ID
-    tax
-    sec
-@end
-    rts
-
-
-; Tokenize non-keyword tokens.
-; Input: strbuf = lowercase line, line_pos at first char
-; Output:
-;   If found, C=1, X=token number, line_pos advanced
-;   If not found, C=0, line_pos unchanged
+;
+; Note: Tokens spelled with letters that can also be labels are lexed as
+; labels (xor, div, runnable, cbm, raw, x, y, z, sp).
 tokenize_other:
     ldx line_pos
     lda #<other_tokens
@@ -1134,7 +1117,7 @@ tokenize_other:
     stx line_pos  ; new line pos
     tya
     clc
-    adc #last_kw  ; Y+last_kw = non-keyword token ID
+    adc #last_po  ; Y+last_po = non-keyword token ID
     tax
     sec
 @end
@@ -1264,13 +1247,7 @@ tokenize:
     plz
     bcs @push_tok_pos_then_continue
 
-    ; Keyword
-    phz
-    jsr tokenize_other_keywords
-    plz
-    bcs @push_tok_pos_then_continue
-
-    ; Non-keyword token
+    ; Punctuation token
     ; Note: This tokenizes relative labels (---, +++) as punctuation tokens.
     phz
     jsr tokenize_other
@@ -1336,7 +1313,7 @@ tokenize:
 ; Symbol table
 ; ------------------------------------------------------------
 
-init_symtable:
+init_symbol_table:
     ; Set first symbol table entry to null terminator
     lda #<attic_symbol_table
     ldx #>attic_symbol_table
@@ -1590,6 +1567,199 @@ set_symbol_value:
 
 
 ; ------------------------------------------------------------
+; Segment table
+; ------------------------------------------------------------
+
+; Initializes the segment table.
+init_segment_table:
+    lda #<attic_segments
+    sta current_segment
+    lda #>attic_segments
+    sta current_segment+1
+    lda #^attic_segments
+    sta current_segment+2
+    lda #<(attic_segments >>> 24)
+    sta current_segment+3
+
+    lda #<(attic_segments+4)
+    sta next_segment_byte_addr
+    lda #>(attic_segments+4)
+    sta next_segment_byte_addr+1
+    lda #^(attic_segments+4)
+    sta next_segment_byte_addr+2
+    lda #<((attic_segments + 4) >>> 24)
+    sta next_segment_byte_addr+3
+
+    lda #0
+    sta next_segment_pc
+    sta next_segment_pc+1
+    ldz #0
+    sta [current_segment],z
+    inz
+    sta [current_segment],z
+    inz
+    sta [current_segment],z
+    inz
+    sta [current_segment],z
+
+    rts
+
+; Initializes an assembly pass.
+init_pass:
+    lda #0
+    sta program_counter
+    sta program_counter+1
+    sta asm_flags
+    rts
+
+
+; Gets the program counter, or fails if not defined.
+; Input: program_counter, asm_flags
+; Output:
+;   C=0 ok, X/Y=PC
+;   C=1 not defined
+get_pc:
+    lda asm_flags
+    and #F_ASM_PC_DEFINED
+    bne +
+    sec
+    rts
++   ldx program_counter
+    ldy program_counter+1
+    clc
+    rts
+
+
+; Sets the program counter.
+; Input: X/Y=PC
+; Output: program_counter, asm_flags
+set_pc:
+    stx program_counter
+    sty program_counter+1
+    lda asm_flags
+    ora #F_ASM_PC_DEFINED
+    sta asm_flags
+    rts
+
+
+; Assembles bytes to a segment.
+; Input: Bytes in beginning of strbuf, X=length; init'd segment table
+; Output:
+;   C=0 ok; table state updated
+;   C=1 fail:
+;     pass $00: PC not defined
+;     pass $FF: out of memory error
+;   Uses expr_a
+assemble_bytes:
+    cpx #0
+    bne +
+    clc
+    rts
++
+    ; expr_a = length
+    stx expr_a
+    lda #0
+    sta expr_a+1
+    sta expr_a+2
+    sta expr_a+3
+
+    ; If PC not defined, error.
+    lda asm_flags
+    and #F_ASM_PC_DEFINED
+    bne +
+    sec
+    rts
++
+    ; If this isn't the final pass, simply increment the PC and don't do
+    ; anything else.
+    lda pass
+    cmp #$ff
+    lbne @increment_pc
+
+    ; If next_segment_byte_addr+len is beyond maximum segment table address, out
+    ; of memory error.
+    lda #<attic_segments_end
+    ldx #>attic_segments_end
+    ldy #^attic_segments_end
+    ldz #<(attic_segments_end >>> 24)
+    sec
+    sbcq expr_a
+    sec
+    sbcq next_segment_byte_addr
+    bpl +
+    sec
+    rts
++
+
+    ; If program_counter != next_segment_pc, create a new segment header.
+    ; (segment_pc_16, length_16)
+    lda program_counter
+    cmp next_segment_pc
+    bne +
+    lda program_counter+1
+    cmp next_segment_pc+1
+    bne +
+    bra ++
++   ldz #0
+    lda program_counter
+    sta [next_segment_byte_addr],z
+    sta next_segment_pc
+    inz
+    lda program_counter+1
+    sta [next_segment_byte_addr],z
+    sta next_segment_pc+1
+    inz
+    lda #0
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
+    ldq next_segment_byte_addr
+    stq current_segment
+
+++  ; Write bytes to segment.
+    lda expr_a
+    dec
+    tax
+    taz
+-   lda strbuf,x
+    sta [next_segment_byte_addr],z
+    dex
+    dez
+    bpl -
+
+    ; Add length to segment length.
+    ldz #2
+    lda [current_segment],z
+    clc
+    adc expr_a
+    sta [current_segment],z
+    inz
+    lda [current_segment],z
+    adc expr_a+1
+    sta [current_segment],z
+
+    ; Add length to next_segment_byte_addr.
+    ldq expr_a
+    clc
+    adcq next_segment_byte_addr
+    stq next_segment_byte_addr
+
+@increment_pc:
+    ; Add length program_counter and next_segment_pc.
+    lda expr_a
+    clc
+    adc program_counter
+    sta program_counter
+    sta next_segment_pc
+    lda expr_a+1
+    adc program_counter+1
+    sta program_counter+1
+    sta next_segment_pc+1
+
+    rts
+
+
+; ------------------------------------------------------------
 ; Assembler
 ; ------------------------------------------------------------
 
@@ -1744,6 +1914,10 @@ assemble_source:
     lda #>(source_start+1)
     sta line_addr+1
 
+    lda #0
+    sta pass
+    jsr init_pass
+
     ; DEBUG: single pass to print source tokenized, detect lexer errors
 @line_loop
     jsr assemble_line
@@ -1779,16 +1953,16 @@ e01: !pet "syntax error",0
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
-mnemonic_count = 138
+mnemonic_count = 136
 mnemonics:
 !pet "adc",0
-!pet "adcq",0
+!pet "adcq",0  ; $01
 !pet "and",0
-!pet "andq",0
+!pet "andq",0  ; $03
 !pet "asl",0
-!pet "aslq",0
+!pet "aslq",0  ; $05
 !pet "asr",0
-!pet "asrq",0
+!pet "asrq",0  ; $07
 !pet "asw",0
 !pet "bbr0",0
 !pet "bbr1",0
@@ -1810,7 +1984,7 @@ mnemonics:
 !pet "bcs",0
 !pet "beq",0
 !pet "bit",0
-!pet "bitq",0
+!pet "bitq",0  ; $1D
 !pet "bmi",0
 !pet "bne",0
 !pet "bpl",0
@@ -1825,22 +1999,22 @@ mnemonics:
 !pet "cli",0
 !pet "clv",0
 !pet "cmp",0
-!pet "cmpq",0
-!pet "cpq",0
+!pet "cmpq",0  ; $2D
+!pet "cpq",0   ; $2E
 !pet "cpx",0
 !pet "cpy",0
 !pet "cpz",0
 !pet "dec",0
-!pet "deq",0
+!pet "deq",0   ; $33
 !pet "dew",0
 !pet "dex",0
 !pet "dey",0
 !pet "dez",0
 !pet "eom",0
 !pet "eor",0
-!pet "eorq",0
+!pet "eorq",0  ; $3A
 !pet "inc",0
-!pet "inq",0
+!pet "inq",0   ; $3C
 !pet "inw",0
 !pet "inx",0
 !pet "iny",0
@@ -1848,16 +2022,16 @@ mnemonics:
 !pet "jmp",0
 !pet "jsr",0
 !pet "lda",0
-!pet "ldq",0
+!pet "ldq",0  ; $44
 !pet "ldx",0
 !pet "ldy",0
 !pet "ldz",0
 !pet "lsr",0
-!pet "lsrq",0
+!pet "lsrq",0  ; $49
 !pet "map",0
 !pet "neg",0
 !pet "ora",0
-!pet "orq",0
+!pet "orq",0   ; $4D
 !pet "pha",0
 !pet "php",0
 !pet "phw",0
@@ -1869,7 +2043,6 @@ mnemonics:
 !pet "plx",0
 !pet "ply",0
 !pet "plz",0
-!pet "resq",0
 !pet "rmb0",0
 !pet "rmb1",0
 !pet "rmb2",0
@@ -1879,15 +2052,14 @@ mnemonics:
 !pet "rmb6",0
 !pet "rmb7",0
 !pet "rol",0
-!pet "rolq",0
+!pet "rolq",0  ; $62
 !pet "ror",0
-!pet "rorq",0
+!pet "rorq",0  ; $64
 !pet "row",0
-!pet "rsvq",0
 !pet "rti",0
 !pet "rts",0
 !pet "sbc",0
-!pet "sbcq",0
+!pet "sbcq",0  ; $69
 !pet "sec",0
 !pet "sed",0
 !pet "see",0
@@ -1901,7 +2073,7 @@ mnemonics:
 !pet "smb6",0
 !pet "smb7",0
 !pet "sta",0
-!pet "stq",0
+!pet "stq",0  ; $77
 !pet "stx",0
 !pet "sty",0
 !pet "stz",0
@@ -1919,6 +2091,12 @@ mnemonics:
 !pet "tya",0
 !pet "tys",0
 !pet "tza",0
+!byte 0
+
+; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
+q_mnemonics:
+!byte $01, $03, $05, $07, $1D, $2D, $2E, $33, $3A, $3C, $44, $49, $4D, $62,
+!byte $64, $69, $77
 !byte 0
 
 ; Pseudo-op table
@@ -1951,63 +2129,52 @@ po_warn = mnemonic_count + 11
 !byte 0
 last_po = po_warn + 1
 
-; Other keywords table
-; These tokens consist of letters, case insensitive, and must be surrounded
-; with "word boundaries."
-other_keywords:
-kw_div = last_po + 0
-!pet "div",0
-kw_xor = last_po + 1
-!pet "xor",0
-!byte 0
-last_kw = kw_xor + 1
-
 ; Other tokens table
 ; These tokens are lexed up to their length, in order, with no delimiters.
 other_tokens:
-tk_complement = last_kw + 0
+tk_complement = last_po + 0
 !pet "!",0
-tk_power = last_kw + 1
+tk_power = last_po + 1
 !pet "^",0
-tk_megabyte = last_kw + 2
+tk_megabyte = last_po + 2
 !pet "^^",0
-tk_minus = last_kw + 3
+tk_minus = last_po + 3
 !pet "-",0
-tk_multiply = last_kw + 4
+tk_multiply = last_po + 4
 !pet "*",0
-tk_remainder = last_kw + 5
+tk_remainder = last_po + 5
 !pet "%",0
-tk_plus = last_kw + 6
+tk_plus = last_po + 6
 !pet "+",0
-tk_lsr = last_kw + 7
+tk_lsr = last_po + 7
 !pet ">>>",0
-tk_asr = last_kw + 8
+tk_asr = last_po + 8
 !pet ">>",0
-tk_asl = last_kw + 9
+tk_asl = last_po + 9
 !pet "<<",0
-tk_lt = last_kw + 10
+tk_lt = last_po + 10
 !pet "<",0
-tk_gt = last_kw + 11
+tk_gt = last_po + 11
 !pet ">",0
-tk_ampersand = last_kw + 12
+tk_ampersand = last_po + 12
 !pet "&",0
-tk_pipe = last_kw + 13
+tk_pipe = last_po + 13
 !pet "|",0
-tk_comma = last_kw + 14
+tk_comma = last_po + 14
 !pet ",",0
-tk_hash = last_kw + 15
+tk_hash = last_po + 15
 !pet "#",0
-tk_colon = last_kw + 16
+tk_colon = last_po + 16
 !pet ":",0
-tk_equal = last_kw + 17
+tk_equal = last_po + 17
 !pet "=",0
-tk_lparen = last_kw + 18
+tk_lparen = last_po + 18
 !pet "(",0
-tk_rparen = last_kw + 19
+tk_rparen = last_po + 19
 !pet ")",0
-tk_lbracket = last_kw + 20
+tk_lbracket = last_po + 20
 !pet "[",0
-tk_rbracket = last_kw + 21
+tk_rbracket = last_po + 21
 !pet "]",0
 !byte 0
 last_tk = tk_rbracket + 1
@@ -2017,6 +2184,18 @@ tk_number_literal = last_tk + 0
 tk_number_literal_leading_zero = last_tk + 1
 tk_string_literal = last_tk + 2
 tk_label_or_reg = last_tk + 3
+
+; Keywords
+; (tokenized as labels)
+kw_x: !pet "x",0
+kw_y: !pet "y",0
+kw_z: !pet "z",0
+kw_sp: !pet "sp",0
+kw_div: !pet "div",0
+kw_xor: !pet "xor",0
+kw_cbm: !pet "cbm",0
+kw_raw: !pet "raw",0
+kw_runnable: !pet "runnable",0
 
 
 ; ------------------------------------------------------------
@@ -2049,6 +2228,10 @@ tk_label_or_reg = last_tk + 3
 ;                     ^ Base-Page Indirect Z-Indexed (or no index)
 ;                      ^ 32-bit Base-Page Indirect Z-Indexed (or no index)
 ;                       ^ Stack Relative Indirect, Y-Indexed
+MODES_NO_OPERAND    = %1000000000000000
+MODES_BYTE_OPERAND  = %0101110000011111
+MODES_WORD_OPERAND  = %0010001111100000
+MODE_32BIT_INDIRECT = %0000000000000010
 addressing_modes:
 !byte %01011011,%10011110  ; adc
 !word enc_adc
@@ -2226,8 +2409,6 @@ addressing_modes:
 !word enc_ply
 !byte %10000000,%00000000  ; plz
 !word enc_plz
-!byte %00001001,%10011000  ; resq
-!word enc_resq
 !byte %00010000,%00000000  ; rmb0
 !word enc_rmb0
 !byte %00010000,%00000000  ; rmb1
@@ -2254,8 +2435,6 @@ addressing_modes:
 !word enc_rorq
 !byte %00000010,%00000000  ; row
 !word enc_row
-!byte %00001001,%10011001  ; rsvq
-!word enc_rsvq
 !byte %10000000,%00000000  ; rti
 !word enc_rti
 !byte %11000000,%00000000  ; rts
@@ -2429,7 +2608,6 @@ enc_plp : !byte $28
 enc_plx : !byte $fa
 enc_ply : !byte $7a
 enc_plz : !byte $fb
-enc_resq: !byte $75, $7d, $79, $61, $71
 enc_rmb0: !byte $07
 enc_rmb1: !byte $17
 enc_rmb2: !byte $27
@@ -2443,7 +2621,6 @@ enc_rolq: !byte $2a, $26, $36, $2e, $3e
 enc_ror : !byte $6a, $66, $76, $6e, $7e
 enc_rorq: !byte $6a, $66, $76, $6e, $7e
 enc_row : !byte $eb
-enc_rsvq: !byte $f5, $fd, $f9, $e1, $f1, $82
 enc_rti : !byte $40
 enc_rts : !byte $60, $62
 enc_sbc : !byte $e9, $e5, $f5, $ed, $fd, $f9, $e1, $f1, $f2, $f2
@@ -2954,49 +3131,6 @@ test_tokenize_pseudoop_5: !pet "!toz  ",0
 test_tokenize_pseudoop_6: !pet "#!to#  ",0
 test_tokenize_pseudoop_7: !pet "to  ",0
 
-!macro test_tokenize_other_keywords .tnum, .str, .pos, .ec, .etoken, .epos {
-    +test_start .tnum
-
-    ; Copy .str to strbuf
-    ldx #0
--   lda .str,x
-    sta strbuf,x
-    beq +
-    inx
-    bra -
-+
-    ldx #.pos
-    stx line_pos
-    jsr tokenize_other_keywords
-!if .ec {
-    bcs +
-    brk
-+   cpx #.etoken
-    beq +
-    brk
-+   lda line_pos
-    cmp #.epos
-    beq +
-    brk
-+
-} else {
-    bcc +
-    brk
-+   lda line_pos
-    cmp #.pos
-    beq +
-    brk
-+
-}
-
-    +test_end
-}
-
-test_tokenize_other_keywords_1: !pet "div ",0
-test_tokenize_other_keywords_2: !pet "xor ",0
-test_tokenize_other_keywords_3: !pet "divz ",0
-test_tokenize_other_keywords_4: !pet "#div ",0
-
 !macro test_tokenize_other .tnum, .str, .pos, .ec, .etoken, .epos {
     +test_start .tnum
 
@@ -3230,7 +3364,7 @@ test_symbol_names:
 test_symbol_names_end:
 
 test_set_up_symbol_data:
-    jsr init_symtable
+    jsr init_symbol_table
 
     lda #<test_symbol_table
     sta code_ptr
@@ -3490,6 +3624,72 @@ test_find_symbol_7: !pet "GAMMB",0
     +test_end
 }
 
+!macro test_do_assemble_bytes .x {
+!if .x > 0 {
+    ldx #.x-1
+-   txa
+    sta strbuf,x
+    dex
+    bpl -
+}
+    ldx #.x
+    jsr assemble_bytes
+}
+
+!macro test_assemble_bytes .tnum, .pass, .pc, .x, .ec, .epc {
+    +test_start .tnum
+    jsr init_symbol_table
+    lda #.pass
+    sta pass
+    jsr init_pass
+!if .pc {
+    ldx #<.pc
+    ldy #>.pc
+    jsr set_pc
+}
+    +test_do_assemble_bytes .x
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++
+}
+
+!if .epc {
+    lda program_counter
+    cmp #<.epc
+    bne +
+    lda program_counter+1
+    cmp #>.epc
+    bne +
+    bra ++
++   +print_strlit_line "... fail, wrong program-counter"
+    brk
+++
+    lda next_segment_pc
+    cmp #<.epc
+    bne +
+    lda next_segment_pc+1
+    cmp #>.epc
+    bne +
+    bra ++
++   +print_strlit_line "... fail, wrong next-segment-pc"
+    brk
+++
+}
+
+!if .pass == $ff {
+    ; validate segment memory: .pc (2), .x (2), 0, 1, 2, 3, ...
+}
+
+    +test_end
+}
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -3627,13 +3827,6 @@ run_test_suite_cmd:
     +test_tokenize_pseudoop $07, test_tokenize_pseudoop_7, 0, 0, 0, 0
 
     +print_chr chr_cr
-    +print_strlit_line "tokenize-other-keywords"
-    +test_tokenize_other_keywords $01, test_tokenize_other_keywords_1, 0, 1, kw_div, 3
-    +test_tokenize_other_keywords $02, test_tokenize_other_keywords_2, 0, 1, kw_xor, 3
-    +test_tokenize_other_keywords $03, test_tokenize_other_keywords_3, 0, 0, 0, 0
-    +test_tokenize_other_keywords $04, test_tokenize_other_keywords_4, 1, 1, kw_div, 4
-
-    +print_chr chr_cr
     +print_strlit_line "tokenize-other"
     +test_tokenize_other $01, test_tokenize_other_1, 0, 1, tk_complement, 1
     +test_tokenize_other $02, test_tokenize_other_2, 0, 1, tk_power, 1
@@ -3691,6 +3884,15 @@ run_test_suite_cmd:
     +print_strlit_line "test-set-symbol-value"
     +test_set_symbol_value $01, test_find_symbol_2, 5, 98765
     +test_set_symbol_value $02, test_find_symbol_7, 5, 87654
+
+    +print_chr chr_cr
+    +print_strlit_line "test-assemble-bytes"
+    +test_assemble_bytes $01, 0, 0, 1, 1, 0  ; undefined PC is error
+    +test_assemble_bytes $02, 0, $c000, 0, 0, 0  ; zero length is ok
+    +test_assemble_bytes $03, 0, $c000, 5, 0, $c005
+    +test_assemble_bytes $04, $ff, $c000, 5, 0, $c005
+    ; TODO: assemble_bytes, two writes with no PC change between (single segment)
+    ; TODO: assemble_btyes, two writes with PC change between (two segments)
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

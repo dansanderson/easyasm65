@@ -422,6 +422,8 @@ The colon `:` is optional.
 
 A global label name must start with a letter, either lowercase or uppercase. Subsequent characters can be either a letter (lowercase or uppercase), a number, back-arrow (ASCII underscore), a dot (`.`), or Mega + `@` (an underscore-like character in PETSCII).
 
+A label cannot be similar to an instruction mnemonic. It can be similar to other keywords. For example, `xor` can be used as a label (case sensitive), even though it is also an operator (case insensitive). `lda` cannot be used as a label.
+
 > **Tip:** If you choose to use uppercase + graphics text mode for assembly programming, I recommend limiting the use of shifted letters in label names. They're allowed because they are uppercase letters in lowercase text mode, but they are difficult to remember how to type, and some are difficult to distinguish. For example, Shift + G and Shift + T both appear as vertical lines in uppercase text mode.
 
 ### "Cheap" local labels
@@ -592,7 +594,7 @@ A typical program does not have to change the PC. It can use the `!to "...", run
 
 A set of instructions and data assembled to a contiguous region of memory is known as a *segment*. A typical program consists of one segment.
 
-When program code assigns a new value to the program counter and this is followed by an instruction, EasyAsm starts a new segment at that address. It keeps track of all the contiguous segments formed by assembled instructions and data.
+When program code assigns a new value to the program counter and this is followed by an instruction or data directive, EasyAsm starts a new segment at that address. The assembler keeps track of all the contiguous segments formed by assembled instructions and data.
 
 ### "Pseudo-PC"
 
