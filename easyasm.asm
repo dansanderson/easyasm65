@@ -4498,6 +4498,68 @@ test_expect_oppop_2: !byte 1, 4, 0, $ff
 test_expect_oppop_3: !byte po_to, 4, 0, $ff
 test_expect_oppop_end:
 
+!macro test_expect_literal .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .eresult, .eflags {
+    +test_start .tnum
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+    jsr expect_literal
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++   ldx tok_pos
+    beq +
+    +print_strlit_line "... fail, tok-pos moved"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   lda expr_result
+    cmp #<.eresult
+    beq +
+    +print_strlit_line "... fail, wrong result (1)"
+    brk
++   lda expr_result+1
+    cmp #>.eresult
+    beq +
+    +print_strlit_line "... fail, wrong result (2)"
+    brk
++   lda expr_result+2
+    cmp #^.eresult
+    beq +
+    +print_strlit_line "... fail, wrong result (3)"
+    brk
++   lda expr_result+3
+    cmp #<(.eresult >>> 24)
+    beq +
+    +print_strlit_line "... fail, wrong result (4)"
+    brk
++   lda expr_flags
+    cmp #.eflags
+    beq +
+    +print_strlit_line "... fail, wrong flags"
+    brk
++
+}
+
+    +test_end
+}
+
+test_expect_literal_1: !byte 0, $ff
+test_expect_literal_2: !byte tk_number_literal, 6, $dd, $cc, $bb, $aa, 0, $ff
+test_expect_literal_3: !byte tk_number_literal_leading_zero, 6, $dd, $cc, $bb, $aa, 0, $ff
+test_expect_literal_end:
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -4733,6 +4795,12 @@ run_test_suite_cmd:
     +test_expect_pseudoop $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
     +test_expect_pseudoop $02, test_expect_oppop_2, test_expect_oppop_3, 1, 0, 0
     +test_expect_pseudoop $03, test_expect_oppop_3, test_expect_oppop_end, 0, 2, po_to
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-literal"
+    +test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
+    +test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
+    +test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
