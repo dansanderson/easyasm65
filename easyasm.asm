@@ -1847,6 +1847,7 @@ expect_keyword:
     lda #0
     sta strbuf,x
     jsr strbuf_to_lowercase
+    ldx #0
     jsr strbuf_cmp_code_ptr
     beq @succeed
 @fail
@@ -1856,6 +1857,7 @@ expect_keyword:
     bra @end
 @succeed
     plx
+    clc
 @end
     rts
 
@@ -1867,6 +1869,7 @@ expect_keyword:
 expect_opcode:
     ldx tok_pos
     lda tokbuf,x
+    beq @fail
     cmp #mnemonic_count
     bcs @fail
     inx
@@ -2041,7 +2044,7 @@ assemble_label:
 
     ; <label> ["=" expr]
     jsr expect_label
-    bcs statement_err_exit
+    lbcs statement_err_exit
     stx expr_a     ; line_pos
     sty expr_a+1   ; length
     lda #tk_equal
@@ -3761,7 +3764,6 @@ test_load_line_to_strbuf_1e: !pet "abc",0
     beq ++
     bra -
 +
-    +print_strlit_line "...fail, wrong tokbuf"
     brk
 ++
 }
@@ -3770,33 +3772,33 @@ test_load_line_to_strbuf_1e: !pet "abc",0
 }
 
 test_tokenize_1: !pet 0
-test_tokenize_1e: !byte 0
+test_tokenize_1e: !byte 0, $ff
 test_tokenize_2: !pet "    ; comment only",0
-test_tokenize_2e: !byte 0
+test_tokenize_2e: !byte 0, $ff
 test_tokenize_3: !pet "\"string literal\"",0
-test_tokenize_3e: !byte tk_string_literal, 4, 14, 0
+test_tokenize_3e: !byte tk_string_literal, 4, 14, 0, $ff
 test_tokenize_4: !pet "12345",0
 test_tokenize_4e:
     !byte tk_number_literal, 4
     !32 12345
-    !byte 0
+    !byte 0, $ff
 test_tokenize_5: !pet "$DeAdBeEf",0
 test_tokenize_5e:
     !byte tk_number_literal, 4
     !32 $deadbeef
-    !byte 0
+    !byte 0, $ff
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 135, 4, 0
+test_tokenize_6e: !byte 135, 4, 0, $ff
 test_tokenize_7: !pet "!wOrD",0
-test_tokenize_7e: !byte po_word, 4, 0
+test_tokenize_7e: !byte po_word, 4, 0, $ff
 test_tokenize_8: !pet "xOr",0
-test_tokenize_8e: !byte tk_label_or_reg, 4, 3, 0
+test_tokenize_8e: !byte tk_label_or_reg, 4, 3, 0, $ff
 test_tokenize_9: !pet ">>>",0
-test_tokenize_9e: !byte tk_lsr, 4, 0
+test_tokenize_9e: !byte tk_lsr, 4, 0, $ff
 test_tokenize_10: !pet "label",0
-test_tokenize_10e: !byte tk_label_or_reg, 4, 5, 0
+test_tokenize_10e: !byte tk_label_or_reg, 4, 5, 0, $ff
 test_tokenize_11: !pet "@label",0
-test_tokenize_11e: !byte tk_label_or_reg, 4, 6, 0
+test_tokenize_11e: !byte tk_label_or_reg, 4, 6, 0, $ff
 test_tokenize_12: !pet "label: lda (45, sp), y  ; comment",0
 test_tokenize_12e:
     !byte tk_label_or_reg, 4, 5
@@ -3810,7 +3812,7 @@ test_tokenize_12e:
     !byte tk_rparen, 22
     !byte tk_comma, 23
     !byte tk_label_or_reg, 25, 1
-    !byte 0
+    !byte 0, $ff
 test_tokenize_13: !pet "label = *+4",0
 test_tokenize_13e:
     !byte tk_label_or_reg, 4, 5
@@ -3819,27 +3821,27 @@ test_tokenize_13e:
     !byte tk_plus, 13
     !byte tk_number_literal, 14
     !32 4
-    !byte 0
+    !byte 0, $ff
 test_tokenize_14: !pet "* = $d000",0
 test_tokenize_14e:
     !byte tk_multiply, 4
     !byte tk_equal, 6
     !byte tk_number_literal, 8
     !32 $d000
-    !byte 0
+    !byte 0, $ff
 test_tokenize_15: !pet "!to \"lda\", runnable",0
 test_tokenize_15e:
     !byte po_to, 4
     !byte tk_string_literal, 8, 3
     !byte tk_comma, 13
     !byte tk_label_or_reg, 15, 8
-    !byte 0
+    !byte 0, $ff
 test_tokenize_16: !pet "lda $000a",0
 test_tokenize_16e:
     !byte 66, 4
     !byte tk_number_literal_leading_zero, 8
     !32 $000a
-    !byte 0
+    !byte 0, $ff
 test_tokenize_last:
 
 test_tokenize_error_1: !pet "$$$",0
@@ -4158,12 +4160,10 @@ test_find_symbol_7: !pet "GAMMB",0
 
 !if .ec {
     bcs +
-    +print_strlit_line "... fail, expected carry set"
     brk
 +
 } else {
     bcc +
-    +print_strlit_line "... fail, expected carry clear"
     brk
 +
 }
@@ -4176,8 +4176,7 @@ test_find_symbol_7: !pet "GAMMB",0
     cmp #>.epc
     bne +
     bra ++
-+   +print_strlit_line "... fail, wrong program-counter"
-    brk
++   brk
 ++
     lda next_segment_pc
     cmp #<.epc
@@ -4186,8 +4185,7 @@ test_find_symbol_7: !pet "GAMMB",0
     cmp #>.epc
     bne +
     bra ++
-+   +print_strlit_line "... fail, wrong next-segment-pc"
-    brk
++   brk
 ++
 }
 
@@ -4201,25 +4199,21 @@ test_find_symbol_7: !pet "GAMMB",0
     lda [attic_ptr],z
     cmp #<.pc
     beq +
-    +print_strlit_line "... fail, wrong segment address (l)"
     brk
 +   inz
     lda [attic_ptr],z
     cmp #>.pc
     beq +
-    +print_strlit_line "... fail, wrong segment address (h)"
     brk
 +   inz
     lda [attic_ptr],z
     cmp #<.x
     beq +
-    +print_strlit_line "... fail, wrong segment length (l)"
     brk
 +   inz
     lda [attic_ptr],z
     cmp #>.x
     beq +
-    +print_strlit_line "... fail, wrong segment length (h)"
     brk
 +   inz
 
@@ -4228,7 +4222,6 @@ test_find_symbol_7: !pet "GAMMB",0
 -   txa
     cmp [attic_ptr],z
     beq +
-    +print_strlit_line "... fail, wrong segment data"
     brk
 +
     inz
@@ -4251,7 +4244,6 @@ test_find_symbol_7: !pet "GAMMB",0
     jsr set_pc
     +test_do_assemble_bytes .x
     bcc +
-    +print_strlit_line "... fail, expected carry clear"
     brk
 +
     ldx #<.pc2
@@ -4259,7 +4251,6 @@ test_find_symbol_7: !pet "GAMMB",0
     jsr set_pc
     +test_do_assemble_bytes .x
     bcc +
-    +print_strlit_line "... fail, expected carry clear"
     brk
 +
     lda program_counter
@@ -4269,8 +4260,7 @@ test_find_symbol_7: !pet "GAMMB",0
     cmp #>.epc
     bne +
     bra ++
-+   +print_strlit_line "... fail, wrong program-counter"
-    brk
++   brk
 ++
     lda next_segment_pc
     cmp #<.epc
@@ -4279,8 +4269,7 @@ test_find_symbol_7: !pet "GAMMB",0
     cmp #>.epc
     bne +
     bra ++
-+   +print_strlit_line "... fail, wrong next-segment-pc"
-    brk
++   brk
 ++
 !if .pass = $ff {
     lda #<attic_segments
@@ -4295,7 +4284,6 @@ test_find_symbol_7: !pet "GAMMB",0
     lda .edata,x
     cmp [attic_ptr],z
     beq +
-    +print_strlit_line "... fail, wrong segment data"
     brk
 +
     dex
@@ -4316,6 +4304,199 @@ test_assemble_bytes_twice_2:
     !word 5
     !byte 0, 1, 2, 3, 4
 test_assemble_bytes_twice_2_end:
+
+
+!macro test_expect_token .tnum, .a, .tokbuf, .tokbufend, .ec, .etokpos {
+    +test_start .tnum
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    lda #.a
+    ldx #0
+    stx tok_pos
+    jsr expect_token
+!if .ec {
+    bcs +
+    brk
++   ldx tok_pos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   ldx tok_pos
+    cpx #.etokpos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_expect_token_1: !byte 0, $ff
+test_expect_token_2: !byte 1, 4, 0, $ff
+test_expect_token_end:
+
+!macro test_expect_label .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ex, .ey {
+    +test_start .tnum
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+    jsr expect_label
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++   ldx tok_pos
+    beq +
+    +print_strlit_line "... fail, expected zero tok-pos"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   cpx #.ex
+    beq +
+    brk
++   cpy #.ey
+    beq +
+    brk
++   ldx tok_pos
+    cpx #.etokpos
+    beq +
+    +print_strlit_line "... fail, wrong tok-pos"
+    brk
++
+}
+
+    +test_end
+}
+
+test_expect_label_1: !byte 0, $ff
+test_expect_label_2: !byte tk_label_or_reg, 99, 5, 0, $ff
+test_expect_label_end:
+
+!macro test_expect_keyword .tnum, .tokbuf, .tokbufend, .lineaddr, .kw, .ec, .etokpos {
+    +test_start .tnum
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ; Fake assembly location in bank 5
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+
+    lda #<.lineaddr
+    sta line_addr
+    lda #>.lineaddr
+    sta line_addr+1
+    ldx #0
+    stx tok_pos
+    ldx #<.kw
+    ldy #>.kw
+    jsr expect_keyword
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++   ldx tok_pos
+    beq +
+    +print_strlit_line "... fail, expected zero tok-pos"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   ldx tok_pos
+    cpx #.etokpos
+    beq +
+    +print_strlit_line "... fail, wrong tok-pos"
+    brk
++
+}
+    +test_end
+}
+
+test_expect_keyword_1: !byte 0, $ff
+test_expect_keyword_2: !byte tk_label_or_reg, 2, 3, 0, $ff
+test_expect_keyword_end:
+test_expect_keyword_line_1: !pet "5 xor 7",0
+test_expect_keyword_line_2: !pet "5 XoR 7",0
+test_expect_keyword_line_3: !pet "5 ror 7",0
+
+!macro test_expect_oppop .tnum, .isop, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
+    +test_start .tnum
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+!if .isop {
+    jsr expect_opcode
+} else {
+    jsr expect_pseudoop
+}
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++   ldx tok_pos
+    beq +
+    +print_strlit_line "... fail, tok-pos moved"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   cmp #.ea
+    beq +
+    +print_strlit_line "... fail, wrong a"
+    brk
++   ldx tok_pos
+    cpx #.etokpos
+    beq +
+    +print_strlit_line "... fail, wrong tok-pos"
+    brk
++
+}
+
+    +test_end
+}
+!macro test_expect_opcode .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
+    +test_expect_oppop .tnum, 1, .tokbuf, .tokbufend, .ec, .etokpos, .ea
+}
+!macro test_expect_pseudoop .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
+    +test_expect_oppop .tnum, 0, .tokbuf, .tokbufend, .ec, .etokpos, .ea
+}
+
+test_expect_oppop_1: !byte 0, $ff
+test_expect_oppop_2: !byte 1, 4, 0, $ff
+test_expect_oppop_3: !byte po_to, 4, 0, $ff
+test_expect_oppop_end:
 
 
 run_test_suite_cmd:
@@ -4522,6 +4703,36 @@ run_test_suite_cmd:
     +test_assemble_bytes_twice $06, 0, $c000, $d000, 5, $d005, 0, 0
     +test_assemble_bytes_twice $07, $ff, $c000, $c005, 5, $c00a, test_assemble_bytes_twice_1, test_assemble_bytes_twice_2
     +test_assemble_bytes_twice $08, $ff, $c000, $d000, 5, $d005, test_assemble_bytes_twice_2, test_assemble_bytes_twice_2_end
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-token"
+    +test_expect_token $01, 1, test_expect_token_1, test_expect_token_2, 1, 0
+    +test_expect_token $02, 1, test_expect_token_2, test_expect_token_end, 0, 2
+    +test_expect_token $03, 4, test_expect_token_2, test_expect_token_end, 1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-label"
+    +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
+    +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-keyword"
+    +test_expect_keyword $01, test_expect_keyword_1, test_expect_keyword_2, test_expect_keyword_line_1, kw_xor, 1, 0
+    +test_expect_keyword $02, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_1, kw_xor, 0, 3
+    +test_expect_keyword $03, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_2, kw_xor, 0, 3
+    +test_expect_keyword $04, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_3, kw_xor, 1, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-opcode"
+    +test_expect_opcode $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
+    +test_expect_opcode $02, test_expect_oppop_2, test_expect_oppop_3, 0, 2, 1
+    +test_expect_opcode $03, test_expect_oppop_3, test_expect_oppop_end, 1, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-pseudoop"
+    +test_expect_pseudoop $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
+    +test_expect_pseudoop $02, test_expect_oppop_2, test_expect_oppop_3, 1, 0, 0
+    +test_expect_pseudoop $03, test_expect_oppop_3, test_expect_oppop_end, 0, 2, po_to
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

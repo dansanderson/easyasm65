@@ -35,6 +35,7 @@ Far future:
 * Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
 * List symbol definitions to file
 * List disassembly alongside source code to file
+* Zones and real locals
 * Macros
 * Conditional assembly
 * Conditional expressions
