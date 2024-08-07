@@ -1965,8 +1965,7 @@ expect_expr:
     sta bas_ptr+1
     tya
     tax               ; X = length
-    jsr find_symbol
-    bcs ++
+    jsr find_or_add_symbol
     jsr get_symbol_value
     bcs ++
     stq expr_result
@@ -1998,13 +1997,15 @@ expect_expr:
 
 ; Input: tokbuf, tok_pos
 ; Output:
-;   C=0 success, label assigned, tok_pos advanced
+;   C=0 success, PC updated, tok_pos advanced
 ;   C=1 fail
-;     err_code=0 not a label assign statement, tok_pos not advanced
+;     err_code=0 not a PC assign statement, tok_pos not advanced
 ;     err_code>0 fatal error with line_pos set
 assemble_pc_assign:
     ldx tok_pos
     phx
+    lda #0
+    sta err_code
 
     ; "*" "=" expr
     lda #tk_multiply
@@ -2047,7 +2048,7 @@ assemble_pc_assign:
 
 ; Input: tokbuf, tok_pos
 ; Output:
-;   C=0 success; PC assigned, tok_pos advanced
+;   C=0 success; label assigned, tok_pos advanced
 ;     Z = 0: was equal-assign, end statement
 ;     Z = 1: was PC assign, accept instruction or directive
 ;   C=1 fail
