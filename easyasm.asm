@@ -1955,8 +1955,41 @@ expect_literal:
 expect_expr:
     ; TODO: real expression evaluator
     ; This temporary expression parser accepts a literal or a label.
+    ldx tok_pos
+    phx
 
-    jsr expect_label
+    ; "(" expr ")"
+    lda #tk_lparen
+    jsr expect_token
+    bcs +++
+    jsr expect_expr
+    lbcs @fail
+    lda #tk_rparen
+    jsr expect_token
+    lbcs @fail
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    ora #F_EXPR_BRACKET_PAREN
+    sta expr_flags
+    lbra @succeed
+
+    ; "[" <expr> "]"
++++ lda #tk_lbracket
+    jsr expect_token
+    bcs +++
+    jsr expect_expr
+    lbcs @fail
+    lda #tk_rbracket
+    jsr expect_token
+    lbcs @fail
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    ora #F_EXPR_BRACKET_SQUARE
+    sta expr_flags
+    lbra @succeed
+
+    ; <label>
++++ jsr expect_label
     bcs +++
     txa               ; bas_ptr = line_addr + X (line_pos of label)
     clc
@@ -1985,14 +2018,18 @@ expect_expr:
     sta expr_flags
     bra @succeed
 
+    ; <literal>
 +++ jsr expect_literal
     bcs @fail
     bra @succeed
 
 @fail
+    plx
+    stx tok_pos
     sec
     rts
 @succeed
+    plx
     clc
     rts
 
@@ -2176,6 +2213,13 @@ is_expr_16bit:
 }
 
 expect_addressing_expr:
+    lda #0
+    sta expr_result
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+    sta expr_flags
+
     ; ":" or end of line: Implicit
     ldx tok_pos
     lda tokbuf,x
@@ -2189,9 +2233,9 @@ expect_addressing_expr:
     ; "#" <expr>: Immediate
     lda #tk_hash
     jsr expect_token
-    bne @try_modes_with_leading_expr
+    bcs @try_modes_with_leading_expr
     jsr expect_expr
-    bcc ++
+    bcs ++
     jsr is_expr_16bit
     bcs +
     +expect_addresing_expr_rts MODE_IMMEDIATE
@@ -2200,7 +2244,7 @@ expect_addressing_expr:
 
 @try_modes_with_leading_expr
     jsr expect_expr
-    bcs @try_modes_without_leading_expr
+    lbcs @try_modes_without_leading_expr
     ; Addressing modes that start with expressions:
     lda expr_flags
     and #F_EXPR_BRACKET_MASK
@@ -2212,13 +2256,15 @@ expect_addressing_expr:
     ;    <expr-8> ["," ("x" | "y")]
     lda #tk_comma
     jsr expect_token
-    beq +
+    bcc +
     +expect_addresing_expr_rts MODE_BASE_PAGE
-+   lda #kw_x
++   ldx #<kw_x
+    ldy #>kw_x
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_X
-+   lda #kw_y
++   ldx #<kw_y
+    ldy #>kw_y
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_Y
@@ -2228,13 +2274,15 @@ expect_addressing_expr:
 ++  ; <expr-16> ["," ("x" | "y")]
     lda #tk_comma
     jsr expect_token
-    beq +
+    bcc +
     +expect_addresing_expr_rts MODE_ABSOLUTE
-+   lda #kw_x
++   ldx #<kw_x
+    ldy #>kw_x
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_ABSOLUTE_X
-+   lda #kw_y
++   ldx #<kw_y
+    ldy #>kw_y
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_ABSOLUTE_Y
@@ -2249,14 +2297,16 @@ expect_addressing_expr:
     ; "(" <expr-8> ")" ["," ("y" | "z")]
     lda #tk_comma
     jsr expect_token
-    beq +
+    bcc +
     ; (Base page indirect no register implies "Z".)
     +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Z
-+   lda #kw_y
++   ldx #<kw_y
+    ldy #>kw_y
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Y
-+   lda #kw_z
++   ldx #<kw_z
+    ldy #>kw_z
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Z
@@ -2271,16 +2321,21 @@ expect_addressing_expr:
     jsr is_expr_16bit
     bcc +
     ; Error: Argument out of range
+    lda tok_pos  ; position error at beginning of expression
+    sec
+    sbc #8
+    sta tok_pos
     lda #err_value_out_of_range
     sta err_code
     lbra @other_error
 
 +   lda #tk_comma
     jsr expect_token
-    bne +
-    lda #kw_z
+    bcs +  ; ,z is optional
+    ldx #<kw_z
+    ldy #>kw_z
     jsr expect_keyword
-    bcc +
+    bcc +  ; z is required if , is provided
     ; Syntax error: "[" <expr-8> "]" "," non-z
     lbra @syntax_error
 +   +expect_addresing_expr_rts MODE_32BIT_IND
@@ -2289,27 +2344,29 @@ expect_addressing_expr:
     ; Addressing modes that don't start with expressions:
     lda #tk_lparen
     jsr expect_token
-    beq +
+    bcc +
     lbra @syntax_error
 +   jsr expect_expr
     bcc +
     lbra @syntax_error
 +   lda #tk_comma
     jsr expect_token
-    beq +
+    bcc +
     lbra @syntax_error
-+   lda #kw_sp
++   ldx #<kw_sp
+    ldy #>kw_sp
     jsr expect_keyword
     bcc +++
     ; (<expr-8>,x)
     ; (<expr-16>,x)
-    lda #kw_x
+    ldx #<kw_x
+    ldy #>kw_x
     jsr expect_keyword
     bcc +
     lbra @syntax_error
 +   lda #tk_rparen
     jsr expect_token
-    beq +
+    bcc +
     lbra @syntax_error
 +   jsr is_expr_16bit
     bcs +
@@ -2319,13 +2376,14 @@ expect_addressing_expr:
 +++ ; (<expr>,sp),y
     lda #tk_rparen
     jsr expect_token
-    beq +
+    bcc +
     lbra @syntax_error
 +   lda #tk_comma
     jsr expect_token
-    beq +
+    bcc +
     lbra @syntax_error
-+   lda #kw_y
++   ldx #<kw_y
+    ldy #>kw_y
     jsr expect_keyword
     bcc +
     lbra @syntax_error
@@ -2607,7 +2665,7 @@ assemble_line:
     ; (This covers <label> ":" also.)
     lda #tk_colon
     jsr expect_token
-    lbeq @tokbuf_loop
+    lbcc @tokbuf_loop
 
 @must_end
     ldx tok_pos
@@ -2697,148 +2755,148 @@ e06: !pet "out of memory",0
 ; Mnemonics token list
 mnemonic_count = 136
 mnemonics:
-!pet "adc",0
+!pet "adc",0   ; $00
 !pet "adcq",0  ; $01
-!pet "and",0
+!pet "and",0   ; $02
 !pet "andq",0  ; $03
-!pet "asl",0
+!pet "asl",0   ; $04
 !pet "aslq",0  ; $05
-!pet "asr",0
+!pet "asr",0   ; $06
 !pet "asrq",0  ; $07
-!pet "asw",0
-!pet "bbr0",0
-!pet "bbr1",0
-!pet "bbr2",0
-!pet "bbr3",0
-!pet "bbr4",0
-!pet "bbr5",0
-!pet "bbr6",0
-!pet "bbr7",0
-!pet "bbs0",0
-!pet "bbs1",0
-!pet "bbs2",0
-!pet "bbs3",0
-!pet "bbs4",0
-!pet "bbs5",0
-!pet "bbs6",0
-!pet "bbs7",0
-!pet "bcc",0
-!pet "bcs",0
-!pet "beq",0
-!pet "bit",0
+!pet "asw",0   ; $08
+!pet "bbr0",0  ; $09
+!pet "bbr1",0  ; $0A
+!pet "bbr2",0  ; $0B
+!pet "bbr3",0  ; $0C
+!pet "bbr4",0  ; $0D
+!pet "bbr5",0  ; $0E
+!pet "bbr6",0  ; $0F
+!pet "bbr7",0  ; $10
+!pet "bbs0",0  ; $11
+!pet "bbs1",0  ; $12
+!pet "bbs2",0  ; $13
+!pet "bbs3",0  ; $14
+!pet "bbs4",0  ; $15
+!pet "bbs5",0  ; $16
+!pet "bbs6",0  ; $17
+!pet "bbs7",0  ; $18
+!pet "bcc",0   ; $19
+!pet "bcs",0   ; $1A
+!pet "beq",0   ; $1B
+!pet "bit",0   ; $1C
 !pet "bitq",0  ; $1D
-!pet "bmi",0
-!pet "bne",0
-!pet "bpl",0
-!pet "bra",0
-!pet "brk",0
-!pet "bsr",0
-!pet "bvc",0
-!pet "bvs",0
-!pet "clc",0
-!pet "cld",0
-!pet "cle",0
-!pet "cli",0
-!pet "clv",0
-!pet "cmp",0
-!pet "cmpq",0  ; $2D
-!pet "cpq",0   ; $2E
-!pet "cpx",0
-!pet "cpy",0
-!pet "cpz",0
-!pet "dec",0
-!pet "deq",0   ; $33
-!pet "dew",0
-!pet "dex",0
-!pet "dey",0
-!pet "dez",0
-!pet "eom",0
-!pet "eor",0
-!pet "eorq",0  ; $3A
-!pet "inc",0
-!pet "inq",0   ; $3C
-!pet "inw",0
-!pet "inx",0
-!pet "iny",0
-!pet "inz",0
-!pet "jmp",0
-!pet "jsr",0
-!pet "lda",0
-!pet "ldq",0  ; $44
-!pet "ldx",0
-!pet "ldy",0
-!pet "ldz",0
-!pet "lsr",0
-!pet "lsrq",0  ; $49
-!pet "map",0
-!pet "neg",0
-!pet "ora",0
-!pet "orq",0   ; $4D
-!pet "pha",0
-!pet "php",0
-!pet "phw",0
-!pet "phx",0
-!pet "phy",0
-!pet "phz",0
-!pet "pla",0
-!pet "plp",0
-!pet "plx",0
-!pet "ply",0
-!pet "plz",0
-!pet "rmb0",0
-!pet "rmb1",0
-!pet "rmb2",0
-!pet "rmb3",0
-!pet "rmb4",0
-!pet "rmb5",0
-!pet "rmb6",0
-!pet "rmb7",0
-!pet "rol",0
-!pet "rolq",0  ; $62
-!pet "ror",0
-!pet "rorq",0  ; $64
-!pet "row",0
-!pet "rti",0
-!pet "rts",0
-!pet "sbc",0
-!pet "sbcq",0  ; $69
-!pet "sec",0
-!pet "sed",0
-!pet "see",0
-!pet "sei",0
-!pet "smb0",0
-!pet "smb1",0
-!pet "smb2",0
-!pet "smb3",0
-!pet "smb4",0
-!pet "smb5",0
-!pet "smb6",0
-!pet "smb7",0
-!pet "sta",0
-!pet "stq",0  ; $77
-!pet "stx",0
-!pet "sty",0
-!pet "stz",0
-!pet "tab",0
-!pet "tax",0
-!pet "tay",0
-!pet "taz",0
-!pet "tba",0
-!pet "trb",0
-!pet "tsb",0
-!pet "tsx",0
-!pet "tsy",0
-!pet "txa",0
-!pet "txs",0
-!pet "tya",0
-!pet "tys",0
-!pet "tza",0
+!pet "bmi",0   ; $1E
+!pet "bne",0   ; $1F
+!pet "bpl",0   ; $20
+!pet "bra",0   ; $21
+!pet "brk",0   ; $22
+!pet "bsr",0   ; $23
+!pet "bvc",0   ; $24
+!pet "bvs",0   ; $25
+!pet "clc",0   ; $26
+!pet "cld",0   ; $27
+!pet "cle",0   ; $28
+!pet "cli",0   ; $29
+!pet "clv",0   ; $2A
+!pet "cmp",0   ; $2B
+!pet "cmpq",0  ; $2C
+!pet "cpq",0   ; $2D
+!pet "cpx",0   ; $2E
+!pet "cpy",0   ; $2F
+!pet "cpz",0   ; $30
+!pet "dec",0   ; $31
+!pet "deq",0   ; $32
+!pet "dew",0   ; $33
+!pet "dex",0   ; $34
+!pet "dey",0   ; $35
+!pet "dez",0   ; $36
+!pet "eom",0   ; $37
+!pet "eor",0   ; $38
+!pet "eorq",0  ; $39
+!pet "inc",0   ; $3A
+!pet "inq",0   ; $3B
+!pet "inw",0   ; $3C
+!pet "inx",0   ; $3D
+!pet "iny",0   ; $3E
+!pet "inz",0   ; $3F
+!pet "jmp",0   ; $40
+!pet "jsr",0   ; $41
+!pet "lda",0   ; $42
+!pet "ldq",0   ; $43
+!pet "ldx",0   ; $44
+!pet "ldy",0   ; $45
+!pet "ldz",0   ; $46
+!pet "lsr",0   ; $47
+!pet "lsrq",0  ; $48
+!pet "map",0   ; $49
+!pet "neg",0   ; $4A
+!pet "ora",0   ; $4B
+!pet "orq",0   ; $4C
+!pet "pha",0   ; $4D
+!pet "php",0   ; $4E
+!pet "phw",0   ; $4F
+!pet "phx",0   ; $50
+!pet "phy",0   ; $51
+!pet "phz",0   ; $52
+!pet "pla",0   ; $53
+!pet "plp",0   ; $54
+!pet "plx",0   ; $55
+!pet "ply",0   ; $56
+!pet "plz",0   ; $57
+!pet "rmb0",0  ; $58
+!pet "rmb1",0  ; $59
+!pet "rmb2",0  ; $5A
+!pet "rmb3",0  ; $5B
+!pet "rmb4",0  ; $5C
+!pet "rmb5",0  ; $5D
+!pet "rmb6",0  ; $5E
+!pet "rmb7",0  ; $5F
+!pet "rol",0   ; $60
+!pet "rolq",0  ; $61
+!pet "ror",0   ; $62
+!pet "rorq",0  ; $63
+!pet "row",0   ; $64
+!pet "rti",0   ; $65
+!pet "rts",0   ; $66
+!pet "sbc",0   ; $67
+!pet "sbcq",0  ; $68
+!pet "sec",0   ; $69
+!pet "sed",0   ; $6A
+!pet "see",0   ; $6B
+!pet "sei",0   ; $6C
+!pet "smb0",0  ; $6D
+!pet "smb1",0  ; $6E
+!pet "smb2",0  ; $6F
+!pet "smb3",0  ; $70
+!pet "smb4",0  ; $71
+!pet "smb5",0  ; $72
+!pet "smb6",0  ; $73
+!pet "smb7",0  ; $74
+!pet "sta",0   ; $75
+!pet "stq",0   ; $76
+!pet "stx",0   ; $77
+!pet "sty",0   ; $78
+!pet "stz",0   ; $79
+!pet "tab",0   ; $7A
+!pet "tax",0   ; $7B
+!pet "tay",0   ; $7C
+!pet "taz",0   ; $7D
+!pet "tba",0   ; $7E
+!pet "trb",0   ; $7F
+!pet "tsb",0   ; $80
+!pet "tsx",0   ; $81
+!pet "tsy",0   ; $82
+!pet "txa",0   ; $83
+!pet "txs",0   ; $84
+!pet "tya",0   ; $85
+!pet "tys",0   ; $86
+!pet "tza",0   ; $87
 !byte 0
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
-!byte $01, $03, $05, $07, $1D, $2D, $2E, $33, $3A, $3C, $44, $49, $4D, $62
-!byte $64, $69, $77
+!byte $01, $03, $05, $07, $1D, $2C, $2D, $32, $39, $3B, $43, $48, $4C, $61
+!byte $63, $68, $76
 !byte 0
 
 ; Pseudo-op table
@@ -3444,7 +3502,8 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-!source "test_suite_2.asm"
+; !source "test_suite_2.asm"
+!source "test_suite_3.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
