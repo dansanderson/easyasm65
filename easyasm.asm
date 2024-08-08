@@ -52,9 +52,9 @@ F_EXPR_BRACKET_PAREN  = %00000001
 ; - Entire expression surrounded by square brackets
 F_EXPR_BRACKET_SQUARE = %00000010
 ; - Hex/dec number literal with leading zero, or symbol assigned such a literal with =
-F_EXPR_BRACKET_ZERO   = %00000011
+F_EXPR_BRACKET_ZERO   = %00000100
 ; - Expr contains undefined symbol
-F_EXPR_UNDEFINED      = %00000100
+F_EXPR_UNDEFINED      = %00001000
 
 tok_pos         *=*+1   ; Offset of tokbuf
 line_pos        *=*+1   ; Offset of line_addr
@@ -2147,14 +2147,198 @@ assemble_label:
     lbra statement_ok_exit
 
 
+; Input: expr_result, expr_flags
+; Output: C=1 if expr is > 256 or is forced to 16-bit with leading zero
+is_expr_16bit:
+    lda expr_flags
+    and #F_EXPR_BRACKET_ZERO
+    bne +
+    lda expr_result+1
+    ora expr_result+2
+    ora expr_result+3
+    bne +
+    clc
+    rts
++   sec
+    rts
+
+
 ; Input: tokbuf, tok_pos
 ; Output:
 ;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
 ;   C=1 fail
 ;     err_code>0 fatal error with line_pos set
+!macro expect_addresing_expr_rts .mode {
+    ldx #<.mode
+    ldy #>.mode
+    clc
+    rts
+}
+
 expect_addressing_expr:
-    ; TODO: the rest of the owl
-    ; TODO: colon or end of line = Implicit
+    ; ":" or end of line: Implicit
+    ldx tok_pos
+    lda tokbuf,x
+    beq +
+    cmp #tk_colon
+    beq +
+    bra @try_immediate
++   +expect_addresing_expr_rts MODE_IMPLIED
+
+@try_immediate
+    ; "#" <expr>: Immediate
+    lda #tk_hash
+    jsr expect_token
+    bne @try_modes_with_leading_expr
+    jsr expect_expr
+    bcc ++
+    jsr is_expr_16bit
+    bcs +
+    +expect_addresing_expr_rts MODE_IMMEDIATE
++   +expect_addresing_expr_rts MODE_IMMEDIATE_WORD
+++  lbra @syntax_error
+
+@try_modes_with_leading_expr
+    jsr expect_expr
+    bcs @try_modes_without_leading_expr
+    ; Addressing modes that start with expressions:
+    lda expr_flags
+    and #F_EXPR_BRACKET_MASK
+    cmp #F_EXPR_BRACKET_NONE
+    bne +++
+    ; - Non-brackets:
+    jsr is_expr_16bit
+    bcs ++
+    ;    <expr-8> ["," ("x" | "y")]
+    lda #tk_comma
+    jsr expect_token
+    beq +
+    +expect_addresing_expr_rts MODE_BASE_PAGE
++   lda #kw_x
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_BASE_PAGE_X
++   lda #kw_y
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_BASE_PAGE_Y
++   ; Syntax error: <expr-8> "," non-x/y
+    lbra @syntax_error
+
+++  ; <expr-16> ["," ("x" | "y")]
+    lda #tk_comma
+    jsr expect_token
+    beq +
+    +expect_addresing_expr_rts MODE_ABSOLUTE
++   lda #kw_x
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_ABSOLUTE_X
++   lda #kw_y
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_ABSOLUTE_Y
++   ; Syntax error: <expr-16> "," non-x/y
+    lbra @syntax_error
+
++++ cmp #F_EXPR_BRACKET_PAREN
+    bne +++
+    ; - Parens:
+    jsr is_expr_16bit
+    bcs ++
+    ; "(" <expr-8> ")" ["," ("y" | "z")]
+    lda #tk_comma
+    jsr expect_token
+    beq +
+    ; (Base page indirect no register implies "Z".)
+    +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Z
++   lda #kw_y
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Y
++   lda #kw_z
+    jsr expect_keyword
+    bcs +
+    +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Z
++   ; Syntax error: "(" <expr-8> ")" "," non-y/z
+    lbra @syntax_error
+
+++  ; "(" <expr-16> ")"
+    +expect_addresing_expr_rts MODE_ABSOLUTE_IND
+
++++ ; - Brackets:
+    ;    "[" <expr-8> "]" ["," "z"]
+    jsr is_expr_16bit
+    bcc +
+    ; Error: Argument out of range
+    lda #err_value_out_of_range
+    sta err_code
+    lbra @other_error
+
++   lda #tk_comma
+    jsr expect_token
+    bne +
+    lda #kw_z
+    jsr expect_keyword
+    bcc +
+    ; Syntax error: "[" <expr-8> "]" "," non-z
+    lbra @syntax_error
++   +expect_addresing_expr_rts MODE_32BIT_IND
+
+@try_modes_without_leading_expr
+    ; Addressing modes that don't start with expressions:
+    lda #tk_lparen
+    jsr expect_token
+    beq +
+    lbra @syntax_error
++   jsr expect_expr
+    bcc +
+    lbra @syntax_error
++   lda #tk_comma
+    jsr expect_token
+    beq +
+    lbra @syntax_error
++   lda #kw_sp
+    jsr expect_keyword
+    bcc +++
+    ; (<expr-8>,x)
+    ; (<expr-16>,x)
+    lda #kw_x
+    jsr expect_keyword
+    bcc +
+    lbra @syntax_error
++   lda #tk_rparen
+    jsr expect_token
+    beq +
+    lbra @syntax_error
++   jsr is_expr_16bit
+    bcs +
+    +expect_addresing_expr_rts MODE_BASE_PAGE_IND_X
++   +expect_addresing_expr_rts MODE_ABSOLUTE_IND_X
+
++++ ; (<expr>,sp),y
+    lda #tk_rparen
+    jsr expect_token
+    beq +
+    lbra @syntax_error
++   lda #tk_comma
+    jsr expect_token
+    beq +
+    lbra @syntax_error
++   lda #kw_y
+    jsr expect_keyword
+    bcc +
+    lbra @syntax_error
++   +expect_addresing_expr_rts MODE_STACK_REL
+
+@syntax_error
+    lda #err_syntax
+    sta err_code
+@other_error
+    ldx tok_pos
+    lda tokbuf+1,x
+    sta line_pos
+    sec
     rts
 
 
@@ -2243,10 +2427,10 @@ v_supported_modes = code_ptr ; (word)
     stx v_buf_pos
 
 ++  ; Assemble 32-bit indirect prefix
-    ;   MODE_32BIT_INDIRECT
+    ;   MODE_32BIT_IND
     ;   Emit $EA
     lda v_addr_mode+1
-    and #>MODE_32BIT_INDIRECT
+    and #>MODE_32BIT_IND
     beq ++
     ; Is 32-bit indirect, emit $EA
     ldx v_buf_pos
@@ -2786,10 +2970,25 @@ kw_runnable: !pet "runnable",0
 ;                     ^ Base-Page Indirect Z-Indexed (or no index)
 ;                      ^ 32-bit Base-Page Indirect Z-Indexed (or no index)
 ;                       ^ Stack Relative Indirect, Y-Indexed
-MODES_NO_OPERAND    = %1000000000000000
-MODES_BYTE_OPERAND  = %0101110000011111
-MODES_WORD_OPERAND  = %0010001111100000
-MODE_32BIT_INDIRECT = %0000000000000010
+MODES_NO_OPERAND     = %1000000000000000
+MODES_BYTE_OPERAND   = %0101110000011111
+MODES_WORD_OPERAND   = %0010001111100000
+MODE_IMPLIED         = %0000000000000000
+MODE_IMMEDIATE       = %0000000000000000
+MODE_IMMEDIATE_WORD  = %0000000000000000
+MODE_BASE_PAGE       = %0000000000000000
+MODE_BASE_PAGE_X     = %0000000000000000
+MODE_BASE_PAGE_Y     = %0000000000000000
+MODE_ABSOLUTE        = %0000000000000000
+MODE_ABSOLUTE_X      = %0000000000000000
+MODE_ABSOLUTE_Y      = %0000000000000000
+MODE_ABSOLUTE_IND    = %0000000000000000
+MODE_ABSOLUTE_IND_X  = %0000000000000000
+MODE_BASE_PAGE_IND_X = %0000000000000000
+MODE_BASE_PAGE_IND_Y = %0000000000000000
+MODE_BASE_PAGE_IND_Z = %0000000000000000
+MODE_32BIT_IND       = %0000000000000010
+MODE_STACK_REL       = %0000000000000001
 addressing_modes:
 !word %0101101110011110  ; adc
 !word enc_adc

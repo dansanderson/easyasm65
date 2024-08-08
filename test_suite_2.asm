@@ -385,6 +385,8 @@ run_test_suite_cmd:
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_assemble_label $08, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 1, 0, err_already_defined, 0, 0, 0, 0
 
+    ; -----------------------------------
+
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
     rts
