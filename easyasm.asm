@@ -26,7 +26,7 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 46
+* = $100 - 48
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -35,6 +35,9 @@ F_ASM_PC_DEFINED = %00000001
 current_segment *=*+4
 next_segment_pc *=*+2
 next_segment_byte_addr *=*+4
+stmt_tokpos     *=*+1
+label_pos       *=*+1
+label_length    *=*+1
 
 symtbl_next_name *=*+3
 
@@ -1565,8 +1568,7 @@ set_symbol_value:
     pla
     stq [expr_a]
     ldz #3
-    lda [attic_ptr],z
-    ora #F_SYMTBL_DEFINED
+    lda #F_SYMTBL_DEFINED
     sta [attic_ptr],z
     rts
 
@@ -2002,11 +2004,6 @@ expect_expr:
 ;     err_code=0 not a PC assign statement, tok_pos not advanced
 ;     err_code>0 fatal error with line_pos set
 assemble_pc_assign:
-    ldx tok_pos
-    phx
-    lda #0
-    sta err_code
-
     ; "*" "=" expr
     lda #tk_multiply
     jsr expect_token
@@ -2055,70 +2052,96 @@ assemble_pc_assign:
 ;     err_code=0 not a pc assign statement, tok_pos not advanced
 ;     err_code>0 fatal error with line_pos set
 assemble_label:
-    ldx tok_pos
-    phx
 
     ; TODO: <rel-label> (no "=")
 
     ; <label> ["=" expr]
     jsr expect_label
     lbcs statement_err_exit
-    stx expr_a     ; line_pos
-    sty expr_a+1   ; length
+    stx label_pos      ; line_pos
+    sty label_length   ; length
     lda #tk_equal
     jsr expect_token
-    bcs @label_without_equal
+    lbcs @label_without_equal
     jsr expect_expr
-    bcc +
-    lda expr_a
+    lbcc @label_with_equal
+    lda label_pos
     sta line_pos
     lda #err_syntax  ; expr required after "="
     sta err_code
     lbra statement_err_exit
 
-+   ; Set label to expr, possibly undefined
-    lda expr_a
+; (This is jsr'd.)
+@find_or_add_symbol_to_define:
+    lda label_pos    ; line_pos
     clc
     adc line_addr
     sta bas_ptr
     lda #0
     adc line_addr+1
-    sta bas_ptr+1
-    ldx expr_a+1
+    sta bas_ptr+1    ; bas_ptr = line_addr + line_pos
+    ldx label_length ; X = length
     jsr find_or_add_symbol
+    bcc +
+    lda #err_out_of_memory
+    sta err_code
+    pha
+    pha
+    lbra statement_err_exit
++
+    ldz #3           ; Error if symbol is already defined
+    lda [attic_ptr],z
+    and #F_SYMTBL_DEFINED
+    beq +
+    lda label_pos
+    sta line_pos
+    lda #err_already_defined
+    sta err_code
+    pla  ; pop caller address, go straight to exit
+    pla
+    lbra statement_err_exit
++   rts
+
+@label_with_equal:
+    ; Set label to expr, possibly undefined
+    jsr @find_or_add_symbol_to_define
     lda expr_flags
     and #F_EXPR_UNDEFINED
+    beq +
     ldz #0
-    lbne statement_ok_exit  ; label expr is undefined; leave symbol undefined
-
+    lbra statement_ok_exit  ; label expr is undefined; leave symbol undefined
++
     ; label expr is defined, use value; propagate zero flag
     ldq expr_result
     jsr set_symbol_value
     lda expr_flags
     and #F_EXPR_BRACKET_ZERO
     beq +
-    ldz #2
+    ldz #3
     lda [attic_ptr],z
-    ora F_SYMTBL_LEADZERO
+    ora #F_SYMTBL_LEADZERO
     sta [attic_ptr],z
 +   ldz #0
     lbra statement_ok_exit
 
 @label_without_equal
     ; Label without "=", set label to PC
+    jsr @find_or_add_symbol_to_define
     ; PC undefined is an error
-    lda asm_flags
-    and #F_ASM_PC_DEFINED
-    bne +
-    lda expr_a
+    jsr get_pc
+    bcc +
+    lda label_pos
     sta line_pos
     lda #err_pc_undef
     sta err_code
     lbra statement_err_exit
-+   lda program_counter
-    ldx program_counter+1
-    ldy #0
-    ldz #0
++   ; Move X/Y (from get_pc) to Q
+    stx expr_result
+    sty expr_result+1
+    lda #0
+    sta expr_result+2
+    sta expr_result+3
+    ldq expr_result
     jsr set_symbol_value
     ldz #1
     lbra statement_ok_exit
@@ -2129,15 +2152,10 @@ assemble_label:
 ;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
 ;   C=1 fail
 ;     err_code>0 fatal error with line_pos set
-assemble_addressing_expr:
-    ldx tok_pos
-    phx
-
+expect_addressing_expr:
     ; TODO: the rest of the owl
     ; TODO: colon or end of line = Implicit
-
-    lbra statement_err_exit
-    lbra statement_ok_exit
+    rts
 
 
 ; Input: tokbuf, tok_pos
@@ -2146,8 +2164,6 @@ assemble_addressing_expr:
 ;   C=1 fail
 ;     err_code>0 fatal error with line_pos set
 assemble_instruction:
-    ldx tok_pos
-    phx
 
 v_line_pos = expr_b         ; (byte)
 v_mnemonic_id = expr_b+1    ; (byte)
@@ -2162,7 +2178,7 @@ v_supported_modes = code_ptr ; (word)
     jsr expect_opcode
     lbcs statement_err_exit
     pha
-    jsr assemble_addressing_expr
+    jsr expect_addressing_expr
     pla
     lbcs statement_err_exit
 
@@ -2317,9 +2333,6 @@ v_supported_modes = code_ptr ; (word)
 
 
 assemble_directive:
-    ldx tok_pos
-    phx
-
     ; <pseudoop> arglist
     jsr expect_pseudoop
     lbcs statement_err_exit
@@ -2330,16 +2343,13 @@ assemble_directive:
     lbra statement_ok_exit
 
 
-; Input: rollback tok_pos on stack
 statement_err_exit
-    plx  ; rollback
+    ldx stmt_tokpos
     stx tok_pos
     sec
     rts
 
-; Input: rollback tok_pos on stack
 statement_ok_exit
-    plx  ; discard
     clc
     rts
 
@@ -2381,6 +2391,7 @@ assemble_line:
     ldx tok_pos
     lda tokbuf,x
     lbeq @end_tokbuf
+    stx stmt_tokpos
 
     jsr assemble_pc_assign
     bcc @next_statement
@@ -2493,6 +2504,10 @@ err_value_out_of_range = 3
 e03: !pet "value out of range",0
 err_unsupported_addr_mode = 4
 e04: !pet "unsupported addressing mode for instruction",0
+err_already_defined = 5
+e05: !pet "symbol already defined",0
+err_out_of_memory = 6
+e06: !pet "out of memory",0
 
 ; ---------------------------------------------------------
 ; Mnemonics token list

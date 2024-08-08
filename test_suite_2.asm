@@ -6,6 +6,9 @@
     sta bas_ptr+2
     lda #0
     sta bas_ptr+3
+
+    sta err_code
+    sta asm_flags
 }
 
 !macro create_undefined_symbol_for_test .name, .namelength {
@@ -124,6 +127,8 @@ test_expect_expr_line_1: !pet "label",0
 
     ldx #0
     stx tok_pos
+    stx stmt_tokpos
+    stx err_code
     stx asm_flags
     stx program_counter
     stx program_counter+1
@@ -189,6 +194,119 @@ test_assemble_pc_assign_tb_end:
 test_assemble_pc_assign_line_1: !pet "* = label",0
 
 
+!macro test_assemble_label .tnum, .tokbuf, .tokbufend, .lineaddr, .ec, .etokpos, .eerr, .ez, .edefined, .evalue, .ezero {
+    +test_start .tnum
+
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    lda #<.lineaddr
+    sta line_addr
+    lda #>.lineaddr
+    sta line_addr+1
+
+    ldx #0
+    stx tok_pos
+    stx stmt_tokpos
+    jsr assemble_label
+
+!if .ec {
+    bcs +
+    +print_strlit_line "... fail, expected carry set"
+    brk
++   ldx tok_pos
+    beq +
+    +print_strlit_line "... fail, expected tok-pos zero"
+    brk
++   lda err_code
+    cmp #.eerr
+    beq +
+    +print_strlit_line "... fail, wrong errcode"
+    brk
++
+} else {
+    bcc +
+    +print_strlit_line "... fail, expected carry clear"
+    brk
++   lda tok_pos
+    cmp #.etokpos
+    beq +
+    +print_strlit_line "... fail, wrong tokpos (a)"
+    brk
++   cpz #.ez
+    beq +
+    +print_strlit_line "... fail, wrong z"
+    brk
++
+    lda #<.lineaddr
+    sta bas_ptr
+    lda #>.lineaddr
+    sta bas_ptr+1
+    ldx #5
+    jsr find_symbol
+    jsr get_symbol_value
+!if .edefined {
+    cmp #<.evalue
+    beq +
+    +print_strlit_line "... fail, wrong value (a)"
+    brk
++   cpx #>.evalue
+    beq +
+    +print_strlit_line "... fail, wrong value (b)"
+    brk
++   cpy #^.evalue
+    beq +
+    +print_strlit_line "... fail, wrong value (c)"
+    brk
++   cpz #<(.evalue >>> 24)
+    beq +
+    +print_strlit_line "... fail, wrong value (d)"
+    brk
++
+    ldz #3
+    lda [attic_ptr],z
+    and #F_SYMTBL_DEFINED
+    bne +
+    +print_strlit_line "... fail, expected value defined"
+    brk
++
+!if .ezero {
+    ldz #3
+    lda [attic_ptr],z
+    and #F_SYMTBL_LEADZERO
+    bne +
+    +print_strlit_line "... fail, expected value leading zero"
+    brk
++
+}
+} else {
+    ldz #3
+    lda [attic_ptr],z
+    and #F_SYMTBL_DEFINED
+    beq +
+    +print_strlit_line "... fail, expected value undefined"
+    brk
++
+}
+}
+
+    +test_end
+}
+
+test_assemble_label_tb_1: !byte 0, $ff
+test_assemble_label_tb_2: !byte tk_label_or_reg, 0, 5, tk_equal, 6, tk_number_literal, 8, $dd, $cc, $00, $00, 0, $ff
+test_assemble_label_tb_3: !byte tk_label_or_reg, 0, 5, tk_equal, 6, tk_number_literal_leading_zero, 8, $dd, $cc, $00, $00, 0, $ff
+test_assemble_label_tb_4: !byte tk_label_or_reg, 0, 5, tk_equal, 6, tk_label_or_reg, 8, 6, 0, $ff
+test_assemble_label_tb_5: !byte tk_label_or_reg, 0, 5, 0, $ff
+test_assemble_label_tb_6: !byte tk_label_or_reg, 0, 5, 1, 6, 0, $ff
+test_assemble_label_tb_end:
+test_assemble_label_line_1: !pet "label = label2",0
+
+
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
@@ -229,6 +347,43 @@ run_test_suite_cmd:
     +start_test_expect_expr
     +test_assemble_pc_assign $05, test_assemble_pc_assign_tb_4, test_assemble_pc_assign_tb_end, test_assemble_pc_assign_line_1, 1, 0, err_value_out_of_range, 0, 0
 
+    ; -----------------------------------
+
+    +print_chr chr_cr
+    +print_strlit_line "test-assemble-label"
+    +start_test_expect_expr
+
+    +test_assemble_label $01, test_assemble_label_tb_1, test_assemble_label_tb_2, test_assemble_label_line_1, 1, 0, 0, 0, 0, 0, 0
+    +start_test_expect_expr
+    +test_assemble_label $02, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 0, 11, 0, 0, 1, $ccdd, 0
+
+    +start_test_expect_expr
+    +test_assemble_label $03, test_assemble_label_tb_3, test_assemble_label_tb_4, test_assemble_label_line_1, 0, 11, 0, 0, 1, $ccdd, 1
+
+    +start_test_expect_expr
+    +test_assemble_label $04, test_assemble_label_tb_4, test_assemble_label_tb_5, test_assemble_label_line_1, 0, 8, 0, 0, 0, 0, 0
+
+    +start_test_expect_expr
+    jsr init_pass
+    +test_assemble_label $05, test_assemble_label_tb_5, test_assemble_label_tb_6, test_assemble_label_line_1, 1, 0, err_pc_undef, 0, 0, 0, 0
+
+    +start_test_expect_expr
+    jsr init_pass
+    ldx #$bb
+    ldy #$aa
+    jsr set_pc
+    +test_assemble_label $06, test_assemble_label_tb_5, test_assemble_label_tb_6, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
+
+    +start_test_expect_expr
+    jsr init_pass
+    ldx #$bb
+    ldy #$aa
+    jsr set_pc
+    +test_assemble_label $07, test_assemble_label_tb_6, test_assemble_label_tb_end, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
+
+    +start_test_expect_expr
+    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
+    +test_assemble_label $08, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 1, 0, err_already_defined, 0, 0, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
