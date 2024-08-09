@@ -52,53 +52,17 @@
     jsr expect_expr
 
 !if .ec {
-    bcs +
-    +print_strlit_line "... fail, expected carry set"
-    brk
-+   ldx tok_pos
-    beq +
-    +print_strlit_line "... fail, expected tok-pos zero"
-    brk
-+
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte tok_pos, 0, test_msg_tokpos_zero
 } else {
-    bcc +
-    +print_strlit_line "... fail, expected carry clear"
-    brk
-+   lda tok_pos
-    cmp #.etokpos
-    beq +
-    +print_strlit_line "... fail, wrong tokpos (a)"
-    brk
-+
+    +assert_cc test_msg_ecc
+    +assert_mem_eq_byte tok_pos, .etokpos, test_msg_wrong_tokpos
+
     !if .eflags != F_EXPR_UNDEFINED {
-    lda expr_result
-    cmp #<.eresult
-    beq +
-    +print_strlit_line "... fail, wrong result (0; a)"
-    brk
-+   lda expr_result+1
-    cmp #>.eresult
-    beq +
-    +print_strlit_line "... fail, wrong result (1; a)"
-    brk
-+   lda expr_result+2
-    cmp #^.eresult
-    beq +
-    +print_strlit_line "... fail, wrong result (2; a)"
-    brk
-+   lda expr_result+3
-    cmp #<(.eresult >>> 24)
-    beq +
-    +print_strlit_line "... fail, wrong result (3; a)"
-    brk
-+
+        +assert_mem_eq_32 expr_result, .eresult, test_msg_wrong_result
     }
-    lda expr_flags
-    cmp #.eflags
-    beq +
-    +print_strlit_line "... fail, wrong expr flags (a)"
-    brk
-+
+
+    +assert_mem_eq_byte expr_flags, .eflags, test_msg_wrong_flags
 }
     +test_end
 }
@@ -137,52 +101,23 @@ test_expect_expr_line_1: !pet "label",0
     jsr assemble_pc_assign
 
 !if .ec {
-    bcs +
-    +print_strlit_line "... fail, expected carry set"
-    brk
-+   ldx tok_pos
-    beq +
-    +print_strlit_line "... fail, expected tok-pos zero"
-    brk
-+   lda err_code
-    cmp #.eerr
-    beq +
-    +print_strlit_line "... fail, wrong errcode"
-    brk
-+
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte tok_pos, 0, test_msg_tokpos_zero
+    +assert_mem_eq_byte err_code, .eerr, test_msg_wrong_err_code
 } else {
-    bcc +
-    +print_strlit_line "... fail, expected carry clear"
-    brk
-+   lda tok_pos
-    cmp #.etokpos
-    beq +
-    +print_strlit_line "... fail, wrong tokpos (a)"
-    brk
-+   lda program_counter
-    cmp #<.epc
-    beq +
-    brk
-+   lda program_counter+1
-    cmp #>.epc
-    beq +
-    brk
-+
-!if .edefined {
-    lda asm_flags
-    and #F_ASM_PC_DEFINED
-    bne +
-    +print_strlit_line "... fail, expected defined pc"
-    brk
-+
-} else {
-    lda asm_flags
-    and #F_ASM_PC_DEFINED
-    beq +
-    +print_strlit_line "... fail, expected undefined pc"
-    brk
-+
-}
+    +assert_cc test_msg_ecc
+    +assert_mem_eq_byte tok_pos, .etokpos, test_msg_wrong_tokpos
+    +assert_mem_eq_word program_counter, .epc, test_msg_wrong_pc
+
+    !if .edefined {
+        lda asm_flags
+        and #F_ASM_PC_DEFINED
+        +assert_ne test_msg_expected_defined_pc
+    } else {
+        lda asm_flags
+        and #F_ASM_PC_DEFINED
+        +assert_eq test_msg_expected_undefined_pc
+    }
 }
 
     +test_end
@@ -217,33 +152,15 @@ test_assemble_pc_assign_line_1: !pet "* = label",0
     jsr assemble_label
 
 !if .ec {
-    bcs +
-    +print_strlit_line "... fail, expected carry set"
-    brk
-+   ldx tok_pos
-    beq +
-    +print_strlit_line "... fail, expected tok-pos zero"
-    brk
-+   lda err_code
-    cmp #.eerr
-    beq +
-    +print_strlit_line "... fail, wrong errcode"
-    brk
-+
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte tok_pos, 0, test_msg_tokpos_zero
+    +assert_mem_eq_byte err_code, .eerr, test_msg_wrong_err_code
 } else {
-    bcc +
-    +print_strlit_line "... fail, expected carry clear"
-    brk
-+   lda tok_pos
-    cmp #.etokpos
-    beq +
-    +print_strlit_line "... fail, wrong tokpos (a)"
-    brk
-+   cpz #.ez
-    beq +
-    +print_strlit_line "... fail, wrong z"
-    brk
-+
+    +assert_cc test_msg_ecc
+    +assert_mem_eq_byte tok_pos, .etokpos, test_msg_wrong_tokpos
+    cpz #.ez
+    +assert_eq test_msg_wrong_z
+
     lda #<.lineaddr
     sta bas_ptr
     lda #>.lineaddr
@@ -251,49 +168,28 @@ test_assemble_pc_assign_line_1: !pet "* = label",0
     ldx #5
     jsr find_symbol
     jsr get_symbol_value
-!if .edefined {
-    cmp #<.evalue
-    beq +
-    +print_strlit_line "... fail, wrong value (a)"
-    brk
-+   cpx #>.evalue
-    beq +
-    +print_strlit_line "... fail, wrong value (b)"
-    brk
-+   cpy #^.evalue
-    beq +
-    +print_strlit_line "... fail, wrong value (c)"
-    brk
-+   cpz #<(.evalue >>> 24)
-    beq +
-    +print_strlit_line "... fail, wrong value (d)"
-    brk
-+
-    ldz #3
-    lda [attic_ptr],z
-    and #F_SYMTBL_DEFINED
-    bne +
-    +print_strlit_line "... fail, expected value defined"
-    brk
-+
-!if .ezero {
-    ldz #3
-    lda [attic_ptr],z
-    and #F_SYMTBL_LEADZERO
-    bne +
-    +print_strlit_line "... fail, expected value leading zero"
-    brk
-+
-}
-} else {
-    ldz #3
-    lda [attic_ptr],z
-    and #F_SYMTBL_DEFINED
-    beq +
-    +print_strlit_line "... fail, expected value undefined"
-    brk
-+
-}
+
+    !if .edefined {
+        +assert_q_eq_32 .evalue, test_msg_wrong_value
+
+        ldz #3
+        lda [attic_ptr],z
+        and #F_SYMTBL_DEFINED
+        +assert_ne test_msg_expected_defined_value
+
+        !if .ezero {
+            ldz #3
+            lda [attic_ptr],z
+            and #F_SYMTBL_LEADZERO
+            +assert_ne test_msg_expected_leading_zero_value
+        }
+    } else {
+        ldz #3
+        lda [attic_ptr],z
+        and #F_SYMTBL_DEFINED
+        +assert_eq test_msg_expected_undefined_value
+    }
+
 }
 
     +test_end

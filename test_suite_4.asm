@@ -35,34 +35,12 @@
     jsr assemble_instruction
 
 !if .ec {
-    bcs +
-    +print_strlit_line "... fail, expected carry set"
-    brk
-+   ldx tok_pos
-    beq +
-    +print_strlit_line "... fail, expected tok-pos zero"
-    brk
-+   lda err_code
-    cmp #.eerr
-    beq +
-    +print_strlit_line "... fail, wrong errcode"
-    brk
-+
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte tok_pos, 0, test_msg_tokpos_zero
+    +assert_mem_eq_byte err_code, .eerr, test_msg_wrong_err_code
 } else {
-    bcc +
-    +print_strlit_line "... fail, expected carry clear"
-    brk
-+   lda program_counter
-    cmp #<.epc
-    beq +
-    +print_strlit_line "... fail, wrong pc (0)"
-    brk
-+   lda program_counter+1
-    cmp #>.epc
-    beq +
-    +print_strlit_line "... fail, wrong pc (1)"
-    brk
-+
+    +assert_cc test_msg_ecc
+    +assert_mem_eq_word program_counter, .epc, test_msg_wrong_pc
 
     lda #<.ebytes
     sta code_ptr
@@ -72,10 +50,7 @@
     ldz #.ebytes_len-1
     jsr strbuf_cmp_code_ptr
     cmp #0
-    beq +
-    +print_strlit_line "... fail, wrong strbuf (bytes)"
-    brk
-+
+    +assert_eq test_msg_wrong_strbuf
 }
 
     +test_end

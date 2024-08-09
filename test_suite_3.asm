@@ -13,70 +13,25 @@
     jsr tokenize
     lda err_code
     beq +
-    +print_strlit_line "...test error: tokenize failed"
+    +print_fail_line test_msg_tokenize
     brk
 +
     ldz #2
     stz tok_pos
     jsr expect_addressing_expr
 !if .ec {
-    bcs +
-    +print_strlit_line "...fail: expected carry set"
-    brk
-+   lda err_code
-    cmp #.eerror
-    beq +
-    +print_strlit_line "...fail: wrong error code"
-    brk
-+   lda line_pos
-    cmp #.eerror_pos
-    beq +
-    +print_strlit_line "...fail: wrong error pos"
-    brk
-+
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte err_code, .eerror, test_msg_wrong_err_code
+    +assert_mem_eq_byte line_pos, .eerror_pos, test_msg_wrong_err_pos
 } else {
-    bcc +
-    +print_strlit_line "...fail: expected carry clear"
-    brk
-+   cpx #<.emode
-    beq +
-    +print_strlit_line "...fail: wrong mode (x)"
-    brk
-+   cpy #>.emode
-    beq +
-    +print_strlit_line "...fail: wrong mode (y)"
-    brk
-+   lda expr_result
-    cmp #<.eresult
-    beq +
-    +print_strlit_line "...fail: wrong result (0)"
-    brk
-+   lda expr_result+1
-    cmp #>.eresult
-    beq +
-    +print_strlit_line "...fail: wrong result (1)"
-    brk
-+   lda expr_result+2
-    cmp #^.eresult
-    beq +
-    +print_strlit_line "...fail: wrong result (2)"
-    brk
-+   lda expr_result+3
-    cmp #<(.eresult >>> 24)
-    beq +
-    +print_strlit_line "...fail: wrong result (3)"
-    brk
-+   lda expr_flags
-    cmp #.eflags
-    beq +
-    +print_strlit_line "...fail: wrong flags"
-    brk
-+   lda tok_pos
-    cmp #.etokpos
-    beq +
-    +print_strlit_line "...fail: wrong tokpos"
-    brk
-+
+    +assert_cc test_msg_ecc
+    cpx #<.emode
+    +assert_eq test_msg_wrong_mode
+    cpy #>.emode
+    +assert_eq test_msg_wrong_mode
+    +assert_mem_eq_32 expr_result, .eresult, test_msg_wrong_result
+    +assert_mem_eq_byte expr_flags, .eflags, test_msg_wrong_flags
+    +assert_mem_eq_byte tok_pos, .etokpos, test_msg_wrong_tokpos
 }
     +test_end
 }
