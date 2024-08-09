@@ -2666,7 +2666,8 @@ assemble_line:
 +   lda err_code
     lbne @err_exit
 
-++  jsr assemble_instruction
+++
+    jsr assemble_instruction
     bcc @next_statement
     lda err_code
     lbne @err_exit
@@ -2681,6 +2682,7 @@ assemble_line:
     lda tokbuf+1,x
     sta line_pos
     lda #err_syntax
+    sta err_code
     bra @err_exit
 
 @next_statement

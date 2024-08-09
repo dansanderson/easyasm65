@@ -179,9 +179,9 @@ run_test_suite_cmd:
     +test_assemble_line $08, test_assemble_line_8, 0, 0, 0
     +test_assemble_line $09, test_assemble_line_9, 1, err_syntax, 5+4
     +test_assemble_line $0A, test_assemble_line_10, 1, err_syntax, 2+4
-    ;+test_assemble_line $0B, test_assemble_line_11, 1, err_syntax, 7+4
-    ;+test_assemble_line $0C, test_assemble_line_12, 1, err_syntax, 7+4
-    ;+test_assemble_line $0D, test_assemble_line_13, 1, 0, 0+4
+    +test_assemble_line $0B, test_assemble_line_11, 1, err_syntax, 0+4
+    +test_assemble_line $0C, test_assemble_line_12, 1, err_syntax, 0+4
+    +test_assemble_line $0D, test_assemble_line_13, 1, 0, 0+4
 
     ; TODO: assert segment bytes for successful statements
 
