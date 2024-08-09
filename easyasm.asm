@@ -2648,22 +2648,33 @@ assemble_line:
     stx stmt_tokpos
 
     jsr assemble_pc_assign
-    bcc @next_statement
+    lbcc @next_statement
     lda err_code
-    bne @err_exit
+    lbne @err_exit
 
     jsr assemble_label
     bcs +
     cpz #0
-    beq @next_statement
-    bra ++  ; label without equal can continue to instruction or directive
+    lbeq @next_statement
+    ldx tok_pos
+    lda tokbuf,x
+    lbeq @end_tokbuf  ; label at end of line
+    cmp #tk_colon
+    beq @next_statement  ; colon follows label
+    bra ++  ; label without equal not end of line or statement,
+            ; must precede an instruction or directive
 +   lda err_code
-    bne @err_exit
+    lbne @err_exit
 
 ++  jsr assemble_instruction
     bcc @next_statement
     lda err_code
-    bne @err_exit
+    lbne @err_exit
+
+    jsr assemble_directive
+    bcc @next_statement
+    lda err_code
+    lbne @err_exit
 
     ; No statement patterns match. Syntax error.
     ldx tok_pos
@@ -2682,14 +2693,16 @@ assemble_line:
 @must_end
     ldx tok_pos
     lda tokbuf,x
-    lbeq @end_tokbuf
+    beq @end_tokbuf
     lda #err_syntax
     sta err_code
     lda tokbuf+1,x
     sta line_pos
 @err_exit
     sec
+    rts
 @end_tokbuf
+    clc
     rts
 
 

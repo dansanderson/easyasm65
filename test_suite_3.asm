@@ -72,8 +72,9 @@ test_expect_addressing_expr_31: !pet "lda (4,sp",0
 test_expect_addressing_expr_32: !pet "lda (4,sp)",0
 test_expect_addressing_expr_33: !pet "lda (4,sp),",0
 test_expect_addressing_expr_34: !pet "lda (4,sp),x",0
+test_expect_addressing_expr_35: !pet "inx iny",0
 ; Other errors
-test_expect_addressing_expr_35: !pet "lda [$fffe],z",0  ; err_value_out_of_range
+test_expect_addressing_expr_36: !pet "lda [$fffe],z",0  ; err_value_out_of_range
 
 
 run_test_suite_cmd:
@@ -116,7 +117,8 @@ run_test_suite_cmd:
     +test_expect_addressing_expr $20, test_expect_addressing_expr_32, 1, 0, 0, 0, 0, err_syntax, $ff
     +test_expect_addressing_expr $21, test_expect_addressing_expr_33, 1, 0, 0, 0, 0, err_syntax, $ff
     +test_expect_addressing_expr $22, test_expect_addressing_expr_34, 1, 0, 0, 0, 0, err_syntax, 11+4
-    +test_expect_addressing_expr $23, test_expect_addressing_expr_35, 1, 0, 0, 0, 0, err_value_out_of_range, 5+4
+    +test_expect_addressing_expr $23, test_expect_addressing_expr_35, 1, 0, 0, 0, 0, err_syntax, 4+4
+    +test_expect_addressing_expr $24, test_expect_addressing_expr_36, 1, 0, 0, 0, 0, err_value_out_of_range, 5+4
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
