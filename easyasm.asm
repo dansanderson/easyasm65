@@ -84,6 +84,8 @@ attic_symbol_names  = attic_symbol_table + $2000   ; 1.5700-1.B6FF (24 KB)
 attic_symbol_names_end = attic_symbol_names + $6000
 attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
 attic_segments_end  = attic_segments + $b000
+attic_forced16s     = attic_segments + $b000       ; 2.6700-2.7D00 (5.5 KB)
+attic_forced16s_end = attic_forced16s + $1600
 
 ; Symbol table constraints
 ;
@@ -1795,6 +1797,101 @@ assemble_bytes:
 
 
 ; ------------------------------------------------------------
+; Forced 16's list
+; ------------------------------------------------------------
+; This is a null-terminated list of 16-bit program counter values
+; whose addresses are forced to 16-bit widths by the first pass.
+; Specifically, an undefined operand expression forces 16 bits
+; in the first pass, even when defined to a value < 256 in a later
+; pass.
+
+set_attic_ptr_to_forced16:
+    lda #<attic_forced16s
+    sta attic_ptr
+    lda #>attic_forced16s
+    sta attic_ptr+1
+    lda #^attic_forced16s
+    sta attic_ptr+2
+    lda #<(attic_forced16s >>> 24)
+    sta attic_ptr+3
+    rts
+
+init_forced16:
+    jsr set_attic_ptr_to_forced16
+    lda #0
+    ldz #0
+    sta [attic_ptr],z
+    inz
+    sta [attic_ptr],z
+    rts
+
+; Input: program_counter
+; Output: C=1 if PC is in the list
+;   attic_ptr at PC entry or end of list
+find_forced16:
+    jsr set_attic_ptr_to_forced16
+    ldx program_counter
+    ldy program_counter+1
+-   ldz #0
+    txa
+    cmp [attic_ptr],z
+    bne +
+    tya
+    inz
+    cmp [attic_ptr],z
+    beq @found
+    dez
++   lda [attic_ptr],z
+    inz
+    ora [attic_ptr],z
+    bne +
+    bra @not_found
+
++   ; next
+    lda #2
+    clc
+    adc attic_ptr
+    sta attic_ptr
+    lda #0
+    adc attic_ptr+1
+    sta attic_ptr+1
+    lda #0
+    adc attic_ptr+2
+    sta attic_ptr+2
+    lda #0
+    adc attic_ptr+3
+    sta attic_ptr+3
+    bra -
+
+@found
+    sec
+    rts
+@not_found
+    clc
+    rts
+
+
+; Add the program counter to the forced-16's list
+; Input: program_counter
+add_forced16:
+    jsr find_forced16
+    bcc +
+    rts   ; already in the list
++   ldz #0
+    lda program_counter
+    sta [attic_ptr],z
+    inz
+    lda program_counter+1
+    sta [attic_ptr],z
+    inz
+    lda #0
+    sta [attic_ptr],z
+    inz
+    sta [attic_ptr],z
+    rts
+
+
+; ------------------------------------------------------------
 ; Assembler
 ; ------------------------------------------------------------
 
@@ -2445,7 +2542,7 @@ assemble_instruction:
     sta instr_line_pos  ; stash line_pos for errors
     jsr expect_opcode
     lbcs statement_err_exit
-    pha
+    pha  ; (mnemonic ID)
     jsr expect_addressing_expr
     pla
     lbcs statement_err_exit
@@ -3559,9 +3656,9 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-!source "test_suite_2.asm"
+; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
-; !source "test_suite_4.asm"
+!source "test_suite_4.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
