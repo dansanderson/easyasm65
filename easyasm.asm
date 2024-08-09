@@ -278,7 +278,7 @@ do_menu:
 assemble_to_memory_cmd:
     jsr do_banner
     +kprimm_start
-    !pet "assemble to memory",13,13,0
+    !pet "# assembling to memory...",13,13,0
     +kprimm_end
 
     jsr stash_source
@@ -286,26 +286,33 @@ assemble_to_memory_cmd:
     ; TODO: the rest of the owl
 
     jsr restore_source
+    +kprimm_start
+    !pet 13,"# program returned, source restored",13,0
+    +kprimm_end
+
     rts
 
 
 assemble_to_disk_cmd:
     jsr do_banner
     +kprimm_start
-    !pet "assemble to disk",13,13,0
+    !pet "# assembling to disk...",13,13,0
     +kprimm_end
 
     jsr stash_source
     jsr assemble_source
     ; TODO: the rest of the owl
 
+    +kprimm_start
+    !pet 13,"# assemble to disk complete",13,0
+    +kprimm_end
     rts
 
 
 restore_source_cmd:
     jsr do_banner
     +kprimm_start
-    !pet "restore source",13,13,0
+    !pet "# restoring source...",13,13,0
     +kprimm_end
 
     ; Safety check: probably never stashed source before
@@ -608,7 +615,11 @@ print_error:
     +kcall bsout
     dex
     bne -
-    ldx line_pos   ; Indent by line_pos
+    ldx line_pos   ; Indent by line_pos - 4
+    dex
+    dex
+    dex
+    dex
 -   lda #chr_spc
     +kcall bsout
     dex
@@ -1995,7 +2006,7 @@ expect_expr:
 
     ; <label>
 +++ jsr expect_label
-    bcs +++
+    lbcs +++
     txa               ; bas_ptr = line_addr + X (line_pos of label)
     clc
     adc line_addr
@@ -2009,7 +2020,7 @@ expect_expr:
     jsr get_symbol_value
     bcs ++
     stq expr_result
-    ldz #2
+    ldz #3
     lda #0
     sta expr_flags
     lda [attic_ptr],z  ; flags
@@ -2131,10 +2142,12 @@ assemble_label:
     pha
     lbra statement_err_exit
 +
-    ldz #3           ; Error if symbol is already defined
+    ldz #3           ; Error if symbol is already defined in first pass
     lda [attic_ptr],z
     and #F_SYMTBL_DEFINED
     beq +
+    lda pass
+    bne +
     lda label_pos
     sta line_pos
     lda #err_already_defined
@@ -2762,7 +2775,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01
+!word e01,e02,e03,e04,e05,e06
 
 err_messages:
 err_syntax = 1

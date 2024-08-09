@@ -11,6 +11,8 @@
         {"name": "--------------"},
         {"file_path": "testdata/blanklines.txt", "name": "t-blanklines", "text_style": "plain"},
         {"file_path": "testdata/commentsonly.txt", "name": "t-commentsonly", "text_style": "plain"},
-        {"file_path": "testdata/emptyfile.txt", "name": "t-emptyfile", "text_style": "plain"}
+        {"file_path": "testdata/emptyfile.txt", "name": "t-emptyfile", "text_style": "plain"},
+        {"file_path": "testdata/border.txt", "name": "t-border", "text_style": "plain"},
+        {"file_path": "testdata/bordercycle.txt", "name": "t-bordercycle", "text_style": "plain"}
     ]
 }

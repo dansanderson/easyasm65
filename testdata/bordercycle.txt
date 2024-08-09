@@ -1,0 +1,10 @@
+; change the border color continuously
+
+; !to "border", runnable
+* = $1600
+
+border = $d020
+
+loop:
+    inc border
+    jmp loop
