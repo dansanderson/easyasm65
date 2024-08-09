@@ -3,5 +3,7 @@
 20 bload "easyasm-e",p($1e00)
 30 bload "easyasm",p($8700000)
 40 key 15,chr$(141)+"sys $1e00 : rem "+chr$(13)
-50 print "done";chr$(13);chr$(13);"easyasm is now in memory. press help for menu.";chr$(13)
-60 new
+50 print "done";chr$(13);chr$(13);"easyasm is now in memory. press <help> for menu.";chr$(13)
+60 print "to switch to edit mode:"
+60 print "  edit on";chr$(13)
+70 new

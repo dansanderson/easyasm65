@@ -1,4 +1,4 @@
-!macro start_test_expect_expr {
+!macro start_test_expect_expr .pass {
     jsr init_symbol_table
 
     ; Fake assembly location in bank 5
@@ -9,6 +9,10 @@
 
     sta err_code
     sta asm_flags
+
+    lda #.pass
+    sta pass
+    jsr init_pass
 }
 
 !macro create_undefined_symbol_for_test .name, .namelength {
@@ -211,83 +215,95 @@ run_test_suite_cmd:
     +print_chr chr_cr
     +print_strlit_line "test-expr"
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_expect_expr $01, "empty", test_expect_expr_tb_1, test_expect_expr_tb_2, test_expect_expr_line_1, 1, 0, 0, 0
     +test_expect_expr $02, "literal", test_expect_expr_tb_2, test_expect_expr_tb_3, test_expect_expr_line_1, 0, 6, $aabbccdd, 0
     +test_expect_expr $03, "literal w zero", test_expect_expr_tb_3, test_expect_expr_tb_4, test_expect_expr_line_1, 0, 6, $0abbccdd, F_EXPR_BRACKET_ZERO
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_expect_expr $04, "label undef", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 0, F_EXPR_UNDEFINED
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +create_undefined_symbol_for_test test_expect_expr_line_1, 5
     +test_expect_expr $05, "label undef in tbl", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 0, F_EXPR_UNDEFINED
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_expect_expr $06, "label def", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 98765, 0
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_expect_expr $07, "label def parens", test_expect_expr_tb_5, test_expect_expr_tb_6, test_expect_expr_line_1, 0, 7, 98765, F_EXPR_BRACKET_PAREN
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_expect_expr $08, "label def brackets", test_expect_expr_tb_6, test_expect_expr_tb_end, test_expect_expr_line_1, 0, 7, 98765, F_EXPR_BRACKET_SQUARE
+
+    +start_test_expect_expr $ff
+    +test_expect_expr $09, "label undef last pass", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 1, 0, 0, F_EXPR_UNDEFINED
+    lda err_code
+    cmp #err_undefined
+    beq +
+    +print_strlit_line "... fail: did not return undefined error"
+    brk
++
+
+    +start_test_expect_expr $ff
+    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
+    +test_expect_expr $0A, "label def last pass", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 98765, 0
 
     ; -----------------------------------
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-pc"
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_pc_assign $01, test_assemble_pc_assign_tb_1, test_assemble_pc_assign_tb_2, test_assemble_pc_assign_line_1, 1, 0, 0, 0, 0
     +test_assemble_pc_assign $02, test_assemble_pc_assign_tb_2, test_assemble_pc_assign_tb_3, test_assemble_pc_assign_line_1, 0, 10, 0, $0000ccdd, 1
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_pc_assign $03, test_assemble_pc_assign_tb_3, test_assemble_pc_assign_tb_4, test_assemble_pc_assign_line_1, 1, 0, err_pc_undef, 0, 0
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +set_symbol_for_test test_assemble_pc_assign_line_1 + 4, 5, $0000aabb
     +test_assemble_pc_assign $04, test_assemble_pc_assign_tb_3, test_assemble_pc_assign_tb_4, test_assemble_pc_assign_line_1, 0, 7, 0, $0000aabb, 1
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_pc_assign $05, test_assemble_pc_assign_tb_4, test_assemble_pc_assign_tb_end, test_assemble_pc_assign_line_1, 1, 0, err_value_out_of_range, 0, 0
 
     ; -----------------------------------
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-label"
-    +start_test_expect_expr
+    +start_test_expect_expr 0
 
+    ; .tnum, .tokbuf, .tokbufend, .lineaddr, .ec, .etokpos, .eerr, .ez, .edefined, .evalue, .ezero
     +test_assemble_label $01, test_assemble_label_tb_1, test_assemble_label_tb_2, test_assemble_label_line_1, 1, 0, 0, 0, 0, 0, 0
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_label $02, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 0, 11, 0, 0, 1, $ccdd, 0
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_label $03, test_assemble_label_tb_3, test_assemble_label_tb_4, test_assemble_label_line_1, 0, 11, 0, 0, 1, $ccdd, 1
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +test_assemble_label $04, test_assemble_label_tb_4, test_assemble_label_tb_5, test_assemble_label_line_1, 0, 8, 0, 0, 0, 0, 0
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     jsr init_pass
     +test_assemble_label $05, test_assemble_label_tb_5, test_assemble_label_tb_6, test_assemble_label_line_1, 1, 0, err_pc_undef, 0, 0, 0, 0
 
-    +start_test_expect_expr
-    jsr init_pass
+    +start_test_expect_expr 0
     ldx #$bb
     ldy #$aa
     jsr set_pc
     +test_assemble_label $06, test_assemble_label_tb_5, test_assemble_label_tb_6, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
 
-    +start_test_expect_expr
-    jsr init_pass
+    +start_test_expect_expr 0
     ldx #$bb
     ldy #$aa
     jsr set_pc
     +test_assemble_label $07, test_assemble_label_tb_6, test_assemble_label_tb_end, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
 
-    +start_test_expect_expr
+    +start_test_expect_expr 0
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_assemble_label $08, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 1, 0, err_already_defined, 0, 0, 0, 0
 

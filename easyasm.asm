@@ -2032,7 +2032,15 @@ expect_expr:
 
 ++  lda #F_EXPR_UNDEFINED
     sta expr_flags
-    bra @succeed
+    lda pass           ; undefined label is an error in final pass
+    cmp #$ff
+    bne @succeed
+    lda #err_undefined
+    sta err_code
+    ldx tok_pos
+    lda tokbuf-2,x     ; back up to the label's line_pos
+    sta line_pos
+    bra @fail
 
     ; <literal>
 +++ jsr expect_literal
@@ -2118,6 +2126,8 @@ assemble_label:
     lbcs @label_without_equal
     jsr expect_expr
     lbcc @label_with_equal
+    lda err_code
+    lbne statement_err_exit
     lda label_pos
     sta line_pos
     lda #err_syntax  ; expr required after "="
@@ -2237,6 +2247,7 @@ expect_addressing_expr:
     sta expr_result+2
     sta expr_result+3
     sta expr_flags
+    sta err_code
 
     ; ":" or end of line: Implicit
     ldx tok_pos
@@ -2258,7 +2269,7 @@ expect_addressing_expr:
     bcs +
     +expect_addresing_expr_rts MODE_IMMEDIATE
 +   +expect_addresing_expr_rts MODE_IMMEDIATE_WORD
-++  lbra @syntax_error
+++  lbra @addr_error
 
 @try_modes_with_leading_expr
     jsr expect_expr
@@ -2287,7 +2298,7 @@ expect_addressing_expr:
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_Y
 +   ; Syntax error: <expr-8> "," non-x/y
-    lbra @syntax_error
+    lbra @addr_error
 
 ++  ; <expr-16> ["," ("x" | "y")]
     lda #tk_comma
@@ -2305,7 +2316,7 @@ expect_addressing_expr:
     bcs +
     +expect_addresing_expr_rts MODE_ABSOLUTE_Y
 +   ; Syntax error: <expr-16> "," non-x/y
-    lbra @syntax_error
+    lbra @addr_error
 
 +++ cmp #F_EXPR_BRACKET_PAREN
     bne +++
@@ -2329,7 +2340,7 @@ expect_addressing_expr:
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_IND_Z
 +   ; Syntax error: "(" <expr-8> ")" "," non-y/z
-    lbra @syntax_error
+    lbra @addr_error
 
 ++  ; "(" <expr-16> ")"
     +expect_addresing_expr_rts MODE_ABSOLUTE_IND
@@ -2343,9 +2354,12 @@ expect_addressing_expr:
     sec
     sbc #8
     sta tok_pos
+    tax
+    lda tokbuf+1,x
+    sta line_pos
     lda #err_value_out_of_range
     sta err_code
-    lbra @other_error
+    lbra @addr_error
 
 +   lda #tk_comma
     jsr expect_token
@@ -2355,7 +2369,7 @@ expect_addressing_expr:
     jsr expect_keyword
     bcc +  ; z is required if , is provided
     ; Syntax error: "[" <expr-8> "]" "," non-z
-    lbra @syntax_error
+    lbra @addr_error
 +   +expect_addresing_expr_rts MODE_32BIT_IND
 
 @try_modes_without_leading_expr
@@ -2363,14 +2377,14 @@ expect_addressing_expr:
     lda #tk_lparen
     jsr expect_token
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   jsr expect_expr
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   lda #tk_comma
     jsr expect_token
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   ldx #<kw_sp
     ldy #>kw_sp
     jsr expect_keyword
@@ -2381,11 +2395,11 @@ expect_addressing_expr:
     ldy #>kw_x
     jsr expect_keyword
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   lda #tk_rparen
     jsr expect_token
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   jsr is_expr_16bit
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_IND_X
@@ -2395,26 +2409,27 @@ expect_addressing_expr:
     lda #tk_rparen
     jsr expect_token
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   lda #tk_comma
     jsr expect_token
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   ldx #<kw_y
     ldy #>kw_y
     jsr expect_keyword
     bcc +
-    lbra @syntax_error
+    lbra @addr_error
 +   +expect_addresing_expr_rts MODE_STACK_REL
 
-@syntax_error
+@addr_error
+    lda err_code
+    bne +
     lda #err_syntax
     sta err_code
-@other_error
     ldx tok_pos
     lda tokbuf+1,x
     sta line_pos
-    sec
++   sec
     rts
 
 
@@ -2775,7 +2790,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06
+!word e01,e02,e03,e04,e05,e06,e07
 
 err_messages:
 err_syntax = 1
@@ -2790,6 +2805,8 @@ err_already_defined = 5
 e05: !pet "symbol already defined",0
 err_out_of_memory = 6
 e06: !pet "out of memory",0
+err_undefined = 7
+e07: !pet "symbol undefined",0
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
@@ -3542,9 +3559,9 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-; !source "test_suite_2.asm"
+!source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
-!source "test_suite_4.asm"
+; !source "test_suite_4.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------

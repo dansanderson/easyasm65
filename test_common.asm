@@ -96,13 +96,13 @@
 }
 
 !macro assert_q_eq_32 .val, .msg {
-    cmp #<.evalue
+    cmp #<.val
     +assert_eq .msg
-    cpx #>.evalue
+    cpx #>.val
     +assert_eq .msg
-    cpy #^.evalue
+    cpy #^.val
     +assert_eq .msg
-    cpz #<(.evalue >>> 24)
+    cpz #<(.val >>> 24)
     +assert_eq .msg
 }
 
