@@ -26,7 +26,7 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 48
+* = $100 - 57
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -38,6 +38,13 @@ next_segment_byte_addr *=*+4
 stmt_tokpos     *=*+1
 label_pos       *=*+1
 label_length    *=*+1
+
+instr_line_pos        *=*+1
+instr_mnemonic_id     *=*+1
+instr_buf_pos         *=*+1
+instr_addr_mode       *=*+2
+instr_mode_rec_addr   *=*+2
+instr_supported_modes *=*+2
 
 symtbl_next_name *=*+3
 
@@ -1655,7 +1662,7 @@ set_pc:
 ;     pass $FF: out of memory error
 ;   Uses expr_a
 assemble_bytes:
-    cpx #0
+    cpx #0  ; Edge case: X = 0
     bne +
     clc
     rts
@@ -1785,10 +1792,8 @@ assemble_bytes:
 ;   C=0 ok, tok_pos advanced
 ;   C=1 not found, tok_pos preserved
 expect_token:
-    sta expr_a
     ldx tok_pos
-    lda tokbuf,x
-    cmp expr_a
+    cmp tokbuf,x
     bne @fail
     inx
     inx
@@ -2407,16 +2412,9 @@ expect_addressing_expr:
 ;     err_code>0 fatal error with line_pos set
 assemble_instruction:
 
-v_line_pos = expr_b         ; (byte)
-v_mnemonic_id = expr_b+1    ; (byte)
-v_buf_pos = expr_b+2        ; (byte)
-v_addr_mode = expr_a        ; (word)
-v_mode_rec_addr = expr_a+2  ; (word)
-v_supported_modes = code_ptr ; (word)
-
     ; <opcode> <addr-expr>
     lda tokbuf+1,x
-    sta v_line_pos  ; stash line_pos for errors
+    sta instr_line_pos  ; stash line_pos for errors
     jsr expect_opcode
     lbcs statement_err_exit
     pha
@@ -2425,45 +2423,46 @@ v_supported_modes = code_ptr ; (word)
     lbcs statement_err_exit
 
     ; A=mnemonic ID, X/Y=addr mode flags, expr_result=operand (if any)
-    sta v_mnemonic_id
-    stx v_addr_mode
-    sty v_addr_mode+1
+    sta instr_mnemonic_id
+    stx instr_addr_mode
+    sty instr_addr_mode+1
 
     ; Locate addressing mode record for mnemonic
-    sta v_mode_rec_addr
+    sta instr_mode_rec_addr
     lda #0
-    sta v_mode_rec_addr+1
-    row v_mode_rec_addr
-    row v_mode_rec_addr  ; v_mode_rec_addr = ID*4
+    sta instr_mode_rec_addr+1
+    clc
+    row (easyasm_base_page << 8) + instr_mode_rec_addr
+    row (easyasm_base_page << 8) + instr_mode_rec_addr  ; instr_mode_rec_addr = ID*4
     lda #<addressing_modes
     clc
-    adc v_mode_rec_addr
-    sta v_mode_rec_addr
+    adc instr_mode_rec_addr
+    sta instr_mode_rec_addr
     lda #>addressing_modes
-    adc v_mode_rec_addr+1
-    sta v_mode_rec_addr+1  ; v_mode_rec_addr = address of mode record for mnemonic
+    adc instr_mode_rec_addr+1
+    sta instr_mode_rec_addr+1  ; instr_mode_rec_addr = address of mode record for mnemonic
 
     ; Match addressing mode to opcode; error if not supported
     ldy #0
-    lda v_addr_mode
-    and (v_mode_rec_addr),y
-    sta v_addr_mode
+    lda instr_addr_mode
+    and (instr_mode_rec_addr),y
+    sta instr_addr_mode
     iny
-    lda v_addr_mode+1
-    and (v_mode_rec_addr),y
-    sta v_addr_mode  ; v_addr_mode = selected addressing mode, or 0 if not supported
-    ora v_addr_mode
+    lda instr_addr_mode+1
+    and (instr_mode_rec_addr),y
+    sta instr_addr_mode+1  ; instr_addr_mode = selected addressing mode, or 0 if not supported
+    ora instr_addr_mode
     bne +
     ; Mode not supported.
-    lda v_line_pos
+    lda instr_line_pos
     sta line_pos
     lda #err_unsupported_addr_mode
     sta err_code
     lbra statement_err_exit
 
-    ; Start at beginning of strbuf.
++   ; Start at beginning of strbuf.
     lda #0
-    sta v_buf_pos
+    sta instr_buf_pos
 
     ; Assemble Q prefix
     ;   q_mnemonics : 0-term'd list of mnemonic IDs
@@ -2471,107 +2470,120 @@ v_supported_modes = code_ptr ; (word)
     ldx #0
 -   lda q_mnemonics,x
     beq ++
-    cmp v_mnemonic_id  ; mnemonic ID
+    cmp instr_mnemonic_id  ; mnemonic ID
     beq +
     inx
     bra -
 +   ; Is a Q instruction, emit $42 $42
-    ldx v_buf_pos
+    ldx instr_buf_pos
     lda #$42
     sta strbuf,x
     inx
     sta strbuf,x
     inx
-    stx v_buf_pos
+    stx instr_buf_pos
 
 ++  ; Assemble 32-bit indirect prefix
     ;   MODE_32BIT_IND
     ;   Emit $EA
-    lda v_addr_mode+1
-    and #>MODE_32BIT_IND
+    lda instr_addr_mode
+    and #<MODE_32BIT_IND
     beq ++
     ; Is 32-bit indirect, emit $EA
-    ldx v_buf_pos
-    lda #$42
+    ldx instr_buf_pos
+    lda #$ea
     sta strbuf,x
     inx
-    stx v_buf_pos
+    stx instr_buf_pos
 
 ++  ; Assemble instruction (mnemonic + mode) encoding
     ;   addressing_modes: (mode_bits_16, enc_addr_16)
     ;   Rotate mode_bits left, count Carry; index into enc_addr
     ;   Emit encoding byte
+    lda instr_addr_mode
+    pha
+    lda instr_addr_mode+1
+    pha
     ldy #0
-    lda (v_mode_rec_addr),y
-    sta v_supported_modes
+    lda (instr_mode_rec_addr),y
+    sta instr_supported_modes
     iny
-    lda (v_mode_rec_addr),y
-    sta v_supported_modes+1
+    lda (instr_mode_rec_addr),y
+    sta instr_supported_modes+1
     ldx #0
--   row v_supported_modes
+-   row (easyasm_base_page << 8) + instr_supported_modes
     bcc +
     inx
-+   row v_addr_mode
++   row (easyasm_base_page << 8) + instr_addr_mode
     bcc -
-    ; X = index into enc_addr
+    pla
+    sta instr_addr_mode+1
+    pla
+    sta instr_addr_mode
+    ; X = index into enc_addr + 1
+    dex  ; X = X - 1
     ldy #2
-    lda (v_mode_rec_addr),y
-    sta code_ptr  ; (yes this is aliased to v_supported_modes, it's ok)
+    lda (instr_mode_rec_addr),y
+    sta code_ptr
     iny
-    lda (v_mode_rec_addr),y
+    lda (instr_mode_rec_addr),y
     sta code_ptr+1
     txa
     tay
     lda (code_ptr),y  ; A = the instruction encoding byte
-    ldx v_buf_pos
+    ldx instr_buf_pos
     sta strbuf,x
     inx
-    stx v_buf_pos
+    stx instr_buf_pos
 
     ; Assemble operand
     ;   MODES_NO_OPERAND
     ;   MODES_BYTE_OPERAND
     ;   MODES_WORD_OPERAND
-    ldy #0
-    lda (v_mode_rec_addr),y
+    lda instr_addr_mode
     and #<MODES_WORD_OPERAND
-    sta v_supported_modes
-    iny
-    lda (v_mode_rec_addr),y
+    sta instr_supported_modes ; (clobbers instr_supported_modes)
+    lda instr_addr_mode+1
     and #>MODES_WORD_OPERAND
-    ora v_supported_modes
+    ora instr_supported_modes
     beq +
     ; Word operand: emit two expr_result bytes
-    ldx v_buf_pos
+    ldx instr_buf_pos
     lda expr_result
     sta strbuf,x
     inx
     lda expr_result+1
     sta strbuf,x
     inx
-    stx v_buf_pos
+    stx instr_buf_pos
     bra ++
-+   ldy #0
-    lda (v_mode_rec_addr),y
++   lda instr_addr_mode
     and #<MODES_BYTE_OPERAND
-    sta v_supported_modes
-    iny
-    lda (v_mode_rec_addr),y
+    sta instr_supported_modes
+    lda instr_addr_mode+1
     and #>MODES_BYTE_OPERAND
-    ora v_supported_modes
+    ora instr_supported_modes
     beq ++  ; No operand, emit no more bytes
     ; Byte operand: emit one expr_result byte
-    ldx v_buf_pos
+    ldx instr_buf_pos
     lda expr_result
     sta strbuf,x
     inx
-    stx v_buf_pos
+    stx instr_buf_pos
 
 ++  ; Add bytes to segment
-    ldx v_buf_pos
+    ldx instr_buf_pos
     jsr assemble_bytes
+    bcc +++
+    lda pass
+    bne +
+    lda #err_pc_undef
+    bra ++
++   lda #err_out_of_memory
+++  sta err_code
+    lbra statement_err_exit
 
-    lbra statement_ok_exit
++++ lbra statement_ok_exit
 
 
 assemble_directive:
@@ -3503,7 +3515,8 @@ scr_table:
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
-!source "test_suite_3.asm"
+; !source "test_suite_3.asm"
+!source "test_suite_4.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
