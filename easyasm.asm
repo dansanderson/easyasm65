@@ -218,13 +218,13 @@ dispatch_jump:
 do_banner:
     +kprimm_start
     !pet "                                           ",13
-    !pet "*** ",0
+    !pet 172,172,172," ",0
     +kprimm_end
     ldx #<id_string
     ldy #>id_string
     jsr print_cstr
     +kprimm_start
-    !pet ", by dddaaannn ***         ",13,0
+    !pet ", by dddaaannn ",187,187,187,"         ",13,13,0
     +kprimm_end
     rts
 
@@ -1078,7 +1078,7 @@ find_in_token_list:
 ; Tokenize mnemonic.
 ; Input: strbuf = lowercase line, line_pos at first char
 ; Output:
-;   If found, C=1, X=token number, line_pos advanced
+;   If found, C=1, X=token number, Y=flags, line_pos advanced
 ;   If not found, C=0, line_pos unchanged
 tokenize_mnemonic:
     ldx line_pos
@@ -1089,9 +1089,36 @@ tokenize_mnemonic:
     sec  ; Must not immediately precede an identifier character.
     jsr find_in_token_list
     bcc @end
-    stx line_pos  ; new line pos
+    stx line_pos  ; new line_pos
+    ; X = line_pos, Y = mnemonic ID, Z = flags
+    ; (Final: X = mnemonic ID, Y = flags)
+
+    ; Check for +1/+2 suffix
+    ldz #0
+    lda strbuf,x
+    cmp #'+'
+    bne @end_ok
+    inx
+    lda strbuf,x
+    cmp #'1'
+    bne +
+    ldz #F_ASM_FORCE8
+    bra @end_forcewidth
++   cmp #'2'
+    bne @end_ok
+    ldz #F_ASM_FORCE16
+@end_forcewidth
+    inx
+    lda strbuf,x
+    jsr is_secondary_ident_char
+    bcs @end_ok  ; Roll back to previous line_pos
+    stx line_pos
+@end_ok
+    sec  ; C = 1
     tya
-    tax  ; X = mnemonic token ID
+    tax  ; X = mnemonic ID
+    tza
+    tay  ; Y = flags
 @end
     rts
 
@@ -1268,10 +1295,23 @@ tokenize:
     phz  ; TODO: tokenize routines should put Z back to start?
     jsr tokenize_mnemonic
     plz
-    bcs @push_tok_pos_then_continue
+    bcc +++
+    ; Push mnemonic ID (X), line_pos, flags (Y)
+    txa
+    ldx tok_pos
+    sta tokbuf,x
+    inx
+    stz tokbuf,x
+    inx
+    sty tokbuf,x
+    lda line_pos
+    taz
+    inx
+    stx tok_pos
+    lbra @tokenize_loop
 
     ; Pseudoop
-    phz
++++ phz
     jsr tokenize_pseudoop
     plz
     bcs @push_tok_pos_then_continue
@@ -1999,7 +2039,7 @@ expect_keyword:
 
 ; Input: tokbuf, tok_pos
 ; Output:
-;   C=0 ok, A=token ID, tok_pos advanced
+;   C=0 ok, A=token ID, Y=flags, tok_pos advanced
 ;   C=1 not found, tok_pos preserved
 expect_opcode:
     ldx tok_pos
@@ -2008,6 +2048,8 @@ expect_opcode:
     cmp #mnemonic_count
     bcs @fail
     inx
+    inx
+    ldy tokbuf,x
     inx
     stx tok_pos
     clc
@@ -2350,11 +2392,6 @@ is_expr_16bit:
     rts
 
 
-; Input: tokbuf, tok_pos
-; Output:
-;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
-;   C=1 fail
-;     err_code>0 fatal error with line_pos set
 !macro expect_addresing_expr_rts .mode {
     ldx #<.mode
     ldy #>.mode
@@ -2371,8 +2408,11 @@ force16_if_expr_undefined:
 +   rts
 
 
-; Input: tokbuf, tok_pos; asm_flags
-; Output: ...
+; Input: tokbuf, tok_pos, asm_flags
+; Output:
+;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
+;   C=1 fail
+;     err_code>0 fatal error with line_pos set
 expect_addressing_expr:
     lda #0
     sta expr_result
@@ -2594,9 +2634,12 @@ assemble_instruction:
     lbcs statement_err_exit
     pha  ; (mnemonic ID)
 
-    ; TODO: force 8-bit if +1, 16-bit if +2
+    ; Force 8-bit if +1, 16-bit if +2
     lda asm_flags
     and #!F_ASM_FORCE_MASK
+    sta asm_flags
+    tya
+    ora asm_flags
     sta asm_flags
 
     jsr expect_addressing_expr

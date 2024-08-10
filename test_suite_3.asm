@@ -22,7 +22,7 @@
     +print_fail_line test_msg_tokenize
     brk
 +
-    ldz #2
+    ldz #3
     stz tok_pos
     jsr expect_addressing_expr
 !if .ec {
@@ -89,26 +89,26 @@ run_test_suite_cmd:
     +print_chr chr_cr
     +print_strlit_line "test-expect-addressing-expr"
     ; .tnum, .str, .ec, .emode, .eresult, .eflags, .etokpos, .eerror, .eerror_pos
-    +test_expect_addressing_expr $01, test_expect_addressing_expr_1, 0, MODE_IMPLIED, 0, 0, 2, 0, 0
-    +test_expect_addressing_expr $02, test_expect_addressing_expr_2, 0, MODE_IMPLIED, 0, 0, 2, 0, 0
-    +test_expect_addressing_expr $03, test_expect_addressing_expr_3, 0, MODE_IMMEDIATE, 13, 0, 10, 0, 0
-    +test_expect_addressing_expr $04, test_expect_addressing_expr_4, 0, MODE_IMMEDIATE_WORD, $aabb, 0, 10, 0, 0
-    +test_expect_addressing_expr $05, test_expect_addressing_expr_5, 0, MODE_BASE_PAGE, $fe, 0, 8, 0, 0
-    +test_expect_addressing_expr $06, test_expect_addressing_expr_6, 0, MODE_BASE_PAGE_X, $fe, 0, 13, 0, 0
-    +test_expect_addressing_expr $07, test_expect_addressing_expr_7, 0, MODE_BASE_PAGE_Y, $fe, 0, 13, 0, 0
-    +test_expect_addressing_expr $08, test_expect_addressing_expr_8, 0, MODE_ABSOLUTE, $d020, 0, 8, 0, 0
-    +test_expect_addressing_expr $09, test_expect_addressing_expr_9, 0, MODE_ABSOLUTE_X, $d020, 0, 13, 0, 0
-    +test_expect_addressing_expr $0a, test_expect_addressing_expr_10, 0, MODE_ABSOLUTE_Y, $d020, 0, 13, 0, 0
-    +test_expect_addressing_expr $0b, test_expect_addressing_expr_11, 0, MODE_ABSOLUTE_X, $fe, F_EXPR_BRACKET_ZERO, 13, 0, 0
-    +test_expect_addressing_expr $0c, test_expect_addressing_expr_12, 0, MODE_ABSOLUTE_IND, $fffe, F_EXPR_BRACKET_PAREN, 12, 0, 0
-    +test_expect_addressing_expr $0d, test_expect_addressing_expr_13, 0, MODE_ABSOLUTE_IND_X, $c000, 0, 17, 0, 0
-    +test_expect_addressing_expr $0e, test_expect_addressing_expr_14, 0, MODE_BASE_PAGE_IND_X, $fe, 0, 17, 0, 0
-    +test_expect_addressing_expr $0f, test_expect_addressing_expr_15, 0, MODE_BASE_PAGE_IND_Y, $fe, F_EXPR_BRACKET_PAREN, 17, 0, 0
-    +test_expect_addressing_expr $10, test_expect_addressing_expr_16, 0, MODE_BASE_PAGE_IND_Z, $fe, F_EXPR_BRACKET_PAREN, 17, 0, 0
-    +test_expect_addressing_expr $11, test_expect_addressing_expr_17, 0, MODE_32BIT_IND, $fe, F_EXPR_BRACKET_SQUARE, 17, 0, 0
-    +test_expect_addressing_expr $12, test_expect_addressing_expr_18, 0, MODE_32BIT_IND, $fe, F_EXPR_BRACKET_SQUARE, 12, 0, 0
-    +test_expect_addressing_expr $13, test_expect_addressing_expr_19, 0, MODE_STACK_REL, 4, 0, 22, 0, 0
-    +test_expect_addressing_expr $14, test_expect_addressing_expr_20, 0, MODE_STACK_REL, 4, 0, 22, 0, 0
+    +test_expect_addressing_expr $01, test_expect_addressing_expr_1, 0, MODE_IMPLIED, 0, 0, 3, 0, 0
+    +test_expect_addressing_expr $02, test_expect_addressing_expr_2, 0, MODE_IMPLIED, 0, 0, 3, 0, 0
+    +test_expect_addressing_expr $03, test_expect_addressing_expr_3, 0, MODE_IMMEDIATE, 13, 0, 11, 0, 0
+    +test_expect_addressing_expr $04, test_expect_addressing_expr_4, 0, MODE_IMMEDIATE_WORD, $aabb, 0, 11, 0, 0
+    +test_expect_addressing_expr $05, test_expect_addressing_expr_5, 0, MODE_BASE_PAGE, $fe, 0, 9, 0, 0
+    +test_expect_addressing_expr $06, test_expect_addressing_expr_6, 0, MODE_BASE_PAGE_X, $fe, 0, 14, 0, 0
+    +test_expect_addressing_expr $07, test_expect_addressing_expr_7, 0, MODE_BASE_PAGE_Y, $fe, 0, 14, 0, 0
+    +test_expect_addressing_expr $08, test_expect_addressing_expr_8, 0, MODE_ABSOLUTE, $d020, 0, 9, 0, 0
+    +test_expect_addressing_expr $09, test_expect_addressing_expr_9, 0, MODE_ABSOLUTE_X, $d020, 0, 14, 0, 0
+    +test_expect_addressing_expr $0a, test_expect_addressing_expr_10, 0, MODE_ABSOLUTE_Y, $d020, 0, 14, 0, 0
+    +test_expect_addressing_expr $0b, test_expect_addressing_expr_11, 0, MODE_ABSOLUTE_X, $fe, F_EXPR_BRACKET_ZERO, 14, 0, 0
+    +test_expect_addressing_expr $0c, test_expect_addressing_expr_12, 0, MODE_ABSOLUTE_IND, $fffe, F_EXPR_BRACKET_PAREN, 13, 0, 0
+    +test_expect_addressing_expr $0d, test_expect_addressing_expr_13, 0, MODE_ABSOLUTE_IND_X, $c000, 0, 18, 0, 0
+    +test_expect_addressing_expr $0e, test_expect_addressing_expr_14, 0, MODE_BASE_PAGE_IND_X, $fe, 0, 18, 0, 0
+    +test_expect_addressing_expr $0f, test_expect_addressing_expr_15, 0, MODE_BASE_PAGE_IND_Y, $fe, F_EXPR_BRACKET_PAREN, 18, 0, 0
+    +test_expect_addressing_expr $10, test_expect_addressing_expr_16, 0, MODE_BASE_PAGE_IND_Z, $fe, F_EXPR_BRACKET_PAREN, 18, 0, 0
+    +test_expect_addressing_expr $11, test_expect_addressing_expr_17, 0, MODE_32BIT_IND, $fe, F_EXPR_BRACKET_SQUARE, 18, 0, 0
+    +test_expect_addressing_expr $12, test_expect_addressing_expr_18, 0, MODE_32BIT_IND, $fe, F_EXPR_BRACKET_SQUARE, 13, 0, 0
+    +test_expect_addressing_expr $13, test_expect_addressing_expr_19, 0, MODE_STACK_REL, 4, 0, 23, 0, 0
+    +test_expect_addressing_expr $14, test_expect_addressing_expr_20, 0, MODE_STACK_REL, 4, 0, 23, 0, 0
     +test_expect_addressing_expr $15, test_expect_addressing_expr_21, 1, 0, 0, 0, 0, err_syntax, 6+4
     +test_expect_addressing_expr $16, test_expect_addressing_expr_22, 1, 0, 0, 0, 0, err_syntax, 8+4
     +test_expect_addressing_expr $17, test_expect_addressing_expr_23, 1, 0, 0, 0, 0, err_syntax, 10+4

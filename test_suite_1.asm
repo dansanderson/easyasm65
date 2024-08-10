@@ -287,8 +287,10 @@ test_find_in_token_list_4: !pet "zzz  ",0
 test_find_in_token_list_5: !pet "adcz  ",0
 test_find_in_token_list_6: !pet "adc#  ",0
 test_find_in_token_list_7: !pet "#adc#  ",0
+test_find_in_token_list_8: !pet "adc+1  ",0
+test_find_in_token_list_9: !pet "adc+2  ",0
 
-!macro test_tokenize_mnemonic .tnum, .str, .pos, .ec, .etoken, .epos {
+!macro test_tokenize_mnemonic .tnum, .str, .pos, .ec, .etoken, .epos, .eflags {
     +test_start .tnum
 
     ; Copy .str to strbuf
@@ -303,24 +305,13 @@ test_find_in_token_list_7: !pet "#adc#  ",0
     stx line_pos
     jsr tokenize_mnemonic
 !if .ec {
-    bcs +
-    brk
-+   cpx #.etoken
-    beq +
-    brk
-+   lda line_pos
-    cmp #.epos
-    beq +
-    brk
-+
+    +assert_cs test_msg_ecs
+    cpx #.etoken
+    +assert_eq test_msg_wrong_result
+    +assert_mem_eq_byte line_pos, .epos, test_msg_wrong_result
 } else {
-    bcc +
-    brk
-+   lda line_pos
-    cmp #.pos
-    beq +
-    brk
-+
+    +assert_cc test_msg_ecc
+    +assert_mem_eq_byte line_pos, .epos, test_msg_wrong_err_pos
 }
 
     +test_end
@@ -461,15 +452,8 @@ test_load_line_to_strbuf_1e: !pet "abc",0
     jsr tokenize
 
 !if .eerror {
-    lda err_code
-    cmp #.eerror
-    beq +
-    brk
-+   lda line_pos
-    cmp #.eerror_pos
-    beq +
-    brk
-+
+    +assert_mem_eq_byte err_code, .eerror, test_msg_wrong_err_code
+    +assert_mem_eq_byte line_pos, .eerror_pos, test_msg_wrong_err_pos
 } else {
     ldx #.etokbuf_end-.etokbuf
 -   dex
@@ -504,7 +488,7 @@ test_tokenize_5e:
     !32 $deadbeef
     !byte 0, $ff
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 135, 4, 0, $ff
+test_tokenize_6e: !byte 135, 4, 0, 0, $ff
 test_tokenize_7: !pet "!wOrD",0
 test_tokenize_7e: !byte po_word, 4, 0, $ff
 test_tokenize_8: !pet "xOr",0
@@ -519,7 +503,7 @@ test_tokenize_12: !pet "label: lda (45, sp), y  ; comment",0
 test_tokenize_12e:
     !byte tk_label_or_reg, 4, 5
     !byte tk_colon, 9
-    !byte 66, 11
+    !byte 66, 11, 0
     !byte tk_lparen, 15
     !byte tk_number_literal, 16
     !32 45
@@ -554,7 +538,7 @@ test_tokenize_15e:
     !byte 0, $ff
 test_tokenize_16: !pet "lda $000a",0
 test_tokenize_16e:
-    !byte 66, 4
+    !byte 66, 4, 0
     !byte tk_number_literal_leading_zero, 8
     !32 $000a
     !byte 0, $ff
@@ -1151,7 +1135,7 @@ test_expect_keyword_line_1: !pet "5 xor 7",0
 test_expect_keyword_line_2: !pet "5 XoR 7",0
 test_expect_keyword_line_3: !pet "5 ror 7",0
 
-!macro test_expect_oppop .tnum, .isop, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
+!macro test_expect_oppop .tnum, .isop, .tokbuf, .tokbufend, .ec, .etokpos, .ea, .ey {
     +test_start .tnum
     ldx #.tokbufend-.tokbuf
     dex
@@ -1185,20 +1169,27 @@ test_expect_keyword_line_3: !pet "5 ror 7",0
     beq +
     brk
 +
+!if .isop {
+    cpy #.ey
+    beq +
+    brk
++
+}
 }
 
     +test_end
 }
-!macro test_expect_opcode .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
-    +test_expect_oppop .tnum, 1, .tokbuf, .tokbufend, .ec, .etokpos, .ea
+!macro test_expect_opcode .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea, .ey {
+    +test_expect_oppop .tnum, 1, .tokbuf, .tokbufend, .ec, .etokpos, .ea, .ey
 }
 !macro test_expect_pseudoop .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea {
-    +test_expect_oppop .tnum, 0, .tokbuf, .tokbufend, .ec, .etokpos, .ea
+    +test_expect_oppop .tnum, 0, .tokbuf, .tokbufend, .ec, .etokpos, .ea, 0
 }
 
 test_expect_oppop_1: !byte 0, $ff
-test_expect_oppop_2: !byte 1, 4, 0, $ff
+test_expect_oppop_2: !byte 1, 4, 0, 0, $ff
 test_expect_oppop_3: !byte po_to, 4, 0, $ff
+test_expect_oppop_4: !byte 1, 4, F_ASM_FORCE16, 0, $ff
 test_expect_oppop_end:
 
 !macro test_expect_literal .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .eresult, .eflags {
@@ -1373,13 +1364,16 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "tokenize-mnemonic"
-    +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3
-    +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4
-    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 135, 3
-    +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0
-    +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0
-    +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3
-    +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 0, 4
+    ; .tnum, .str, .pos, .ec, .etoken, .epos, .eflags
+    +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3, 0
+    +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4, 0
+    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 135, 3, 0
+    +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0, 0
+    +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0, 0
+    +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3, 0
+    +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 0, 4, 0
+    +test_tokenize_mnemonic $08, test_find_in_token_list_8, 0, 1, 0, 5, F_ASM_FORCE8
+    +test_tokenize_mnemonic $09, test_find_in_token_list_9, 0, 1, 0, 5, F_ASM_FORCE16
 
     +print_chr chr_cr
     +print_strlit_line "tokenize-pseudoop"
@@ -1481,21 +1475,23 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-opcode"
-    +test_expect_opcode $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
-    +test_expect_opcode $02, test_expect_oppop_2, test_expect_oppop_3, 0, 2, 1
-    +test_expect_opcode $03, test_expect_oppop_3, test_expect_oppop_end, 1, 0, 0
+    ; .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea
+    +test_expect_opcode $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0, 0
+    +test_expect_opcode $02, test_expect_oppop_2, test_expect_oppop_3, 0, 3, 1, 0
+    +test_expect_opcode $03, test_expect_oppop_3, test_expect_oppop_4, 1, 0, 0, 0
+    +test_expect_opcode $04, test_expect_oppop_4, test_expect_oppop_end, 0, 3, 1, F_ASM_FORCE16
 
     +print_chr chr_cr
-    +print_strlit_line "test-expect-pseudoop"
-    +test_expect_pseudoop $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
-    +test_expect_pseudoop $02, test_expect_oppop_2, test_expect_oppop_3, 1, 0, 0
-    +test_expect_pseudoop $03, test_expect_oppop_3, test_expect_oppop_end, 0, 2, po_to
+    +print_strlit_line "test-expect-pseudoop -- disabled for space"
+    ; +test_expect_pseudoop $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
+    ; +test_expect_pseudoop $02, test_expect_oppop_2, test_expect_oppop_3, 1, 0, 0
+    ; +test_expect_pseudoop $03, test_expect_oppop_3, test_expect_oppop_end, 0, 2, po_to
 
     +print_chr chr_cr
-    +print_strlit_line "test-expect-literal"
-    +test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
-    +test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
-    +test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
+    +print_strlit_line "test-expect-literal -- disabled for space"
+    ;+test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
+    ;+test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
+    ;+test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

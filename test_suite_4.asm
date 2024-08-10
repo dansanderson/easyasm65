@@ -93,6 +93,13 @@ test_assemble_instruction_11_bytes_end:
 test_assemble_instruction_12: !pet "stq [$fc]",0
 test_assemble_instruction_12_bytes: !byte $42, $42, $ea, $92, $fc
 test_assemble_instruction_12_bytes_end:
+test_assemble_instruction_13: !pet "sta+2 $fc",0
+test_assemble_instruction_13_bytes: !byte $8d, $fc, 00
+test_assemble_instruction_13_bytes_end:
+test_assemble_instruction_14: !pet "sta+1 $00fc",0
+test_assemble_instruction_14_bytes: !byte $85, $fc
+test_assemble_instruction_14_bytes_end:
+
 
 !macro test_assemble_line .tnum, .line_addr, .ec, .eerr, .epos {
     +test_start .tnum
@@ -185,6 +192,8 @@ run_test_suite_cmd:
     +test_assemble_instruction $0a, test_assemble_instruction_10, 0, 0, $0015, test_assemble_instruction_10_bytes, test_assemble_instruction_10_bytes_end-test_assemble_instruction_10_bytes
     +test_assemble_instruction $0b, test_assemble_instruction_11, 0, 0, $0014, test_assemble_instruction_11_bytes, test_assemble_instruction_11_bytes_end-test_assemble_instruction_11_bytes
     +test_assemble_instruction $0c, test_assemble_instruction_12, 0, 0, $0015, test_assemble_instruction_12_bytes, test_assemble_instruction_12_bytes_end-test_assemble_instruction_12_bytes
+    +test_assemble_instruction $0d, test_assemble_instruction_13, 0, 0, $0013, test_assemble_instruction_13_bytes, test_assemble_instruction_13_bytes_end-test_assemble_instruction_13_bytes
+    +test_assemble_instruction $0e, test_assemble_instruction_14, 0, 0, $0012, test_assemble_instruction_14_bytes, test_assemble_instruction_14_bytes_end-test_assemble_instruction_14_bytes
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-line"
