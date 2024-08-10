@@ -31,7 +31,12 @@ easyasm_base_page = $1e
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
 asm_flags       *=*+1
+; - The PC is defined.
 F_ASM_PC_DEFINED = %00000001
+; - expect_addressing_expr is forcing 16-bit addressing.
+F_ASM_FORCE_MASK = %00000110
+F_ASM_FORCE8     = %00000010
+F_ASM_FORCE16    = %00000100
 current_segment *=*+4
 next_segment_pc *=*+2
 next_segment_byte_addr *=*+4
@@ -2311,7 +2316,11 @@ assemble_label:
 
 ; Input: expr_result, expr_flags
 ; Output: C=1 if expr is > 256 or is forced to 16-bit with leading zero
+;   Also honors F_ASM_FORCE16 assembly flag.
 is_expr_16bit:
+    lda asm_flags
+    and #F_ASM_FORCE16
+    bne +
     lda expr_flags
     and #F_EXPR_BRACKET_ZERO
     bne +
@@ -2337,6 +2346,17 @@ is_expr_16bit:
     rts
 }
 
+
+force16_if_expr_undefined:
+    lda expr_flags
+    and #F_EXPR_UNDEFINED
+    beq +
+    jsr add_forced16
++   rts
+
+
+; Input: tokbuf, tok_pos; asm_flags
+; Output: ...
 expect_addressing_expr:
     lda #0
     sta expr_result
@@ -2356,12 +2376,24 @@ expect_addressing_expr:
 +   +expect_addresing_expr_rts MODE_IMPLIED
 
 @try_immediate
+    ; Check if the current PC is on the "forced16" list.
+    lda asm_flags
+    and #F_ASM_FORCE16
+    beq +  ; skip if already forced
+    jsr find_forced16
+    bcc +
+    lda asm_flags
+    ora #F_ASM_FORCE16
+    sta asm_flags
++
+
     ; "#" <expr>: Immediate
     lda #tk_hash
     jsr expect_token
     bcs @try_modes_with_leading_expr
     jsr expect_expr
     bcs ++
+    jsr force16_if_expr_undefined
     jsr is_expr_16bit
     bcs +
     +expect_addresing_expr_rts MODE_IMMEDIATE
@@ -2371,6 +2403,7 @@ expect_addressing_expr:
 @try_modes_with_leading_expr
     jsr expect_expr
     lbcs @try_modes_without_leading_expr
+    jsr force16_if_expr_undefined
     ; Addressing modes that start with expressions:
     lda expr_flags
     and #F_EXPR_BRACKET_MASK
@@ -2478,7 +2511,8 @@ expect_addressing_expr:
 +   jsr expect_expr
     bcc +
     lbra @addr_error
-+   lda #tk_comma
++   jsr force16_if_expr_undefined
+    lda #tk_comma
     jsr expect_token
     bcc +
     lbra @addr_error
@@ -2543,6 +2577,12 @@ assemble_instruction:
     jsr expect_opcode
     lbcs statement_err_exit
     pha  ; (mnemonic ID)
+
+    ; TODO: force 8-bit if +1, 16-bit if +2
+    lda asm_flags
+    and #!F_ASM_FORCE_MASK
+    sta asm_flags
+
     jsr expect_addressing_expr
     pla
     lbcs statement_err_exit
