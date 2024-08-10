@@ -628,11 +628,12 @@ print_error:
     dex
     dex
     dex
+    beq +
 -   lda #chr_spc
     +kcall bsout
     dex
     bne -
-    lda #chr_uparrow
++   lda #chr_uparrow
     +kcall bsout
     lda #chr_cr
     +kcall bsout
@@ -1888,6 +1889,12 @@ init_forced16:
 ;   attic_ptr at PC entry or end of list
 find_forced16:
     jsr set_attic_ptr_to_forced16
+
+    ; Report an undefined PC as "not found"
+    lda asm_flags
+    ora F_ASM_PC_DEFINED
+    beq @not_found
+
     ldx program_counter
     ldy program_counter+1
 -   ldz #0
@@ -1935,7 +1942,13 @@ add_forced16:
     jsr find_forced16
     bcc +
     rts   ; already in the list
-+   ldz #0
++
+    ; Don't add an undefined PC
+    lda asm_flags
+    ora F_ASM_PC_DEFINED
+    beq +
+
+    ldz #0
     lda program_counter
     sta [attic_ptr],z
     inz
@@ -1946,7 +1959,7 @@ add_forced16:
     sta [attic_ptr],z
     inz
     sta [attic_ptr],z
-    rts
++   rts
 
 
 ; ------------------------------------------------------------
@@ -2130,6 +2143,9 @@ expect_expr:
     ; This temporary expression parser accepts a literal or a label.
     ldx tok_pos
     phx
+
+    lda tokbuf,x
+    lbeq @fail
 
     ; "(" expr ")"
     lda #tk_lparen
@@ -2405,6 +2421,10 @@ force16_if_expr_undefined:
     and #F_EXPR_UNDEFINED
     beq +
     jsr add_forced16
+    lda asm_flags
+    and #!F_ASM_FORCE_MASK
+    ora #F_ASM_FORCE16
+    sta asm_flags
 +   rts
 
 

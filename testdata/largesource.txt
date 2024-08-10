@@ -1,0 +1,129 @@
+; Not actually EasyAsm's full source, just a bunch of source to stress test.
+
+; EasyAsm, an assembler for the MEGA65
+; Copyright c 2024  Dan Sanderson
+;
+; This program is free software: you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation, either version 3 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+;
+; ---------------------------------------------------------
+; easyasm : The main program
+; ---------------------------------------------------------
+
+* = $2000
+
+kernal_base_page = $00
+easyasm_base_page = $1e
+
+; BP map (B = $1E)
+; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
+
+; - The PC is defined.
+F_ASM_PC_DEFINED = %00000001
+; - expect_addressing_expr is forcing 16-bit addressing.
+F_ASM_FORCE_MASK = %00000110
+F_ASM_FORCE8     = %00000010
+F_ASM_FORCE16    = %00000100
+
+; Other memory
+source_start = $2000  ; bank 0
+tokbuf = $7e00        ; bank 5
+strbuf = $7f00        ; bank 5
+max_end_of_program = tokbuf
+
+; KERNAL routines
+bsout = $ffd2
+primm = $ff7d
+
+; MEGA65 registers
+dmaimm = $d707
+
+; Character constants
+chr_cr = 13
+chr_spc = 32
+chr_shiftspc = 160
+chr_tab = 9
+chr_uparrow = 94
+chr_backarrow = 95
+chr_megaat = 164
+chr_doublequote = 34
+
+; All entry into EasyAsm comes through here.
+; MAPL = (E)500  MAPH = (8)300  B = $1Exx
+; A = dispatch index (1-indexed)
+dispatch:
+    pha
+    jsr init
+    txa
+    tay  ; Y = argument
+    pla
+
+; A = menu option or 0 for menu, Y = argument (reserved)
+invoke_menu_option:
+    asl
+    tax   ; X = A*2
+    jmp (dispatch_jump,x)
+dispatch_jump:
+    inx
+
+init:
+
+; ------------------------------------------------------------
+; Utilities
+; ------------------------------------------------------------
+
+; Print a C-style string
+; Input: X/Y address (bank 5)
+print_cstr:
+    ; Manage B manually, for speed
+    lda #kernal_base_page
+    tab
+
+    stx $fc   ; B=0
+    sty $fd
+    lda #$05
+    sta $fe
+    lda #$00
+    sta $ff
+
+-   ldz #0
+    lda [$fc],z
+    beq +
+    jsr bsout
+    inw $fc
+    bra -
++
+    ; Restore B
+    lda #easyasm_base_page
+    tab
+    rts
+
+; Input: A = byte
+; Output: A/Z = hex digits
+hex_az:
+    pha
+    lsr
+    lsr
+    lsr
+    lsr
+    jsr hex_nyb
+    taz
+    pla
+
+hex_nyb:
+    and #15
+    cmp #10
+    bcc +
+    adc #6
++   adc #'0'
+    rts
