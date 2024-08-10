@@ -1,6 +1,12 @@
 !macro test_expect_addressing_expr .tnum, .str, .ec, .emode, .eresult, .eflags, .etokpos, .eerror, .eerror_pos {
     +test_start .tnum
 
+    ; TODO: add tests for forced16 and forced8 modes
+    jsr init_forced16
+    lda asm_flags
+    and #!F_ASM_FORCE_MASK
+    sta asm_flags
+
     ; Fake assembly location in bank 5
     lda #5
     sta bas_ptr+2

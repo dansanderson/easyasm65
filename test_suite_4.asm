@@ -24,6 +24,7 @@
 +
     jsr init_symbol_table
     jsr init_segment_table
+    jsr init_forced16
 
     ldx #0
     stx pass
@@ -31,7 +32,7 @@
     stx stmt_tokpos
     stx err_code
     stx asm_flags
-    +set_pc_for_test $0000
+    +set_pc_for_test $0010
     jsr assemble_instruction
 
 !if .ec {
@@ -172,18 +173,18 @@ run_test_suite_cmd:
     +print_chr chr_cr
     +print_strlit_line "test-assemble-instruction"
     ; .tnum, .str, .ec, .eerr, .epc, .ebytes, .ebytes_len
-    +test_assemble_instruction $01, test_assemble_instruction_1, 0, 0, 1, test_assemble_instruction_1_bytes, test_assemble_instruction_1_bytes_end-test_assemble_instruction_1_bytes
-    +test_assemble_instruction $02, test_assemble_instruction_2, 0, 0, 2, test_assemble_instruction_2_bytes, test_assemble_instruction_2_bytes_end-test_assemble_instruction_2_bytes
-    +test_assemble_instruction $03, test_assemble_instruction_3, 0, 0, 3, test_assemble_instruction_3_bytes, test_assemble_instruction_3_bytes_end-test_assemble_instruction_3_bytes
-    +test_assemble_instruction $04, test_assemble_instruction_4, 0, 0, 2, test_assemble_instruction_4_bytes, test_assemble_instruction_4_bytes_end-test_assemble_instruction_4_bytes
-    +test_assemble_instruction $05, test_assemble_instruction_5, 0, 0, 3, test_assemble_instruction_5_bytes, test_assemble_instruction_5_bytes_end-test_assemble_instruction_5_bytes
-    +test_assemble_instruction $06, test_assemble_instruction_6, 0, 0, 2, test_assemble_instruction_6_bytes, test_assemble_instruction_6_bytes_end-test_assemble_instruction_6_bytes
-    +test_assemble_instruction $07, test_assemble_instruction_7, 0, 0, 3, test_assemble_instruction_7_bytes, test_assemble_instruction_7_bytes_end-test_assemble_instruction_7_bytes
-    +test_assemble_instruction $08, test_assemble_instruction_8, 0, 0, 2, test_assemble_instruction_8_bytes, test_assemble_instruction_8_bytes_end-test_assemble_instruction_8_bytes
-    +test_assemble_instruction $09, test_assemble_instruction_9, 0, 0, 4, test_assemble_instruction_9_bytes, test_assemble_instruction_9_bytes_end-test_assemble_instruction_9_bytes
-    +test_assemble_instruction $0a, test_assemble_instruction_10, 0, 0, 5, test_assemble_instruction_10_bytes, test_assemble_instruction_10_bytes_end-test_assemble_instruction_10_bytes
-    +test_assemble_instruction $0b, test_assemble_instruction_11, 0, 0, 4, test_assemble_instruction_11_bytes, test_assemble_instruction_11_bytes_end-test_assemble_instruction_11_bytes
-    +test_assemble_instruction $0c, test_assemble_instruction_12, 0, 0, 5, test_assemble_instruction_12_bytes, test_assemble_instruction_12_bytes_end-test_assemble_instruction_12_bytes
+    +test_assemble_instruction $01, test_assemble_instruction_1, 0, 0, $0011, test_assemble_instruction_1_bytes, test_assemble_instruction_1_bytes_end-test_assemble_instruction_1_bytes
+    +test_assemble_instruction $02, test_assemble_instruction_2, 0, 0, $0012, test_assemble_instruction_2_bytes, test_assemble_instruction_2_bytes_end-test_assemble_instruction_2_bytes
+    +test_assemble_instruction $03, test_assemble_instruction_3, 0, 0, $0013, test_assemble_instruction_3_bytes, test_assemble_instruction_3_bytes_end-test_assemble_instruction_3_bytes
+    +test_assemble_instruction $04, test_assemble_instruction_4, 0, 0, $0012, test_assemble_instruction_4_bytes, test_assemble_instruction_4_bytes_end-test_assemble_instruction_4_bytes
+    +test_assemble_instruction $05, test_assemble_instruction_5, 0, 0, $0013, test_assemble_instruction_5_bytes, test_assemble_instruction_5_bytes_end-test_assemble_instruction_5_bytes
+    +test_assemble_instruction $06, test_assemble_instruction_6, 0, 0, $0012, test_assemble_instruction_6_bytes, test_assemble_instruction_6_bytes_end-test_assemble_instruction_6_bytes
+    +test_assemble_instruction $07, test_assemble_instruction_7, 0, 0, $0013, test_assemble_instruction_7_bytes, test_assemble_instruction_7_bytes_end-test_assemble_instruction_7_bytes
+    +test_assemble_instruction $08, test_assemble_instruction_8, 0, 0, $0012, test_assemble_instruction_8_bytes, test_assemble_instruction_8_bytes_end-test_assemble_instruction_8_bytes
+    +test_assemble_instruction $09, test_assemble_instruction_9, 0, 0, $0014, test_assemble_instruction_9_bytes, test_assemble_instruction_9_bytes_end-test_assemble_instruction_9_bytes
+    +test_assemble_instruction $0a, test_assemble_instruction_10, 0, 0, $0015, test_assemble_instruction_10_bytes, test_assemble_instruction_10_bytes_end-test_assemble_instruction_10_bytes
+    +test_assemble_instruction $0b, test_assemble_instruction_11, 0, 0, $0014, test_assemble_instruction_11_bytes, test_assemble_instruction_11_bytes_end-test_assemble_instruction_11_bytes
+    +test_assemble_instruction $0c, test_assemble_instruction_12, 0, 0, $0015, test_assemble_instruction_12_bytes, test_assemble_instruction_12_bytes_end-test_assemble_instruction_12_bytes
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-line"
