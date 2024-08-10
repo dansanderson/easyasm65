@@ -30,13 +30,22 @@ easyasm_base_page = $1e
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
+
 asm_flags       *=*+1
-; - The PC is defined.
+; - The PC is defined
 F_ASM_PC_DEFINED = %00000001
-; - expect_addressing_expr is forcing 16-bit addressing.
+; - expect_addressing_expr is forcing 16-bit addressing
 F_ASM_FORCE_MASK = %00000110
 F_ASM_FORCE8     = %00000010
 F_ASM_FORCE16    = %00000100
+F_ASM_F16IMM     = %00000110
+; - expect_addressing_expr subtracts address arg from PC for branching
+F_ASM_AREL_MASK  = %00011000
+F_ASM_AREL8      = %00001000
+F_ASM_AREL16     = %00010000
+; - assembly generated at least one warning
+F_ASM_WARN       = %00100000
+
 current_segment *=*+4
 next_segment_pc *=*+2
 next_segment_byte_addr *=*+4
@@ -639,6 +648,50 @@ print_error:
     +kcall bsout
 
 +++ rts
+
+
+; Input: A=warning ID
+; Output: prints message with line number, sets F_ASM_WARN
+print_warning:
+    pha
+
+    +kprimm_start
+    !pet "line ",0
+    +kprimm_end
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    ldz #3
+    lda [bas_ptr],z        ; line number high
+    tax
+    dez
+    lda [bas_ptr],z        ; line number low
+    ldy #0
+    ldz #0
+    clc                    ; request unsigned
+    jsr print_dec32
+    +kprimm_start
+    !pet ": ",0
+    +kprimm_end
+
+    pla
+    dec
+    asl
+    tax
+    lda warn_message_tbl+1,x
+    tay
+    lda warn_message_tbl,x
+    tax
+    jsr print_cstr
+
+    lda #chr_cr
+    +kcall bsout
+
+    lda asm_flags
+    ora #F_ASM_WARN
+    sta asm_flags
+    rts
 
 
 ; Test whether A is a letter
@@ -2452,6 +2505,36 @@ expect_addressing_expr:
 +   +expect_addresing_expr_rts MODE_IMPLIED
 
 @try_immediate
+    ; "#" <expr>: Immediate
+    lda #tk_hash
+    jsr expect_token
+    bcs @try_modes_with_leading_expr
+    jsr expect_expr
+    lbcs @addr_error
+    lda asm_flags
+    and #F_ASM_F16IMM
+    beq +
+    +expect_addresing_expr_rts MODE_IMMEDIATE_WORD
++   ; Value must be in byte range, signed or unsigned
+    lda expr_result+1
+    ora expr_result+2
+    ora expr_result+3
+    beq +  ; Positive 0 - 255
+    lda expr_result+1
+    and expr_result+2
+    and expr_result+3
+    cmp #$ff
+    bne ++
+    lda expr_result+0
+    cmp #$80
+    bcs ++
+    ; Negative -128 - +127
++   +expect_addresing_expr_rts MODE_IMMEDIATE
+++  lda #err_value_out_of_range
+    sta err_code
+    lbra @addr_error
+
+@try_modes_with_leading_expr
     ; Check if the current PC is on the "forced16" list.
     lda asm_flags
     and #F_ASM_FORCE16
@@ -2463,20 +2546,6 @@ expect_addressing_expr:
     sta asm_flags
 +
 
-    ; "#" <expr>: Immediate
-    lda #tk_hash
-    jsr expect_token
-    bcs @try_modes_with_leading_expr
-    jsr expect_expr
-    bcs ++
-    jsr force16_if_expr_undefined
-    jsr is_expr_16bit
-    bcs +
-    +expect_addresing_expr_rts MODE_IMMEDIATE
-+   +expect_addresing_expr_rts MODE_IMMEDIATE_WORD
-++  lbra @addr_error
-
-@try_modes_with_leading_expr
     jsr expect_expr
     lbcs @try_modes_without_leading_expr
     jsr force16_if_expr_undefined
@@ -2652,26 +2721,18 @@ assemble_instruction:
     sta instr_line_pos  ; stash line_pos for errors
     jsr expect_opcode
     lbcs statement_err_exit
-    pha  ; (mnemonic ID)
-
-    ; Force 8-bit if +1, 16-bit if +2
+    sta instr_mnemonic_id
+    ; Reset instruction flags
     lda asm_flags
-    and #!F_ASM_FORCE_MASK
+    and #!(F_ASM_FORCE_MASK | F_ASM_AREL_MASK)
     sta asm_flags
+    ; Propagate flags from tokenizer: 8-bit if +1, 16-bit if +2
     tya
     ora asm_flags
     sta asm_flags
 
-    jsr expect_addressing_expr
-    pla
-    lbcs statement_err_exit
-
-    ; A=mnemonic ID, X/Y=addr mode flags, expr_result=operand (if any)
-    sta instr_mnemonic_id
-    stx instr_addr_mode
-    sty instr_addr_mode+1
-
     ; Locate addressing mode record for mnemonic
+    lda instr_mnemonic_id
     sta instr_mode_rec_addr
     lda #0
     sta instr_mode_rec_addr+1
@@ -2685,6 +2746,46 @@ assemble_instruction:
     lda #>addressing_modes
     adc instr_mode_rec_addr+1
     sta instr_mode_rec_addr+1  ; instr_mode_rec_addr = address of mode record for mnemonic
+
+    ; Force 16-bit if instruction only accepts 16-bit arguments
+    ; (Note that FORCE16 will not force Immediate Word mode, so LDZ is fine.)
+    ldy #0
+    lda (instr_mode_rec_addr),y
+    and #<MODES_WORD_OPERAND
+    bne +
+    iny
+    lda (instr_mode_rec_addr),y
+    and #>MODES_WORD_OPERAND
+    beq +++  ; does not have word operand modes
++   ldy #0
+    lda (instr_mode_rec_addr),y
+    and #<MODES_BYTE_OPERAND
+    bne +++  ; also has byte operand modes, no force
+    lda (instr_mode_rec_addr),y
+    and #>MODES_BYTE_OPERAND
+    bne +++
+    ; Only has word operand modes. Coerce operands to 16-bit.
+    ; (Overrides "+1", which is inappropriate in this case anyway.)
+    lda asm_flags
+    and #!F_ASM_FORCE_MASK
+    ora #F_ASM_FORCE16
+    sta asm_flags
++++
+
+    ; Special case: force 16-bit immediate just for PHW
+    lda instr_mnemonic_id
+    cmp #mnemonic_phw
+    bne +++
+    lda asm_flags
+    ora #F_ASM_F16IMM
+    sta asm_flags
++++
+
+    ; Process the addressing mode expression
+    jsr expect_addressing_expr
+    lbcs statement_err_exit
+    stx instr_addr_mode
+    sty instr_addr_mode+1
 
     ; Match addressing mode to opcode; error if not supported
     ldy #0
@@ -3024,6 +3125,12 @@ e06: !pet "out of memory",0
 err_undefined = 7
 e07: !pet "symbol undefined",0
 
+warn_message_tbl:
+!word w01
+warn_messages:
+warn_ldz_range = 1
+w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
+
 ; ---------------------------------------------------------
 ; Mnemonics token list
 mnemonic_count = 136
@@ -3038,6 +3145,7 @@ mnemonics:
 !pet "asrq",0  ; $07
 !pet "asw",0   ; $08
 !pet "bbr0",0  ; $09
+mnemonic_bbr0 = $09
 !pet "bbr1",0  ; $0A
 !pet "bbr2",0  ; $0B
 !pet "bbr3",0  ; $0C
@@ -3053,6 +3161,7 @@ mnemonics:
 !pet "bbs5",0  ; $16
 !pet "bbs6",0  ; $17
 !pet "bbs7",0  ; $18
+mnemonic_bbs7 = $18
 !pet "bcc",0   ; $19
 !pet "bcs",0   ; $1A
 !pet "beq",0   ; $1B
@@ -3099,6 +3208,7 @@ mnemonics:
 !pet "ldx",0   ; $44
 !pet "ldy",0   ; $45
 !pet "ldz",0   ; $46
+mnemonic_ldz = $46
 !pet "lsr",0   ; $47
 !pet "lsrq",0  ; $48
 !pet "map",0   ; $49
@@ -3108,6 +3218,7 @@ mnemonics:
 !pet "pha",0   ; $4D
 !pet "php",0   ; $4E
 !pet "phw",0   ; $4F
+mnemonic_phw = $4f
 !pet "phx",0   ; $50
 !pet "phy",0   ; $51
 !pet "phz",0   ; $52
