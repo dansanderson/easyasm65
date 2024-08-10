@@ -188,6 +188,7 @@ init:
 
     jsr init_symbol_table
     jsr init_segment_table
+    jsr init_forced16
 
     rts
 
@@ -1749,6 +1750,7 @@ assemble_bytes:
     sta [next_segment_byte_addr],z
     ldq next_segment_byte_addr
     stq current_segment
+
     lda #0
     tax
     tay
@@ -1785,6 +1787,17 @@ assemble_bytes:
     clc
     adcq next_segment_byte_addr
     stq next_segment_byte_addr
+
+    ; Null terminate the segment list
+    ldz #0
+    lda #0
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
 
 @increment_pc:
     ; Add length program_counter and next_segment_pc.
@@ -2316,21 +2329,24 @@ assemble_label:
 
 ; Input: expr_result, expr_flags
 ; Output: C=1 if expr is > 256 or is forced to 16-bit with leading zero
-;   Also honors F_ASM_FORCE16 assembly flag.
+;   Also honors F_ASM_FORCE8/16 assembly flags.
 is_expr_16bit:
     lda asm_flags
-    and #F_ASM_FORCE16
-    bne +
+    and #F_ASM_FORCE_MASK
+    cmp #F_ASM_FORCE16
+    beq ++
+    cmp #F_ASM_FORCE8
+    beq +
     lda expr_flags
     and #F_EXPR_BRACKET_ZERO
-    bne +
+    bne ++
     lda expr_result+1
     ora expr_result+2
     ora expr_result+3
-    bne +
-    clc
+    bne ++
++   clc
     rts
-+   sec
+++  sec
     rts
 
 
@@ -2379,7 +2395,7 @@ expect_addressing_expr:
     ; Check if the current PC is on the "forced16" list.
     lda asm_flags
     and #F_ASM_FORCE16
-    beq +  ; skip if already forced
+    bne +  ; skip if already forced
     jsr find_forced16
     bcc +
     lda asm_flags
