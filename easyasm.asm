@@ -2573,9 +2573,9 @@ make_operand_rel:
     lda program_counter+1
     adc #0
     tax
+    tya
     ldy #0
     ldz #0
-    tya
     stq expr_a  ; expr_a = program_counter + 2
     ldq expr_result
     sec
