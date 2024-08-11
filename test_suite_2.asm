@@ -297,10 +297,7 @@ test_assemble_pc_assign_tb_4: !byte tk_multiply, 0, tk_equal, 2, tk_number_liter
 test_assemble_pc_assign_tb_end:
 test_assemble_pc_assign_line_1: !pet "* = label",0
 
-
-!macro test_assemble_label .tnum, .tokbuf, .tokbufend, .lineaddr, .ec, .etokpos, .eerr, .ez, .edefined, .evalue, .ezero {
-    +test_start .tnum
-
+!macro assemble_label_for_test .tokbuf, .tokbufend, .lineaddr {
     ldx #.tokbufend-.tokbuf
     dex
 -   lda .tokbuf,x
@@ -317,6 +314,12 @@ test_assemble_pc_assign_line_1: !pet "* = label",0
     stx tok_pos
     stx stmt_tokpos
     jsr assemble_label
+}
+
+!macro test_assemble_label .tnum, .tokbuf, .tokbufend, .lineaddr, .ec, .etokpos, .eerr, .ez, .edefined, .evalue, .ezero {
+    +test_start .tnum
+
+    +assemble_label_for_test .tokbuf, .tokbufend, .lineaddr
 
 !if .ec {
     +assert_cs test_msg_ecs
@@ -333,7 +336,7 @@ test_assemble_pc_assign_line_1: !pet "* = label",0
     lda #>.lineaddr
     sta bas_ptr+1
     ldx #5
-    jsr find_symbol
+    jsr find_or_add_label
     jsr get_symbol_value
 
     !if .edefined {
@@ -368,9 +371,11 @@ test_assemble_label_tb_3: !byte tk_label_or_reg, 0, 5, tk_equal, 6, tk_number_li
 test_assemble_label_tb_4: !byte tk_label_or_reg, 0, 5, tk_equal, 6, tk_label_or_reg, 8, 6, 0, $ff
 test_assemble_label_tb_5: !byte tk_label_or_reg, 0, 5, 0, $ff
 test_assemble_label_tb_6: !byte tk_label_or_reg, 0, 5, 1, 6, 0, $ff
+test_assemble_label_tb_7: !byte tk_label_or_reg, 0, 7, tk_equal, 8, tk_label_or_reg, 10, 6, 0, $ff
+test_assemble_label_tb_8: !byte tk_label_or_reg, 0, 7, 0, $ff
 test_assemble_label_tb_end:
 test_assemble_label_line_1: !pet "label = label2",0
-
+test_assemble_label_line_2: !pet "@cheapo = label2",0
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -491,11 +496,22 @@ run_test_suite_cmd:
     ldx #$bb
     ldy #$aa
     jsr set_pc
-    +test_assemble_label $07, test_assemble_label_tb_6, test_assemble_label_tb_end, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
+    +test_assemble_label $07, test_assemble_label_tb_6, test_assemble_label_tb_7, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
 
     +start_test_expect_expr 0
     +set_symbol_for_test test_expect_expr_line_1, 5, 98765
     +test_assemble_label $08, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 1, 0, err_already_defined, 0, 0, 0, 0
+
+    +start_test_expect_expr 0
+    +set_symbol_for_test test_assemble_label_line_2+10, 6, 98765
+    +test_assemble_label $09, test_assemble_label_tb_7, test_assemble_label_tb_8, test_assemble_label_line_2, 1, 0, err_label_assign_global_only, 0, 0, 0, 0
+
+    +start_test_expect_expr 0
+    ldx #$bb
+    ldy #$aa
+    jsr set_pc
+    +assemble_label_for_test test_assemble_label_tb_5, test_assemble_label_tb_6, test_assemble_label_line_1
+    +test_assemble_label $0A, test_assemble_label_tb_8, test_assemble_label_tb_end, test_assemble_label_line_2, 0, 3, 0, 1, 1, $aabb, 0
 
     ; -----------------------------------
 

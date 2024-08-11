@@ -26,7 +26,7 @@ easyasm_base_page = $1e
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 57
+* = $100 - 59
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -62,6 +62,7 @@ instr_mode_rec_addr   *=*+2
 instr_supported_modes *=*+2
 
 symtbl_next_name *=*+3
+last_pc_defined_global_label *=*+2
 
 expr_a          *=*+4
 expr_b          *=*+4
@@ -95,6 +96,7 @@ bas_ptr         *=*+4   ; 32-bit pointer, bank 0
 attic_easyasm_stash = $08700000                    ; 0.0000-0.5FFF
 attic_source_stash  = attic_easyasm_stash + $6000  ; 0.6000-1.36FF
 attic_symbol_table  = attic_source_stash + $d700   ; 1.3700-1.56FF (8 KB)
+   ; If symbol table has to cross a bank boundary, check code for 16-bit addresses. :|
 attic_symbol_names  = attic_symbol_table + $2000   ; 1.5700-1.B6FF (24 KB)
 attic_symbol_names_end = attic_symbol_names + $6000
 attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
@@ -173,6 +175,12 @@ chr_doublequote = 34
     pla
 }
 
+!macro debug_print .msg {
+    +kprimm_start
+    !pet .msg
+    !byte 0
+    +kprimm_end
+}
 
 ; ------------------------------------------------------------
 ; Dispatch
@@ -1461,6 +1469,10 @@ init_symbol_table:
     lda #^attic_symbol_names
     sta symtbl_next_name+2
 
+    lda #0
+    sta last_pc_defined_global_label
+    sta last_pc_defined_global_label+1
+
     rts
 
 
@@ -1633,7 +1645,10 @@ find_or_add_symbol:
     inc    ; Q = name length + 1
     clc
     adcq expr_a
-    stq symtbl_next_name
+    sta symtbl_next_name
+    stx symtbl_next_name+1
+    sty symtbl_next_name+2
+    ; (symtbl_next_name is 24 bits.)
 
     ; Success.
     clc
@@ -2310,16 +2325,21 @@ expect_expr:
     ; <label>
 +++ jsr expect_label
     lbcs +++
-    txa               ; bas_ptr = line_addr + X (line_pos of label)
-    clc
-    adc line_addr
-    sta bas_ptr
-    lda #0
-    adc line_addr+1
-    sta bas_ptr+1
-    tya
-    tax               ; X = length
-    jsr find_or_add_symbol
+    stx label_pos
+    sty label_length
+
+    ; TODO: A bare expression can be a relative label, but a term cannot.
+    ; The full expression evaluator can handle this with a flag on recursive calls to expect_expr.
+;     jsr determine_label_type
+;     cpx #lbl_relplus
+;     beq +
+;     cpx #lbl_relminus
+;     beq +
+;     bra ++
+; +   ; TODO: disallow conditionally...
+; ++
+
+    jsr find_or_add_label
     jsr get_symbol_value
     bcs ++
     stq expr_result
@@ -2407,6 +2427,116 @@ assemble_pc_assign:
     lbra statement_ok_exit
 
 
+; Input: line_addr, label_pos
+; Output:
+;   X=0 global
+;   X=1 cheap local
+;   X=2 relative +
+;   X=3 relative -
+lbl_global = 0
+lbl_cheaplocal = 1
+lbl_relplus = 2
+lbl_relminus = 3
+determine_label_type:
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    ldz label_pos
+    lda [bas_ptr],z
+    cmp #'@'
+    bne +
+    ldx #lbl_cheaplocal
+    rts
++   cmp #'+'
+    bne +
+    ldx #lbl_relplus
+    rts
++   cmp #'-'
+    bne +
+    ldx #lbl_relminus
+    rts
++   ldx #lbl_global
+    rts
+
+
+; Input: line_addr, label_pos, label_length
+; Output:
+; - C=0 found or added, attic_ptr=entry address
+; - C=1 out of memory error
+; Uses strbuf, expr_a.
+find_or_add_label:
+    ldx #0  ; strbuf position
+
+    ; TODO: relative labels
+
+    ; Detect cheap local, rewrite name
+    jsr determine_label_type
+    cpx #lbl_cheaplocal
+    bne ++
+    ; Copy last-seen global name to strbuf
+    lda last_pc_defined_global_label
+    ora last_pc_defined_global_label+1
+    beq ++  ; Never seen a global, no cheap local prefix
+    lda last_pc_defined_global_label
+    sta attic_ptr
+    lda last_pc_defined_global_label+1
+    sta attic_ptr+1
+    lda #^attic_symbol_table
+    sta attic_ptr+2
+    lda #$08
+    sta attic_ptr+3
+    sta expr_a+3
+    ldz #0
+    lda [attic_ptr],z
+    sta expr_a
+    inz
+    lda [attic_ptr],z
+    sta expr_a+1
+    inz
+    lda [attic_ptr],z
+    sta expr_a+2       ; expr_a = name of last seen global
+    ldx #0
+    ldz #0             ; Copy global name to strbuf
+-   lda [expr_a],z
+    beq ++
+    sta strbuf,x
+    inx
+    inz
+    bra -
+++
+
+    ; Copy label text to strbuf.
+    lda label_pos    ; line_pos
+    clc
+    adc line_addr
+    sta bas_ptr
+    lda #0
+    adc line_addr+1
+    sta bas_ptr+1    ; bas_ptr = line_addr + line_pos
+    ldy label_length
+    ldz #0
+-   lda [bas_ptr],z
+    sta strbuf,x
+    inx
+    inz
+    dey
+    bne -
+
+    lda #<strbuf
+    sta bas_ptr
+    lda #>strbuf
+    sta bas_ptr+1
+    lda bas_ptr+2
+    pha
+    lda #5
+    sta bas_ptr+2
+    jsr find_or_add_symbol
+    pla
+    sta bas_ptr+2  ; Important! reset bas_ptr bank to 0
+    rts
+
+
 ; Input: tokbuf, tok_pos
 ; Output:
 ;   C=0 success; label assigned, tok_pos advanced
@@ -2439,20 +2569,12 @@ assemble_label:
 
 ; (This is jsr'd.)
 @find_or_add_symbol_to_define:
-    lda label_pos    ; line_pos
-    clc
-    adc line_addr
-    sta bas_ptr
-    lda #0
-    adc line_addr+1
-    sta bas_ptr+1    ; bas_ptr = line_addr + line_pos
-    ldx label_length ; X = length
-    jsr find_or_add_symbol
+    jsr find_or_add_label
     bcc +
     lda #err_out_of_memory
     sta err_code
-    pha
-    pha
+    pla  ; pop caller address, go straight to exit
+    pla
     lbra statement_err_exit
 +
     ldz #3           ; Error if symbol is already defined in first pass
@@ -2471,12 +2593,21 @@ assemble_label:
 +   rts
 
 @label_with_equal:
+    ; Only global-type labels can be assigned with =
+    jsr determine_label_type
+    cpx #lbl_global
+    beq +
+    lda #err_label_assign_global_only
+    sta err_code
+    lbra statement_err_exit
++
+
     ; Set label to expr, possibly undefined
     jsr @find_or_add_symbol_to_define
     lda expr_flags
     and #F_EXPR_UNDEFINED
     beq +
-    ldz #0
+    ldz #0  ; Return value
     lbra statement_ok_exit  ; label expr is undefined; leave symbol undefined
 +
     ; label expr is defined, use value; propagate zero flag
@@ -2489,7 +2620,7 @@ assemble_label:
     lda [attic_ptr],z
     ora #F_SYMTBL_LEADZERO
     sta [attic_ptr],z
-+   ldz #0
++   ldz #0  ; Return value
     lbra statement_ok_exit
 
 @label_without_equal
@@ -2511,7 +2642,18 @@ assemble_label:
     sta expr_result+3
     ldq expr_result
     jsr set_symbol_value
-    ldz #1
+
+    ; Remember last seen PC-assigned global label
+    jsr determine_label_type
+    cpx #lbl_global
+    bne +
+    lda attic_ptr
+    sta last_pc_defined_global_label
+    lda attic_ptr+1
+    sta last_pc_defined_global_label+1
++
+
+    ldz #1  ; Return value
     lbra statement_ok_exit
 
 
@@ -3363,7 +3505,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09
 
 err_messages:
 err_syntax = 1
@@ -3382,6 +3524,8 @@ err_undefined = 7
 e07: !pet "symbol undefined",0
 err_pc_overflow = 8
 e08: !pet "program counter overflowed $ffff",0
+err_label_assign_global_only = 9
+e09: !pet "only global labels can be assigned with =",0
 
 warn_message_tbl:
 !word w01
@@ -4191,9 +4335,9 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-; !source "test_suite_2.asm"
+!source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
-!source "test_suite_4.asm"
+; !source "test_suite_4.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
