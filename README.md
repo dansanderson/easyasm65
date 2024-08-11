@@ -27,19 +27,18 @@ Release 0.1:
 * `!binary`
 * `!source`
 * `runnable` with custom PC (single relocatable segment)
-* Multi-segment programs with `!to "...", cbm` and `raw`; multiple `* = ...` allowed; gaps filled on disk
+* Multi-segment programs with `!to "...", cbm` and `plain`; multiple `* = ...` allowed; gaps filled on disk
 * Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
 * Multi-file output, multiple `!to` allowed
 
 Far future:
 * Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
-* List symbol definitions to file
-* List disassembly alongside source code to file
+* `!symbollist`: List symbol definitions to file
+* `!report`: List disassembly alongside source code to file
 * Zones and real locals
 * Macros
 * Conditional assembly
 * Conditional expressions
-* Automatic 16-bit branch instructions
 * A nice built-in editor
 
 ## An important note
@@ -740,7 +739,7 @@ EasyAsm supports the following assembler directives.
 !to "...", <mode>
 ```
 
-Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address), `raw` (PRG without address), or `runnable` (bootstrap routine).
+Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address), `plain` (PRG without address), or `runnable` (bootstrap routine).
 
 EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 

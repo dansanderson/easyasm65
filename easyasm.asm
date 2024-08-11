@@ -1772,8 +1772,7 @@ set_pc:
 ; Output:
 ;   C=0 ok; table state updated
 ;   C=1 fail:
-;     pass $00: PC not defined
-;     pass $FF: out of memory error
+;     err_code set; caller can react appropriately (err_pc_undef on pass 0 is ok)
 ;   Uses expr_a
 assemble_bytes:
     cpx #0  ; Edge case: X = 0
@@ -1792,6 +1791,8 @@ assemble_bytes:
     lda asm_flags
     and #F_ASM_PC_DEFINED
     bne +
+    lda #err_pc_undef
+    sta err_code
     sec
     rts
 +
@@ -1812,6 +1813,8 @@ assemble_bytes:
     sec
     sbcq next_segment_byte_addr
     bpl +
+    lda #err_out_of_memory
+    sta err_code
     sec
     rts
 +
@@ -1905,8 +1908,10 @@ assemble_bytes:
     adc program_counter+1
     sta program_counter+1
     sta next_segment_pc+1
-
-    rts
+    bcc +
+    lda #err_pc_overflow
+    sta err_code
++   rts
 
 
 ; ------------------------------------------------------------
@@ -3168,16 +3173,18 @@ assemble_instruction:
     ; Add bytes to segment
     ldx instr_buf_pos
     jsr assemble_bytes
-    bcc +++
+    bcc ++
     lda pass
     bne +
-    lda #err_pc_undef
+    lda err_code
+    cmp #err_pc_undef
+    bne +
+    ; PC undef on pass 0 is ok
+    lda #0
+    sta err_code
     bra ++
-+   lda #err_out_of_memory
-++  sta err_code
-    lbra statement_err_exit
-
-+++ lbra statement_ok_exit
++  lbra statement_err_exit
+++ lbra statement_ok_exit
 
 
 assemble_directive:
@@ -3356,7 +3363,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07
+!word e01,e02,e03,e04,e05,e06,e07,e08
 
 err_messages:
 err_syntax = 1
@@ -3373,6 +3380,8 @@ err_out_of_memory = 6
 e06: !pet "out of memory",0
 err_undefined = 7
 e07: !pet "symbol undefined",0
+err_pc_overflow = 8
+e08: !pet "program counter overflowed $ffff",0
 
 warn_message_tbl:
 !word w01
