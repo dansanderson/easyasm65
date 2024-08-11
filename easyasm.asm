@@ -2186,6 +2186,77 @@ expect_literal:
     rts
 
 
+; Input: expr_result
+;   C=1 if signed, C=0 unsigned
+; Output:
+;   C=1 if:
+;      signed:
+;        high word = ffff and low word >= 8000, or
+;        high word = 0000 and low word < 8000
+;      unsigned:
+;        high word = 0000 or ffff
+;   Else, C=0
+is_expr_word:
+    lda expr_result+3
+    and expr_result+2
+    cmp #$ff
+    bne +
+    bcc @yes
+    lda expr_result+1
+    and #$80
+    bne @yes
+    bra @no
++   lda expr_result+3
+    ora expr_result+2
+    bne @no
+    bcc @yes
+    lda expr_result+1
+    cmp #$80
+    bcc @yes
+@no
+    clc
+    rts
+@yes
+    sec
+    rts
+
+; Input: expr_result
+;   C=1 if signed, C=0 unsigned
+; Output:
+;   C=1 if:
+;     signed:
+;       high word+byte = ffffff and LSB >= 80, or
+;       high word+byte = 000000 and LSB < 80
+;     unsigned:
+;       high word+byte = ffffff or 000000
+;   Else, C=0
+is_expr_byte:
+    lda expr_result+3
+    and expr_result+2
+    and expr_result+1
+    cmp #$ff
+    bne +
+    bcc @yes
+    lda expr_result
+    and #$80
+    bne @yes
+    bra @no
++   lda expr_result+3
+    ora expr_result+2
+    ora expr_result+1
+    bne @no
+    bcc @yes
+    lda expr_result
+    cmp #$80
+    bcc @yes
+@no
+    clc
+    rts
+@yes
+    sec
+    rts
+
+
 ; Input: tokbuf, tok_pos, line_addr
 ; Output:
 ;   C=0 ok, tok_pos advanced; expr_result, expr_flags
@@ -2445,19 +2516,21 @@ is_expr_16bit:
     lda asm_flags
     and #F_ASM_FORCE_MASK
     cmp #F_ASM_FORCE16
-    beq ++
+    beq @yes_16
     cmp #F_ASM_FORCE8
-    beq +
+    beq @no_16
     lda expr_flags
     and #F_EXPR_BRACKET_ZERO
-    bne ++
+    bne @yes_16
     lda expr_result+1
     ora expr_result+2
     ora expr_result+3
-    bne ++
-+   clc
+    bne @yes_16
+@no_16
+    clc
     rts
-++  sec
+@yes_16
+    sec
     rts
 
 
@@ -2470,6 +2543,9 @@ is_expr_16bit:
 
 
 force16_if_expr_undefined:
+    lda asm_flags
+    and #F_ASM_FORCE_MASK
+    bne +  ; Undefined doesn't override other forces
     lda expr_flags
     and #F_EXPR_UNDEFINED
     beq +
@@ -2481,11 +2557,30 @@ force16_if_expr_undefined:
 +   rts
 
 
-; Input: instr_mnemonic_id, expr_result, program_counter
+; Input: expr_result, program_counter
 ; Output:
-;   If the mnemoic is a branch instruction, subtracts program_counter
-adjust_expr_result_for_branches:
-    ; TODO
+;   expr_result = expr_result - (program_counter + 2)
+make_operand_rel:
+    lda expr_flags
+    and #F_EXPR_UNDEFINED
+    beq +
+    rts
++
+    lda program_counter
+    clc
+    adc #2
+    tay
+    lda program_counter+1
+    adc #0
+    tax
+    ldy #0
+    ldz #0
+    tya
+    stq expr_a  ; expr_a = program_counter + 2
+    ldq expr_result
+    sec
+    sbcq expr_a
+    stq expr_result  ; expr_result = expr_result - expr_a
     rts
 
 
@@ -2554,8 +2649,27 @@ expect_addressing_expr:
     sta asm_flags
 +
 
+    ; Make the operand a relative address for branch instructions.
+    ; (Leave it to assemble_instruction to range check.)
     jsr expect_expr
     lbcs @try_modes_without_leading_expr
+    lda asm_flags
+    and #F_ASM_AREL8
+    beq +
+    lda asm_flags   ; force16 for long branches
+    ora #F_ASM_FORCE8
+    sta asm_flags
+    jsr make_operand_rel
+    bra ++
++   lda asm_flags
+    and #F_ASM_AREL16
+    beq ++
+    lda asm_flags   ; force16 for long branches
+    ora #F_ASM_FORCE16
+    sta asm_flags
+    jsr make_operand_rel
+++
+
     jsr force16_if_expr_undefined
     ; Addressing modes that start with expressions:
     lda expr_flags
@@ -2829,7 +2943,7 @@ assemble_instruction:
     sta asm_flags
 +++
 
-    ; Special case: force 16-bit immediate just for PHW
+    ; Force 16-bit immediate just for PHW
     lda instr_mnemonic_id
     cmp #mnemonic_phw
     bne +++
@@ -2837,6 +2951,21 @@ assemble_instruction:
     ora #F_ASM_F16IMM
     sta asm_flags
 +++
+
+    ; Set AREL8/AREL16 for branch/long branch instructions
+    lda instr_mnemonic_id
+    jsr is_branch_mnemonic
+    bcc +
+    lda asm_flags
+    ora #F_ASM_AREL8
+    sta asm_flags
+    bra ++
++   jsr is_long_branch_mnemonic
+    bcc ++
+    lda asm_flags
+    ora #F_ASM_AREL16
+    sta asm_flags
+++
 
     ; Process the addressing mode expression
     jsr expect_addressing_expr
@@ -2948,9 +3077,17 @@ assemble_instruction:
     lda instr_addr_mode+1
     and #>MODES_WORD_OPERAND
     ora instr_supported_modes
-    beq +
+    beq @maybe_byte_operand
     ; Word operand: emit two expr_result bytes
-    ldx instr_buf_pos
+    ; Range check
+    lda instr_mnemonic_id
+    jsr is_long_branch_mnemonic  ; C=1: signed operand
+    jsr is_expr_word
+    bcs +
+    lda #err_value_out_of_range
+    sta err_code
+    lbra statement_err_exit
++   ldx instr_buf_pos
     lda expr_result
     sta strbuf,x
     inx
@@ -2958,22 +3095,31 @@ assemble_instruction:
     sta strbuf,x
     inx
     stx instr_buf_pos
-    bra ++
-+   lda instr_addr_mode
+    bra @add_bytes
+
+@maybe_byte_operand
+    lda instr_addr_mode
     and #<MODES_BYTE_OPERAND
     sta instr_supported_modes
     lda instr_addr_mode+1
     and #>MODES_BYTE_OPERAND
     ora instr_supported_modes
-    beq ++  ; No operand, emit no more bytes
+    beq @add_bytes  ; No operand, emit no more bytes
     ; Byte operand: emit one expr_result byte
-    ldx instr_buf_pos
+    jsr is_branch_mnemonic  ; C=1: signed operand
+    jsr is_expr_byte
+    bcs +
+    lda #err_value_out_of_range
+    sta err_code
+    lbra statement_err_exit
++   ldx instr_buf_pos
     lda expr_result
     sta strbuf,x
     inx
     stx instr_buf_pos
 
-++  ; Add bytes to segment
+@add_bytes
+    ; Add bytes to segment
     ldx instr_buf_pos
     jsr assemble_bytes
     bcc +++
@@ -3992,7 +4138,7 @@ scr_table:
 
 ; ---------------------------------------------------------
 
-; !warn "EasyAsm size: ", * - $2000
+; !warn "EasyAsm remaining code space: ", max_end_of_program - *
 !if * >= max_end_of_program {
     !error "EasyAsm code is too large, * = ", *
 }
