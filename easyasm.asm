@@ -2481,6 +2481,14 @@ force16_if_expr_undefined:
 +   rts
 
 
+; Input: instr_mnemonic_id, expr_result, program_counter
+; Output:
+;   If the mnemoic is a branch instruction, subtracts program_counter
+adjust_expr_result_for_branches:
+    ; TODO
+    rts
+
+
 ; Input: tokbuf, tok_pos, asm_flags
 ; Output:
 ;   C=0 ok, X/Y=addr mode flags (LSB/MSB), expr_result, expr_flags, tok_pos advanced
@@ -2707,6 +2715,55 @@ expect_addressing_expr:
     sta line_pos
 +   sec
     rts
+
+
+; Input: A=mnemonic ID
+; Output: C=1 yes is branch
+is_bitbranch_mnemonic:
+    ; Relies on bbr0 to bbs7 being alphabetically consecutive
+    cmp #mnemonic_bbr0
+    bcc ++
+    cmp #mnemonic_bbs7+1
+    bcs +
+    sec
+    bra ++
++   clc
+++  rts
+
+
+; Input: A=mnemonic ID
+; Output: C=1 yes is branch
+is_branch_mnemonic:
+    ; Relies on bbr7 to bvs being alphabetically consecutive
+    ; Omits "b" instructions that aren't branches
+    cmp #mnemonic_bbs7+1
+    bcc ++
+    cmp #mnemonic_bvs+1
+    bcs +
+    cmp #mnemonic_bit
+    beq +
+    cmp #mnemonic_bitq
+    beq +
+    cmp #mnemonic_brk
+    beq +
+    sec
+    bra ++
++   clc
+++  rts
+
+
+; Input: A=mnemonic ID
+; Output: C=1 yes is branch
+is_long_branch_mnemonic:
+    ; Relies on lbcc to lbvs being alphabetically consecutive
+    cmp #mnemonic_lbcc
+    bcc ++
+    cmp #mnemonic_lbvs+1
+    bcs +
+    sec
+    bra ++
++   clc
+++  rts
 
 
 ; Input: tokbuf, tok_pos
@@ -3133,7 +3190,7 @@ w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
-mnemonic_count = 136
+mnemonic_count = 145
 mnemonics:
 !pet "adc",0   ; $00
 !pet "adcq",0  ; $01
@@ -3166,15 +3223,19 @@ mnemonic_bbs7 = $18
 !pet "bcs",0   ; $1A
 !pet "beq",0   ; $1B
 !pet "bit",0   ; $1C
+mnemonic_bit = $1C
 !pet "bitq",0  ; $1D
+mnemonic_bitq = $1D
 !pet "bmi",0   ; $1E
 !pet "bne",0   ; $1F
 !pet "bpl",0   ; $20
 !pet "bra",0   ; $21
 !pet "brk",0   ; $22
+mnemonic_brk = $22
 !pet "bsr",0   ; $23
 !pet "bvc",0   ; $24
 !pet "bvs",0   ; $25
+mnemonic_bvs = $25
 !pet "clc",0   ; $26
 !pet "cld",0   ; $27
 !pet "cle",0   ; $28
@@ -3203,84 +3264,95 @@ mnemonic_bbs7 = $18
 !pet "inz",0   ; $3F
 !pet "jmp",0   ; $40
 !pet "jsr",0   ; $41
-!pet "lda",0   ; $42
-!pet "ldq",0   ; $43
-!pet "ldx",0   ; $44
-!pet "ldy",0   ; $45
-!pet "ldz",0   ; $46
-mnemonic_ldz = $46
-!pet "lsr",0   ; $47
-!pet "lsrq",0  ; $48
-!pet "map",0   ; $49
-!pet "neg",0   ; $4A
-!pet "ora",0   ; $4B
-!pet "orq",0   ; $4C
-!pet "pha",0   ; $4D
-!pet "php",0   ; $4E
-!pet "phw",0   ; $4F
-mnemonic_phw = $4f
-!pet "phx",0   ; $50
-!pet "phy",0   ; $51
-!pet "phz",0   ; $52
-!pet "pla",0   ; $53
-!pet "plp",0   ; $54
-!pet "plx",0   ; $55
-!pet "ply",0   ; $56
-!pet "plz",0   ; $57
-!pet "rmb0",0  ; $58
-!pet "rmb1",0  ; $59
-!pet "rmb2",0  ; $5A
-!pet "rmb3",0  ; $5B
-!pet "rmb4",0  ; $5C
-!pet "rmb5",0  ; $5D
-!pet "rmb6",0  ; $5E
-!pet "rmb7",0  ; $5F
-!pet "rol",0   ; $60
-!pet "rolq",0  ; $61
-!pet "ror",0   ; $62
-!pet "rorq",0  ; $63
-!pet "row",0   ; $64
-!pet "rti",0   ; $65
-!pet "rts",0   ; $66
-!pet "sbc",0   ; $67
-!pet "sbcq",0  ; $68
-!pet "sec",0   ; $69
-!pet "sed",0   ; $6A
-!pet "see",0   ; $6B
-!pet "sei",0   ; $6C
-!pet "smb0",0  ; $6D
-!pet "smb1",0  ; $6E
-!pet "smb2",0  ; $6F
-!pet "smb3",0  ; $70
-!pet "smb4",0  ; $71
-!pet "smb5",0  ; $72
-!pet "smb6",0  ; $73
-!pet "smb7",0  ; $74
-!pet "sta",0   ; $75
-!pet "stq",0   ; $76
-!pet "stx",0   ; $77
-!pet "sty",0   ; $78
-!pet "stz",0   ; $79
-!pet "tab",0   ; $7A
-!pet "tax",0   ; $7B
-!pet "tay",0   ; $7C
-!pet "taz",0   ; $7D
-!pet "tba",0   ; $7E
-!pet "trb",0   ; $7F
-!pet "tsb",0   ; $80
-!pet "tsx",0   ; $81
-!pet "tsy",0   ; $82
-!pet "txa",0   ; $83
-!pet "txs",0   ; $84
-!pet "tya",0   ; $85
-!pet "tys",0   ; $86
-!pet "tza",0   ; $87
+!pet "lbcc",0   ; $42
+mnemonic_lbcc = $42
+!pet "lbcs",0   ; $43
+!pet "lbeq",0   ; $44
+!pet "lbmi",0   ; $45
+!pet "lbne",0   ; $46
+!pet "lbpl",0   ; $47
+!pet "lbra",0   ; $48
+!pet "lbvc",0   ; $49
+!pet "lbvs",0   ; $4A
+mnemonic_lbvs = $4A
+!pet "lda",0   ; $4B
+!pet "ldq",0   ; $4C
+!pet "ldx",0   ; $4D
+!pet "ldy",0   ; $4E
+!pet "ldz",0   ; $4F
+mnemonic_ldz = $4F
+!pet "lsr",0   ; $50
+!pet "lsrq",0  ; $51
+!pet "map",0   ; $52
+!pet "neg",0   ; $53
+!pet "ora",0   ; $54
+!pet "orq",0   ; $55
+!pet "pha",0   ; $56
+!pet "php",0   ; $57
+!pet "phw",0   ; $58
+mnemonic_phw = $58
+!pet "phx",0   ; $59
+!pet "phy",0   ; $5A
+!pet "phz",0   ; $5B
+!pet "pla",0   ; $5C
+!pet "plp",0   ; $5D
+!pet "plx",0   ; $5E
+!pet "ply",0   ; $5F
+!pet "plz",0   ; $60
+!pet "rmb0",0  ; $61
+!pet "rmb1",0  ; $62
+!pet "rmb2",0  ; $63
+!pet "rmb3",0  ; $64
+!pet "rmb4",0  ; $65
+!pet "rmb5",0  ; $66
+!pet "rmb6",0  ; $67
+!pet "rmb7",0  ; $68
+!pet "rol",0   ; $69
+!pet "rolq",0  ; $6A
+!pet "ror",0   ; $6B
+!pet "rorq",0  ; $6C
+!pet "row",0   ; $6D
+!pet "rti",0   ; $6E
+!pet "rts",0   ; $6F
+!pet "sbc",0   ; $70
+!pet "sbcq",0  ; $71
+!pet "sec",0   ; $72
+!pet "sed",0   ; $73
+!pet "see",0   ; $74
+!pet "sei",0   ; $75
+!pet "smb0",0  ; $76
+!pet "smb1",0  ; $77
+!pet "smb2",0  ; $78
+!pet "smb3",0  ; $79
+!pet "smb4",0  ; $7A
+!pet "smb5",0  ; $7B
+!pet "smb6",0  ; $7C
+!pet "smb7",0  ; $7D
+!pet "sta",0   ; $7E
+!pet "stq",0   ; $7F
+!pet "stx",0   ; $80
+!pet "sty",0   ; $81
+!pet "stz",0   ; $82
+!pet "tab",0   ; $83
+!pet "tax",0   ; $84
+!pet "tay",0   ; $85
+!pet "taz",0   ; $86
+!pet "tba",0   ; $87
+!pet "trb",0   ; $88
+!pet "tsb",0   ; $89
+!pet "tsx",0   ; $8A
+!pet "tsy",0   ; $8B
+!pet "txa",0   ; $8C
+!pet "txs",0   ; $8D
+!pet "tya",0   ; $8E
+!pet "tys",0   ; $8F
+!pet "tza",0   ; $90
 !byte 0
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
-!byte $01, $03, $05, $07, $1D, $2C, $2D, $32, $39, $3B, $43, $48, $4C, $61
-!byte $63, $68, $76
+!byte $01, $03, $05, $07, $1D, $2C, $2D, $32, $39, $3B, $4C, $52, $46, $6A
+!byte $6C, $71, $7F
 !byte 0
 
 ; Pseudo-op table
@@ -3482,31 +3554,31 @@ addressing_modes:
 !word enc_bbs6
 !word %0001000000000000  ; bbs7
 !word enc_bbs7
-!word %0001001000000000  ; bcc
+!word %0001000000000000  ; bcc
 !word enc_bcc
-!word %0001001000000000  ; bcs
+!word %0001000000000000  ; bcs
 !word enc_bcs
-!word %0001001000000000  ; beq
+!word %0001000000000000  ; beq
 !word enc_beq
 !word %0101101100000000  ; bit
 !word enc_bit
 !word %0001001000000000  ; bitq
 !word enc_bitq
-!word %0001001000000000  ; bmi
+!word %0001000000000000  ; bmi
 !word enc_bmi
-!word %0001001000000000  ; bne
+!word %0001000000000000  ; bne
 !word enc_bne
-!word %0001001000000000  ; bpl
+!word %0001000000000000  ; bpl
 !word enc_bpl
-!word %0001001000000000  ; bra
+!word %0001000000000000  ; bra
 !word enc_bra
 !word %1000000000000000  ; brk
 !word enc_brk
 !word %0000001000000000  ; bsr
 !word enc_bsr
-!word %0001001000000000  ; bvc
+!word %0001000000000000  ; bvc
 !word enc_bvc
-!word %0001001000000000  ; bvs
+!word %0001000000000000  ; bvs
 !word enc_bvs
 !word %1000000000000000  ; clc
 !word enc_clc
@@ -3564,6 +3636,24 @@ addressing_modes:
 !word enc_jmp
 !word %0000001001100000  ; jsr
 !word enc_jsr
+!word %0000001000000000  ; lbcc
+!word enc_lbcc
+!word %0000001000000000  ; lbcs
+!word enc_lbcs
+!word %0000001000000000  ; lbeq
+!word enc_lbeq
+!word %0000001000000000  ; lbmi
+!word enc_lbmi
+!word %0000001000000000  ; lbne
+!word enc_lbne
+!word %0000001000000000  ; lbpl
+!word enc_lbpl
+!word %0000001000000000  ; lbra
+!word enc_lbra
+!word %0000001000000000  ; lbvc
+!word enc_lbvc
+!word %0000001000000000  ; lbvs
+!word enc_lbvs
 !word %0101101110011111  ; lda
 !word enc_lda
 !word %0001001000000110  ; ldq
@@ -3745,19 +3835,19 @@ enc_bbs4: !byte $cf
 enc_bbs5: !byte $df
 enc_bbs6: !byte $ef
 enc_bbs7: !byte $ff
-enc_bcc : !byte $90, $93
-enc_bcs : !byte $b0, $b3
-enc_beq : !byte $f0, $f3
+enc_bcc : !byte $90
+enc_bcs : !byte $b0
+enc_beq : !byte $f0
 enc_bit : !byte $89, $24, $34, $2c, $3c
 enc_bitq: !byte $24, $2c
-enc_bmi : !byte $30, $33
-enc_bne : !byte $d0, $d3
-enc_bpl : !byte $10, $13
-enc_bra : !byte $80, $83
+enc_bmi : !byte $30
+enc_bne : !byte $d0
+enc_bpl : !byte $10
+enc_bra : !byte $80
 enc_brk : !byte $00
 enc_bsr : !byte $63
-enc_bvc : !byte $50, $53
-enc_bvs : !byte $70, $73
+enc_bvc : !byte $50
+enc_bvs : !byte $70
 enc_clc : !byte $18
 enc_cld : !byte $d8
 enc_cle : !byte $02
@@ -3785,6 +3875,15 @@ enc_iny : !byte $c8
 enc_inz : !byte $1b
 enc_jmp : !byte $4c, $6c, $7c
 enc_jsr : !byte $20, $22, $23
+enc_lbcc : !byte $93
+enc_lbcs : !byte $b3
+enc_lbeq : !byte $f3
+enc_lbmi : !byte $33
+enc_lbne : !byte $d3
+enc_lbpl : !byte $13
+enc_lbra : !byte $83
+enc_lbvc : !byte $53
+enc_lbvs : !byte $73
 enc_lda : !byte $a9, $a5, $b5, $ad, $bd, $b9, $a1, $b1, $b2, $b2, $e2
 enc_ldq : !byte $a5, $ad, $b2, $b2
 enc_ldx : !byte $a2, $a6, $b6, $ae, $be

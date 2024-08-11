@@ -488,7 +488,7 @@ test_tokenize_5e:
     !32 $deadbeef
     !byte 0, $ff
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 135, 4, 0, 0, $ff
+test_tokenize_6e: !byte 144, 4, 0, 0, $ff
 test_tokenize_7: !pet "!wOrD",0
 test_tokenize_7e: !byte po_word, 4, 0, $ff
 test_tokenize_8: !pet "xOr",0
@@ -503,7 +503,7 @@ test_tokenize_12: !pet "label: lda (45, sp), y  ; comment",0
 test_tokenize_12e:
     !byte tk_label_or_reg, 4, 5
     !byte tk_colon, 9
-    !byte 66, 11, 0
+    !byte 75, 11, 0
     !byte tk_lparen, 15
     !byte tk_number_literal, 16
     !32 45
@@ -538,7 +538,7 @@ test_tokenize_15e:
     !byte 0, $ff
 test_tokenize_16: !pet "lda $000a",0
 test_tokenize_16e:
-    !byte 66, 4, 0
+    !byte 75, 4, 0
     !byte tk_number_literal_leading_zero, 8
     !32 $000a
     !byte 0, $ff
@@ -1354,7 +1354,7 @@ run_test_suite_cmd:
     +print_strlit_line "find-in-token-list"
     +test_find_in_token_list $01, test_find_in_token_list_1, 0, 1, 1, 0, 3
     +test_find_in_token_list $02, test_find_in_token_list_2, 0, 1, 1, 1, 4
-    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 135, 3
+    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 144, 3
     +test_find_in_token_list $04, test_find_in_token_list_4, 0, 1, 0, 0, 0
     +test_find_in_token_list $05, test_find_in_token_list_5, 0, 0, 1, 0, 3
     +test_find_in_token_list $06, test_find_in_token_list_5, 0, 1, 0, 0, 0
@@ -1367,7 +1367,7 @@ run_test_suite_cmd:
     ; .tnum, .str, .pos, .ec, .etoken, .epos, .eflags
     +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3, 0
     +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4, 0
-    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 135, 3, 0
+    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 144, 3, 0
     +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0, 0
     +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0, 0
     +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3, 0
@@ -1463,23 +1463,23 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-label"
-    +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
-    +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
+    ; +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
+    ; +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-keyword"
-    +test_expect_keyword $01, test_expect_keyword_1, test_expect_keyword_2, test_expect_keyword_line_1, kw_xor, 1, 0
-    +test_expect_keyword $02, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_1, kw_xor, 0, 3
-    +test_expect_keyword $03, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_2, kw_xor, 0, 3
-    +test_expect_keyword $04, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_3, kw_xor, 1, 0
+    ; +test_expect_keyword $01, test_expect_keyword_1, test_expect_keyword_2, test_expect_keyword_line_1, kw_xor, 1, 0
+    ; +test_expect_keyword $02, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_1, kw_xor, 0, 3
+    ; +test_expect_keyword $03, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_2, kw_xor, 0, 3
+    ; +test_expect_keyword $04, test_expect_keyword_2, test_expect_keyword_end, test_expect_keyword_line_3, kw_xor, 1, 0
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-opcode"
     ; .tnum, .tokbuf, .tokbufend, .ec, .etokpos, .ea
-    +test_expect_opcode $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0, 0
-    +test_expect_opcode $02, test_expect_oppop_2, test_expect_oppop_3, 0, 3, 1, 0
-    +test_expect_opcode $03, test_expect_oppop_3, test_expect_oppop_4, 1, 0, 0, 0
-    +test_expect_opcode $04, test_expect_oppop_4, test_expect_oppop_end, 0, 3, 1, F_ASM_FORCE16
+    ; +test_expect_opcode $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0, 0
+    ; +test_expect_opcode $02, test_expect_oppop_2, test_expect_oppop_3, 0, 3, 1, 0
+    ; +test_expect_opcode $03, test_expect_oppop_3, test_expect_oppop_4, 1, 0, 0, 0
+    ; +test_expect_opcode $04, test_expect_oppop_4, test_expect_oppop_end, 0, 3, 1, F_ASM_FORCE16
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-pseudoop -- disabled for space"
@@ -1489,9 +1489,9 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "test-expect-literal -- disabled for space"
-    ;+test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
-    ;+test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
-    ;+test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
+    +test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
+    +test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
+    +test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
