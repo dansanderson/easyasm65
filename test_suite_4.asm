@@ -124,6 +124,9 @@ ai_22: !pet "lbra $C013",0  ; no error
 ai_22_bytes: !byte $83, $01, $c0
 ai_22_bytes_end:
 ai_23: !pet "lbra $1C013",0  ; out of range error
+ai_24: !pet "bbs0 $fc,$0010",0
+ai_24_bytes: !byte $8f, $fc, $fe
+ai_24_bytes_end:
 
 
 !macro test_assemble_line .tnum, .line_addr, .ec, .eerr, .epos {
@@ -229,6 +232,7 @@ run_test_suite_cmd:
     +test_assemble_instruction $15, ai_21, 0, 0, $0013, ai_21_bytes, ai_21_bytes_end-ai_21_bytes
     +test_assemble_instruction $16, ai_22, 0, 0, $0013, ai_22_bytes, ai_22_bytes_end-ai_22_bytes
     +test_assemble_instruction $17, ai_23, 1, err_value_out_of_range, 0, 0, 0
+    +test_assemble_instruction $18, ai_24, 0, 0, $0013, ai_24_bytes, ai_24_bytes_end-ai_24_bytes
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-line"

@@ -43,8 +43,9 @@ F_ASM_F16IMM     = %00000110
 F_ASM_AREL_MASK  = %00011000
 F_ASM_AREL8      = %00001000
 F_ASM_AREL16     = %00010000
+F_ASM_BITBRANCH  = %00100000
 ; - assembly generated at least one warning
-F_ASM_WARN       = %00100000
+F_ASM_WARN       = %01000000
 
 current_segment *=*+4
 next_segment_pc *=*+2
@@ -2694,6 +2695,17 @@ expect_addressing_expr:
     jsr expect_keyword
     bcs +
     +expect_addresing_expr_rts MODE_BASE_PAGE_Y
++   lda asm_flags
+    and #F_ASM_BITBRANCH
+    beq +
+    ldq expr_result
+    stq expr_b
+    jsr expect_expr
+    bcs +
+    ; <expr-8> "," <expr> (for bit branches)
+    ; expr_b = ZP, expr_result = Rel
+    jsr make_operand_rel
+    +expect_addresing_expr_rts MODE_BASE_PAGE
 +   ; Syntax error: <expr-8> "," non-x/y
     lbra @addr_error
 
@@ -2967,6 +2979,16 @@ assemble_instruction:
     sta asm_flags
 ++
 
+    ; Set BITBRANCH for bit branch instructions
+    ; Allows two-operand syntax
+    lda instr_mnemonic_id
+    jsr is_bitbranch_mnemonic
+    bcc +
+    lda asm_flags
+    ora #F_ASM_BITBRANCH
+    sta asm_flags
++
+
     ; Process the addressing mode expression
     jsr expect_addressing_expr
     lbcs statement_err_exit
@@ -3105,9 +3127,33 @@ assemble_instruction:
     and #>MODES_BYTE_OPERAND
     ora instr_supported_modes
     beq @add_bytes  ; No operand, emit no more bytes
+    ; For bit branch instructions, range-check and emit ZP (expr_b).
+    ; Rest will emit the Rel8 (expr_result).
+    lda asm_flags
+    and #F_ASM_BITBRANCH
+    beq +++
+    ldq expr_result
+    stq expr_a
+    ldq expr_b
+    stq expr_result
+    jsr is_expr_byte
+    bcs +
+    lda #err_value_out_of_range
+    sta err_code
+    lbra statement_err_exit
++   ldx instr_buf_pos
+    lda expr_result
+    sta strbuf,x
+    inx
+    stx instr_buf_pos
+    ldq expr_a
+    stq expr_result
+    clc
+    bra +
++++
     ; Byte operand: emit one expr_result byte
     jsr is_branch_mnemonic  ; C=1: signed operand
-    jsr is_expr_byte
++   jsr is_expr_byte
     bcs +
     lda #err_value_out_of_range
     sta err_code
@@ -3603,14 +3649,19 @@ kw_runnable: !pet "runnable",0
 ; ------------------------------------------------------------
 ; Instruction encodings
 ;
-; The addressing_modes table consists of one entry per instruction
-; mnemonic, four bytes per entry, in token ID order.
+; The addressing_modes table consists of one entry per instruction mnemonic,
+; four bytes per entry, in token ID order.
 ;
 ; The first two bytes are an addressing mode bitmask, one bit set for each
 ; addressing mode supported by the instruction.
 ;
 ; The last two bytes are the code address for the encoding list. (See below,
 ; starting with enc_adc.)
+;
+; The bit branch instructions, which take two operands, are not uniquely
+; represented by this data structure. expect_addressing_expr will return the
+; "base page" mode and leave the token position on the comma for further
+; processing.
 ;
 ;     %11111111,
 ;      ^ Implied (parameterless, or A/Q)
