@@ -508,7 +508,7 @@ EasyAsm does not support Boolean values, and so does not have conditional operat
 
 The "megabyte" operator `^^` is exclusive to EasyAsm, as a companion to low (`<`), high (`>`), and bank (`^`) byte selectors. The megabyte operator selects the highest byte of a 32-bit value.
 
-The power operator is right-associative: `x^y^z` = `x^(y^z)`
+The power operator is right-associative: `x^y^z` = `x^(y^z)` In EasyAsm, it is an error for an exponent to be negative.
 
 To type the power operator, type the up-arrow character (next to the Restore key). To type the bitwise-or operator, type Mega + period.
 

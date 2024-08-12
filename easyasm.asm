@@ -134,6 +134,12 @@ primm = $ff7d
 
 ; MEGA65 registers
 dmaimm = $d707
+mathbusy = $d70f
+divrema  = $d768
+divquot  = $d76c
+multina  = $d770
+multinb  = $d774
+product  = $d778
 
 ; Character constants
 chr_cr = 13
@@ -2278,14 +2284,34 @@ is_expr_byte:
     rts
 
 
-; Input: tokbuf, tok_pos, line_addr
-; Output:
-;   C=0 ok, tok_pos advanced; expr_result, expr_flags
+; Expression grammar:
+;   primary   ::= * | <label> | <literal> | "(" expr ")" | "[" expr "]"
+;   inversion ::= (!)? primary
+;   power     ::= inversion (^ inversion)*
+;   negate    ::= (-)? power
+;   factor    ::= negate ((* DIV / %) negate)*
+;   term      ::= factor ((+ -) factor)*
+;   shift     ::= term ((<< >> >>>) term)*
+;   bytesel   ::= (< > ^ ^^)? shift
+;   expr      ::= bytesel ((& XOR |) bytesel)*
+;
+; All "expect_" routines rely on global tokbuf and line_addr, and manipulate
+; global tok_pos. Each returns a result as follows:
+;   C=0 ok, tok_pos advanced; result in expr_result, expr_flags
 ;   C=1 not found, tok_pos preserved
 ;     err_code>0, line_pos: report error in expression
-expect_expr:
-    ; TODO: real expression evaluator
-    ; This temporary expression parser accepts a literal or a label.
+;
+; Any C=0 return with expr_flags & F_EXPR_UNDEFINED should propagate
+; F_EXPR_UNDEFINED and not bother to set expr_result.
+;
+; Bracket flags propagate if the rule matches the higher precedence rule
+; without applying an operation.
+;
+; Intermediate results are kept on the stack, and unwound within each
+; subroutine.
+
+; primary   ::= * | <label> | <literal> | "(" expr ")" | "[" expr "]"
+expect_primary:
     ldx tok_pos
     phx
 
@@ -2322,23 +2348,30 @@ expect_expr:
     sta expr_flags
     lbra @succeed
 
+    ; Program counter (*)
++++ lda #tk_multiply
+    jsr expect_token
+    bcs +++
+    lda program_counter
+    sta expr_result
+    lda program_counter+1
+    sta expr_result+1
+    lda #0
+    sta expr_result+2
+    sta expr_result+3
+    lda asm_flags
+    and #F_ASM_PC_DEFINED
+    bne +
+    lda expr_flags
+    ora #F_EXPR_UNDEFINED
+    sta expr_flags
++   lbra @succeed
+
     ; <label>
 +++ jsr expect_label
     lbcs +++
     stx label_pos
     sty label_length
-
-    ; TODO: A bare expression can be a relative label, but a term cannot.
-    ; The full expression evaluator can handle this with a flag on recursive calls to expect_expr.
-;     jsr determine_label_type
-;     cpx #lbl_relplus
-;     beq +
-;     cpx #lbl_relminus
-;     beq +
-;     bra ++
-; +   ; TODO: disallow conditionally...
-; ++
-
     jsr find_or_add_label
     jsr get_symbol_value
     bcs ++
@@ -2379,6 +2412,212 @@ expect_expr:
     plx
     clc
     rts
+
+
+; inversion ::= (!)* primary
+expect_inversion:
+    ldz #0
+-   lda #tk_complement
+    jsr expect_token
+    bcs +
+    inz
+    bra -
++   phz
+    jsr expect_primary
+    plz
+    bcs @end
+    cpz #0
+    beq @ok  ; 0 inversions, preserve flags
+    lda expr_flags  ; at least one inversion, reset flags
+    and #!F_EXPR_BRACKET_MASK
+    sta expr_flags
+    tza
+    and #1
+    beq @ok  ; even number of inversions, no value change
+    lda expr_result
+    eor #$ff
+    sta expr_result
+    lda expr_result+1
+    eor #$ff
+    sta expr_result+1
+    lda expr_result+2
+    eor #$ff
+    sta expr_result+2
+    lda expr_result+3
+    eor #$ff
+    sta expr_result+3
+@ok
+    clc
+@end
+    rts
+
+
+; power     ::= inversion (^ inversion)*
+expect_power:
+    jsr expect_inversion
+    lbcs @end
+    ldz #0
+    ; For right associative, push a count and all expressions parsed, then
+    ; evaluate while unwinding.
+-   lda expr_result
+    pha
+    lda expr_result+1
+    pha
+    lda expr_result+2
+    pha
+    lda expr_result+3
+    pha
+    lda #tk_power
+    phz
+    jsr expect_token
+    plz
+    bcs +
+    inz
+    phz
+    jsr expect_inversion
+    plz
+    bcc -
+    ; Power operator without valid expression, exit with error.
+    rts
+
++   ; There are Z+1 values on the stack.
+    ; If Z=0, just pull and preserve expression flags.
+    pla
+    sta expr_result+3
+    pla
+    sta expr_result+2
+    pla
+    sta expr_result+1
+    pla
+    sta expr_result
+    cpz #0
+    lbeq @ok
+
+    ; Clear bracket flags.
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    sta expr_flags
+
+    ; Z times, pull a value, and take it to the previous value's power.
+    ; If a power is negative (bit 31 is set), raise an error.
+    ldy #0  ; Error status
+@power_loop
+    bit expr_result+3
+    bpl +
+    ldy #1  ; Error: negative exponent. Continue to unwind stack.
++   phy
+    ldq expr_result
+    stq expr_a
+    ply
+    pla
+    sta expr_result+3
+    pla
+    sta expr_result+2
+    pla
+    sta expr_result+1
+    pla
+    sta expr_result
+
+    cpy #1
+    beq +++
+    ; Take expr_a to the expr_result power. Put final answer in expr_result.
+    phy
+    phz
+    ldq expr_a
+    stq multina
+    lda #0
+    tax
+    tay
+    taz
+    lda #1
+    stq expr_b  ; expr_b = 1
+
+    ; Edge case: power = 0
+    ldq expr_result
+    bne +
+    lda #1
+    sta expr_result
+    bra +++
+
++   ldq expr_b  ; Start with A * 1
+@exp_loop
+    stq multinb
+    ldq expr_result
+    sec
+    sbcq expr_b
+    stq expr_result  ; expr_result = expr_result - 1
+    beq +
+    ldq product
+    bra @exp_loop
++   ldq product
+    stq expr_result
+    plz
+    ply
+
++++ dez
+    bne @power_loop
+
+    cpy #1
+    bne @ok
+    lda #err_exponent_negative
+    sta err_code
+    sec
+    rts
+
+@ok
+    clc
+@end
+    rts
+
+
+; negate    ::= (-)? power
+expect_negate:
+    lda #tk_minus
+    jsr expect_token
+    bcs +
+    ldy #0
+    bra ++
++   ldy #1
+++  phy
+    jsr expect_power
+    ply
+    beq @end
+
+    ; Negate expr_result (XOR $FFFFFFFF + 1)
+    clc
+    lda expr_result
+    eor #$ff
+    adc #1
+    sta expr_result
+    lda expr_result+1
+    eor #$ff
+    adc #0
+    sta expr_result+1
+    lda expr_result+2
+    eor #$ff
+    adc #0
+    sta expr_result+2
+    lda expr_result+3
+    eor #$ff
+    adc #0
+    sta expr_result+3
+
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    sta expr_flags
+
+@end
+    rts
+
+
+; TODO: the rest of the owl
+; factor    ::= negate ((* DIV / %) negate)*
+; term      ::= factor ((+ -) factor)*
+; shift     ::= term ((<< >> >>>) term)*
+; bytesel   ::= (< > ^ ^^)? shift
+; expr      ::= bytesel ((& XOR |) bytesel)*
+expect_expr:
+    jmp expect_power
 
 
 ; Input: tokbuf, tok_pos
@@ -3505,7 +3744,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08,e09
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11
 
 err_messages:
 err_syntax = 1
@@ -3526,6 +3765,10 @@ err_pc_overflow = 8
 e08: !pet "program counter overflowed $ffff",0
 err_label_assign_global_only = 9
 e09: !pet "only global labels can be assigned with =",0
+err_unimplemented = 10
+e10: !pet "unimplemented feature",0
+err_exponent_negative = 11
+e11: !pet "exponent cannot be negative",0
 
 warn_message_tbl:
 !word w01

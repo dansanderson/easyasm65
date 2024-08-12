@@ -234,14 +234,17 @@ test_expect_literal_end:
     +test_end
 }
 
-test_expect_expr_tb_1: !byte 0, $ff
-test_expect_expr_tb_2: !byte tk_number_literal, 0, $dd, $cc, $bb, $aa, 0, $ff
-test_expect_expr_tb_3: !byte tk_number_literal_leading_zero, 0, $dd, $cc, $bb, $0a, 0, $ff
-test_expect_expr_tb_4: !byte tk_label_or_reg, 0, 5, 0, $ff
-test_expect_expr_tb_5: !byte tk_lparen, 0, tk_label_or_reg, 0, 5, tk_rparen, 6, 0, $ff
-test_expect_expr_tb_6: !byte tk_lbracket, 0, tk_label_or_reg, 0, 5, tk_rbracket, 6, 0, $ff
-test_expect_expr_tb_end:
-test_expect_expr_line_1: !pet "label",0
+tee_tb_1: !byte 0, $ff
+tee_tb_2: !byte tk_number_literal, 0, $dd, $cc, $bb, $aa, 0, $ff
+tee_tb_3: !byte tk_number_literal_leading_zero, 0, $dd, $cc, $bb, $0a, 0, $ff
+tee_tb_4: !byte tk_label_or_reg, 0, 5, 0, $ff
+tee_tb_5: !byte tk_lparen, 0, tk_label_or_reg, 0, 5, tk_rparen, 6, 0, $ff
+tee_tb_6: !byte tk_lbracket, 0, tk_label_or_reg, 0, 5, tk_rbracket, 6, 0, $ff
+tee_tb_7: !byte tk_complement, 0, tk_number_literal, 2, $dd, $cc, $bb, $aa, 0, $ff
+tee_tb_8: !byte tk_complement, 0, tk_lparen, 2, tk_number_literal, 4, $dd, $cc, $bb, $aa, tk_rparen, 8, 0, $ff
+tee_tb_9: !byte tk_complement, 0, tk_complement, 1, tk_lparen, 2, tk_number_literal, 3, $dd, $cc, $bb, $aa, tk_rparen, 10, 0, $ff
+tee_tb_end:
+tee_line_1: !pet "label",0
 
 !macro test_assemble_pc_assign .tnum, .tokbuf, .tokbufend, .lineaddr, .ec, .etokpos, .eerr, .epc, .edefined {
     +test_start .tnum
@@ -396,13 +399,13 @@ run_test_suite_cmd:
     +test_expect_opcode $04, test_expect_oppop_4, test_expect_oppop_end, 0, 3, 1, F_ASM_FORCE16
 
     +print_chr chr_cr
-    +print_strlit_line "test-expect-pseudoop -- disabled for space"
+    +print_strlit_line "test-expect-pseudoop"
     +test_expect_pseudoop $01, test_expect_oppop_1, test_expect_oppop_2, 1, 0, 0
     +test_expect_pseudoop $02, test_expect_oppop_2, test_expect_oppop_3, 1, 0, 0
     +test_expect_pseudoop $03, test_expect_oppop_3, test_expect_oppop_end, 0, 2, po_to
 
     +print_chr chr_cr
-    +print_strlit_line "test-expect-literal -- disabled for space"
+    +print_strlit_line "test-expect-literal"
     +test_expect_literal $01, test_expect_literal_1, test_expect_literal_2, 1, 0, 0, 0
     +test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
     +test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_BRACKET_ZERO
@@ -411,31 +414,31 @@ run_test_suite_cmd:
     +print_strlit_line "test-expr"
 
     +start_test_expect_expr 0
-    +test_expect_expr $01, "empty", test_expect_expr_tb_1, test_expect_expr_tb_2, test_expect_expr_line_1, 1, 0, 0, 0
-    +test_expect_expr $02, "literal", test_expect_expr_tb_2, test_expect_expr_tb_3, test_expect_expr_line_1, 0, 6, $aabbccdd, 0
-    +test_expect_expr $03, "literal w zero", test_expect_expr_tb_3, test_expect_expr_tb_4, test_expect_expr_line_1, 0, 6, $0abbccdd, F_EXPR_BRACKET_ZERO
+    +test_expect_expr $01, "empty", tee_tb_1, tee_tb_2, tee_line_1, 1, 0, 0, 0
+    +test_expect_expr $02, "literal", tee_tb_2, tee_tb_3, tee_line_1, 0, 6, $aabbccdd, 0
+    +test_expect_expr $03, "literal w zero", tee_tb_3, tee_tb_4, tee_line_1, 0, 6, $0abbccdd, F_EXPR_BRACKET_ZERO
 
     +start_test_expect_expr 0
-    +test_expect_expr $04, "label undef", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 0, F_EXPR_UNDEFINED
+    +test_expect_expr $04, "label undef", tee_tb_4, tee_tb_5, tee_line_1, 0, 3, 0, F_EXPR_UNDEFINED
 
     +start_test_expect_expr 0
-    +create_undefined_symbol_for_test test_expect_expr_line_1, 5
-    +test_expect_expr $05, "label undef in tbl", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 0, F_EXPR_UNDEFINED
+    +create_undefined_symbol_for_test tee_line_1, 5
+    +test_expect_expr $05, "label undef in tbl", tee_tb_4, tee_tb_5, tee_line_1, 0, 3, 0, F_EXPR_UNDEFINED
 
     +start_test_expect_expr 0
-    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
-    +test_expect_expr $06, "label def", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 98765, 0
+    +set_symbol_for_test tee_line_1, 5, 98765
+    +test_expect_expr $06, "label def", tee_tb_4, tee_tb_5, tee_line_1, 0, 3, 98765, 0
 
     +start_test_expect_expr 0
-    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
-    +test_expect_expr $07, "label def parens", test_expect_expr_tb_5, test_expect_expr_tb_6, test_expect_expr_line_1, 0, 7, 98765, F_EXPR_BRACKET_PAREN
+    +set_symbol_for_test tee_line_1, 5, 98765
+    +test_expect_expr $07, "label def parens", tee_tb_5, tee_tb_6, tee_line_1, 0, 7, 98765, F_EXPR_BRACKET_PAREN
 
     +start_test_expect_expr 0
-    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
-    +test_expect_expr $08, "label def brackets", test_expect_expr_tb_6, test_expect_expr_tb_end, test_expect_expr_line_1, 0, 7, 98765, F_EXPR_BRACKET_SQUARE
+    +set_symbol_for_test tee_line_1, 5, 98765
+    +test_expect_expr $08, "label def brackets", tee_tb_6, tee_tb_7, tee_line_1, 0, 7, 98765, F_EXPR_BRACKET_SQUARE
 
     +start_test_expect_expr $ff
-    +test_expect_expr $09, "label undef last pass", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 1, 0, 0, F_EXPR_UNDEFINED
+    +test_expect_expr $09, "label undef last pass", tee_tb_4, tee_tb_5, tee_line_1, 1, 0, 0, F_EXPR_UNDEFINED
     lda err_code
     cmp #err_undefined
     beq +
@@ -444,8 +447,13 @@ run_test_suite_cmd:
 +
 
     +start_test_expect_expr $ff
-    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
-    +test_expect_expr $0A, "label def last pass", test_expect_expr_tb_4, test_expect_expr_tb_5, test_expect_expr_line_1, 0, 3, 98765, 0
+    +set_symbol_for_test tee_line_1, 5, 98765
+    +test_expect_expr $0A, "label def last pass", tee_tb_4, tee_tb_5, tee_line_1, 0, 3, 98765, 0
+
+    +start_test_expect_expr 0
+    +test_expect_expr $0B, "inversion", tee_tb_7, tee_tb_8, tee_line_1, 0, 8, !$aabbccdd, 0
+    +test_expect_expr $0C, "inversion paren", tee_tb_8, tee_tb_9, tee_line_1, 0, 12, !$aabbccdd, 0
+    +test_expect_expr $0D, "double inversion paren", tee_tb_9, tee_tb_end, tee_line_1, 0, 14, !!$aabbccdd, 0
 
     ; -----------------------------------
 
@@ -499,7 +507,7 @@ run_test_suite_cmd:
     +test_assemble_label $07, test_assemble_label_tb_6, test_assemble_label_tb_7, test_assemble_label_line_1, 0, 3, 0, 1, 1, $aabb, 0
 
     +start_test_expect_expr 0
-    +set_symbol_for_test test_expect_expr_line_1, 5, 98765
+    +set_symbol_for_test tee_line_1, 5, 98765
     +test_assemble_label $08, test_assemble_label_tb_2, test_assemble_label_tb_3, test_assemble_label_line_1, 1, 0, err_already_defined, 0, 0, 0, 0
 
     +start_test_expect_expr 0
