@@ -257,6 +257,14 @@ tee_tb_21: !byte tk_number_literal, 0, $3c, $00, $00, $00, tk_label_or_reg, 3, 3
 tee_tb_22: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_plus, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_23: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_minus, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_24: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_plus, 1, tk_number_literal, 2, $03, $00, $00, $00, tk_minus, 1, tk_number_literal, 2, $01, $00, $00, $00, 0, $ff
+
+tee_tb_25: !byte tk_number_literal, 0, $03, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $05, $00, $00, $00, 0, $ff
+tee_tb_26: !byte tk_number_literal, 0, $0c, $00, $00, $00, tk_asr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
+tee_tb_27: !byte tk_number_literal, 0, $f4, $ff, $ff, $ff, tk_asr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
+tee_tb_28: !byte tk_number_literal, 0, $0c, $00, $00, $00, tk_lsr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
+tee_tb_29: !byte tk_number_literal, 0, $f4, $ff, $ff, $ff, tk_lsr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
+tee_tb_30: !byte tk_number_literal, 0, $01, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $02, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
+
 tee_tb_end:
 tee_line_1: !pet "label",0
 tee_line_2: !pet "8 div 2",0
@@ -351,7 +359,16 @@ run_test_suite_cmd:
     +test_expect_expr $19, "multiple div", tee_tb_21, tee_tb_22, tee_line_3, 0, 24, 60 div 5 div 4, 0
     +test_expect_expr $1A, "plus", tee_tb_22, tee_tb_23, tee_line_3, 0, 14, 2 + 3, 0
     +test_expect_expr $1B, "minus", tee_tb_23, tee_tb_24, tee_line_3, 0, 14, 2 - 3, 0
-    +test_expect_expr $1C, "multiple plus", tee_tb_24, tee_tb_end, tee_line_3, 0, 22, 2 + 3 - 1, 0
+    +test_expect_expr $1C, "multiple plus", tee_tb_24, tee_tb_25, tee_line_3, 0, 22, 2 + 3 - 1, 0
+
+    +test_expect_expr $1D, "asl", tee_tb_25, tee_tb_26, tee_line_3, 0, 14, 3 << 5, 0
+    +test_expect_expr $1E, "asr positive", tee_tb_26, tee_tb_27, tee_line_3, 0, 14, 12 >> 3, 0
+    +test_expect_expr $1F, "asr negative", tee_tb_27, tee_tb_28, tee_line_3, 0, 14, -12 >> 3, 0
+    +test_expect_expr $20, "lsr positive", tee_tb_28, tee_tb_29, tee_line_3, 0, 14, 12 >>> 3, 0
+    ; (Acme's own integer width is platform dependent (C int) and likely
+    ; 64-bit, so we can't ask Acme to calculate -12 <<< 3.)
+    +test_expect_expr $21, "lsr negative", tee_tb_29, tee_tb_30, tee_line_3, 0, 14, $1ffffffe, 0
+    +test_expect_expr $22, "multiple asl", tee_tb_30, tee_tb_end, tee_line_3, 0, 22, 1 << 2 << 3, 0
 
     ; -----------------------------------
 

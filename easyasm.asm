@@ -2719,12 +2719,90 @@ expect_term:
     rts
 
 
-; TODO: the rest of the owl
 ; shift     ::= term ((<< >> >>>) term)*
+expect_shift:
+    jsr expect_term
+    lbcs @end
+
+@shift_loop
+    lda #tk_asl
+    jsr expect_token
+    bcc +
+    lda #tk_asr
+    jsr expect_token
+    bcc +
+    lda #tk_lsr
+    jsr expect_token
+    lbcs @ok
+
++   sta expr_a
+    ldq expr_result
+    stq expr_b
+    jsr expect_term
+    lbcs @end  ; Operator but no term, fail
+
+    ; expr_a = tk_asl, tk_asr, or tk_lsr
+    ; Perform operation on expr_b, expr_result times. Store result in expr_result.
+@count_loop
+    lda expr_result+3
+    ora expr_result+2
+    ora expr_result+1
+    ora expr_result
+    lbeq @finish_count_loop
+
+    clc
+    lda expr_a
+    cmp #tk_asl
+    bne +
+    ; asl
+    asl expr_b
+    rol expr_b+1
+    rol expr_b+2
+    rol expr_b+3
+    bra +++
++   cmp #tk_asr
+    bne +
+    ; asr
+    asr expr_b+3
+    bra ++
++   ; lsr
+    lsr expr_b+3
+++  ror expr_b+2
+    ror expr_b+1
+    ror expr_b
++++
+
+    sec
+    lda expr_result
+    sbc #1
+    sta expr_result
+    lda expr_result+1
+    sbc #0
+    sta expr_result+1
+    lda expr_result+2
+    sbc #0
+    sta expr_result+2
+    lda expr_result+3
+    sbc #0
+    sta expr_result+3
+    lbra @count_loop
+
+@finish_count_loop
+    ldq expr_b
+    stq expr_result
+    lbra @shift_loop
+
+@ok
+    clc
+@end
+    rts
+
+
+; TODO: the rest of the owl
 ; bytesel   ::= (< > ^ ^^)? shift
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    jmp expect_term
+    jmp expect_shift
 
 
 ; Input: tokbuf, tok_pos
