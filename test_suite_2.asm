@@ -257,14 +257,12 @@ tee_tb_21: !byte tk_number_literal, 0, $3c, $00, $00, $00, tk_label_or_reg, 3, 3
 tee_tb_22: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_plus, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_23: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_minus, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_24: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_plus, 1, tk_number_literal, 2, $03, $00, $00, $00, tk_minus, 1, tk_number_literal, 2, $01, $00, $00, $00, 0, $ff
-
 tee_tb_25: !byte tk_number_literal, 0, $03, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $05, $00, $00, $00, 0, $ff
 tee_tb_26: !byte tk_number_literal, 0, $0c, $00, $00, $00, tk_asr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_27: !byte tk_number_literal, 0, $f4, $ff, $ff, $ff, tk_asr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_28: !byte tk_number_literal, 0, $0c, $00, $00, $00, tk_lsr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_29: !byte tk_number_literal, 0, $f4, $ff, $ff, $ff, tk_lsr, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_30: !byte tk_number_literal, 0, $01, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $02, $00, $00, $00, tk_asl, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
-
 tee_tb_end:
 tee_line_1: !pet "label",0
 tee_line_2: !pet "8 div 2",0

@@ -2798,11 +2798,54 @@ expect_shift:
     rts
 
 
-; TODO: the rest of the owl
 ; bytesel   ::= (< > ^ ^^)? shift
+expect_bytesel:
+    lda #tk_lt
+    jsr expect_token
+    bcc +
+    lda #tk_gt
+    jsr expect_token
+    bcc +
+    lda #tk_power
+    jsr expect_token
+    bcc +
+    lda #tk_megabyte
+    jsr expect_token
+    bcc +
+    jsr expect_shift  ; Passthru
+    lbra @end
+
++   pha
+    jsr expect_shift
+    pla
+    lbcs @end  ; Operator but no term, fail
+    ldx #0
+    cmp #tk_lt
+    beq +++
+    cmp #tk_gt
+    beq ++
+    cmp #tk_power
+    beq +
+    inx  ; tk_megabyte
++   inx
+++  inx
++++ lda expr_result,x
+    sta expr_result
+    lda #0
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+
+@ok
+    clc
+@end
+    rts
+
+
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    jmp expect_shift
+    ; TODO: & XOR |
+    jmp expect_bytesel
 
 
 ; Input: tokbuf, tok_pos
@@ -4768,10 +4811,10 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-!source "test_suite_2.asm"
+; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-; !source "test_suite_5.asm"
+!source "test_suite_5.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
