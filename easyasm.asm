@@ -2582,14 +2582,12 @@ expect_power:
 expect_negate:
     lda #tk_minus
     jsr expect_token
-    bcs +
-    ldy #0
-    bra ++
-+   ldy #1
-++  phy
-    jsr expect_power
-    ply
-    beq @end
+    bcc +
+    jsr expect_power  ; Passthru
+    lbra @end
+
++   jsr expect_power
+    lbcs @end
 
     ; Negate expr_result (XOR $FFFFFFFF + 1)
     clc
@@ -2614,6 +2612,8 @@ expect_negate:
     and #!F_EXPR_BRACKET_MASK
     sta expr_flags
 
+@ok
+    clc
 @end
     rts
 
@@ -2625,7 +2625,7 @@ expect_negate:
 ; bytesel   ::= (< > ^ ^^)? shift
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    jmp expect_power
+    jmp expect_negate
 
 
 ; Input: tokbuf, tok_pos

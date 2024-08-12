@@ -248,6 +248,7 @@ tee_tb_11: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_numbe
 tee_tb_12: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $00, $00, $00, $00, 0, $ff
 tee_tb_13: !byte tk_lparen, 0, tk_number_literal, 1, $02, $00, $00, $00, tk_power, 2, tk_number_literal, 3, $01, $00, $00, $00, tk_rparen, 4, tk_power, 5, tk_number_literal, 6, $03, $00, $00, $00, 0, $ff
 tee_tb_14: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $fd, $ff, $ff, $ff, 0, $ff
+tee_tb_15: !byte tk_minus, 0, tk_number_literal, 0, $02, $00, $00, $00, 0, $ff
 tee_tb_end:
 tee_line_1: !pet "label",0
 
@@ -463,7 +464,8 @@ run_test_suite_cmd:
     +test_expect_expr $0F, "two exponents", tee_tb_11, tee_tb_12, tee_line_1, 0, 22, 2^1^3, 0
     +test_expect_expr $10, "exponent of zero", tee_tb_12, tee_tb_13, tee_line_1, 0, 14, 2^0, 0
     +test_expect_expr $11, "grouping to a power", tee_tb_13, tee_tb_14, tee_line_1, 0, 26, (2^1)^3, 0
-    +test_expect_expr $12, "negative exponent", tee_tb_14, tee_tb_end, tee_line_1, 1, 14, 0, 0
+    +test_expect_expr $12, "negative exponent", tee_tb_14, tee_tb_15, tee_line_1, 1, 14, 0, 0
+    +test_expect_expr $13, "negate", tee_tb_15, tee_tb_end, tee_line_1, 0, 8, -2, 0
 
     ; -----------------------------------
 
