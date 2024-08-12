@@ -2844,8 +2844,84 @@ expect_bytesel:
 
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    ; TODO: & XOR |
-    jmp expect_bytesel
+    jsr expect_bytesel
+    lbcs @end
+
+@bitop_loop
+    lda #tk_ampersand
+    jsr expect_token
+    bcc +
+    lda #tk_pipe
+    jsr expect_token
+    bcc +
+    lda #0
+    ldx #<kw_xor
+    ldy #>kw_xor
+    jsr expect_keyword
+    bcs @ok
+
++   sta expr_a
+    ldq expr_result
+    stq expr_b
+    jsr expect_bytesel
+    lbcs @end  ; Operator but no term, fail
+
+    ; expr_a = tk_ampersand, tk_pipe, or 0 for XOR
+    ; expr_result = expr_b <op> expr_result
+    lda expr_a
+    cmp #tk_ampersand
+    bne +
+    ; expr_b & expr_result
+    lda expr_b
+    and expr_result
+    sta expr_result
+    lda expr_b+1
+    and expr_result+1
+    sta expr_result+1
+    lda expr_b+2
+    and expr_result+2
+    sta expr_result+2
+    lda expr_b+3
+    and expr_result+3
+    sta expr_result+3
+    lbra @bitop_loop
+
++   cmp #tk_pipe
+    bne +
+    ; expr_b | expr_result
+    lda expr_b
+    ora expr_result
+    sta expr_result
+    lda expr_b+1
+    ora expr_result+1
+    sta expr_result+1
+    lda expr_b+2
+    ora expr_result+2
+    sta expr_result+2
+    lda expr_b+3
+    ora expr_result+3
+    sta expr_result+3
+    lbra @bitop_loop
+
++   ; expr_b XOR expr_result
+    lda expr_b
+    eor expr_result
+    sta expr_result
+    lda expr_b+1
+    eor expr_result+1
+    sta expr_result+1
+    lda expr_b+2
+    eor expr_result+2
+    sta expr_result+2
+    lda expr_b+3
+    eor expr_result+3
+    sta expr_result+3
+    lbra @bitop_loop
+
+@ok
+    clc
+@end
+    rts
 
 
 ; Input: tokbuf, tok_pos
