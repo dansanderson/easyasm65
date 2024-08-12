@@ -2451,95 +2451,96 @@ expect_inversion:
 @end
     rts
 
+!macro push32 .addr {
+    lda .addr
+    pha
+    lda .addr+1
+    pha
+    lda .addr+2
+    pha
+    lda .addr+3
+    pha
+}
+
+!macro pull32 .addr {
+    pla
+    sta .addr+3
+    pla
+    sta .addr+2
+    pla
+    sta .addr+1
+    pla
+    sta .addr
+}
 
 ; power     ::= inversion (^ inversion)*
 expect_power:
     jsr expect_inversion
-    lbcs @end
-    ldz #0
-    ; For right associative, push a count and all expressions parsed, then
-    ; evaluate while unwinding.
--   lda expr_result
-    pha
-    lda expr_result+1
-    pha
-    lda expr_result+2
-    pha
-    lda expr_result+3
-    pha
+    lbcs @end  ; Missing first operand.
+    lda #tk_power
+    jsr expect_token
+    lbcs @ok   ; Passthru
+
+    ; For right associative, push all expressions parsed, then evaluate while
+    ; unwinding.
+    +push32 expr_result
+    ldz #1
+-   phz
+    jsr expect_inversion
+    plz
+    lbcs @drop_stack_and_err  ; Power operator missing operand after operator.
+    +push32 expr_result
+    inz
     lda #tk_power
     phz
     jsr expect_token
     plz
-    bcs +
-    inz
-    phz
-    jsr expect_inversion
-    plz
     bcc -
-    ; Power operator without valid expression, exit with error.
-    rts
-
-+   ; There are Z+1 values on the stack.
-    ; If Z=0, just pull and preserve expression flags.
-    pla
-    sta expr_result+3
-    pla
-    sta expr_result+2
-    pla
-    sta expr_result+1
-    pla
-    sta expr_result
-    cpz #0
-    lbeq @ok
 
     ; Clear bracket flags.
     lda expr_flags
     and #!F_EXPR_BRACKET_MASK
     sta expr_flags
 
-    ; Z times, pull a value, and take it to the previous value's power.
-    ; If a power is negative (bit 31 is set), raise an error.
-    ldy #0  ; Error status
+    ; expr_b = 1, used twice later
+    lda #1
+    sta expr_b
+    lda #0
+    sta expr_b+1
+    sta expr_b+2
+    sta expr_b+3
+
+    ; There are Z > 1 values on the stack. Last operand is first exponent.
+    +pull32 expr_result
+    dez  ; Z = Z - 1
+
+    ; Z times, pull an operand, and take it to the previous result's power.
 @power_loop
+    ; If a power is negative (bit 31 is set), abort with error.
     bit expr_result+3
     bpl +
-    ldy #1  ; Error: negative exponent. Continue to unwind stack.
-+   phy
-    ldq expr_result
-    stq expr_a
-    ply
-    pla
-    sta expr_result+3
-    pla
-    sta expr_result+2
-    pla
-    sta expr_result+1
-    pla
-    sta expr_result
+    lda #err_exponent_negative
+    sta err_code
+    lbra @drop_stack_and_err
++
+    ; Pull the base.
+    +pull32 expr_a
 
-    cpy #1
-    beq +++
-    ; Take expr_a to the expr_result power. Put final answer in expr_result.
-    phy
+    ; Stash operand count during the exp_loop.
     phz
-    ldq expr_a
-    stq multina
-    lda #0
-    tax
-    tay
-    taz
-    lda #1
-    stq expr_b  ; expr_b = 1
 
+    ; Take expr_a to the expr_result power. Put final answer in expr_result.
     ; Edge case: power = 0
     ldq expr_result
     bne +
     lda #1
     sta expr_result
-    bra +++
-
-+   ldq expr_b  ; Start with A * 1
+    dez
+    bra @power_loop
++
+    ldq expr_a
+    stq multina
+    ldq expr_b  ; Start with A * 1
 @exp_loop
     stq multinb
     ldq expr_result
@@ -2549,21 +2550,27 @@ expect_power:
     beq +
     ldq product
     bra @exp_loop
+
 +   ldq product
     stq expr_result
+
+    ; Restore Z = operand count. Proceed to next operand.
     plz
-    ply
-
-+++ dez
+    dez
     bne @power_loop
+    bra @ok
 
-    cpy #1
-    bne @ok
-    lda #err_exponent_negative
-    sta err_code
-    sec
+@drop_stack_and_err
+-   cpz #0
+    beq +
+    pla
+    pla
+    pla
+    pla
+    dez
+    bra -
++   sec
     rts
-
 @ok
     clc
 @end

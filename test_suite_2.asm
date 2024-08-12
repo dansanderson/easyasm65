@@ -243,6 +243,7 @@ tee_tb_6: !byte tk_lbracket, 0, tk_label_or_reg, 0, 5, tk_rbracket, 6, 0, $ff
 tee_tb_7: !byte tk_complement, 0, tk_number_literal, 2, $dd, $cc, $bb, $aa, 0, $ff
 tee_tb_8: !byte tk_complement, 0, tk_lparen, 2, tk_number_literal, 4, $dd, $cc, $bb, $aa, tk_rparen, 8, 0, $ff
 tee_tb_9: !byte tk_complement, 0, tk_complement, 1, tk_lparen, 2, tk_number_literal, 3, $dd, $cc, $bb, $aa, tk_rparen, 10, 0, $ff
+tee_tb_10: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
 tee_tb_end:
 tee_line_1: !pet "label",0
 
@@ -453,7 +454,8 @@ run_test_suite_cmd:
     +start_test_expect_expr 0
     +test_expect_expr $0B, "inversion", tee_tb_7, tee_tb_8, tee_line_1, 0, 8, !$aabbccdd, 0
     +test_expect_expr $0C, "inversion paren", tee_tb_8, tee_tb_9, tee_line_1, 0, 12, !$aabbccdd, 0
-    +test_expect_expr $0D, "double inversion paren", tee_tb_9, tee_tb_end, tee_line_1, 0, 14, !!$aabbccdd, 0
+    +test_expect_expr $0D, "double inversion paren", tee_tb_9, tee_tb_10, tee_line_1, 0, 14, !!$aabbccdd, 0
+    +test_expect_expr $0E, "one exponent", tee_tb_10, tee_tb_end, tee_line_1, 0, 14, 2^3, 0
 
     ; -----------------------------------
 
