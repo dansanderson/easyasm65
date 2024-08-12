@@ -75,7 +75,7 @@ F_EXPR_BRACKET_PAREN  = %00000001
 ; - Entire expression surrounded by square brackets
 F_EXPR_BRACKET_SQUARE = %00000010
 ; - Hex/dec number literal with leading zero, or symbol assigned such a literal with =
-F_EXPR_BRACKET_ZERO   = %00000100
+F_EXPR_FORCE16   = %00000100
 ; - Expr contains undefined symbol
 F_EXPR_UNDEFINED      = %00001000
 
@@ -904,11 +904,11 @@ expr_times_ten:
 ; Output:
 ;  C: 0=not found, line_pos unchanged
 ;  C: 1=found; expr_result=value; line_pos advanced
-;  expr_flags F_EXPR_BRACKET_ZERO bit set if hex or dec literal has a leading zero
+;  expr_flags F_EXPR_FORCE16 bit set if hex or dec literal has a leading zero
 accept_literal:
     ; Init expr zero flag to 0.
     lda expr_flags
-    and #!F_EXPR_BRACKET_ZERO
+    and #!F_EXPR_FORCE16
     sta expr_flags
 
     lda line_pos
@@ -960,7 +960,7 @@ accept_literal:
     bne +
     pha
     lda expr_flags
-    ora #F_EXPR_BRACKET_ZERO
+    ora #F_EXPR_FORCE16
     sta expr_flags
     pla
 +
@@ -993,7 +993,7 @@ accept_literal:
     bne +
     pha
     lda expr_flags
-    ora #F_EXPR_BRACKET_ZERO
+    ora #F_EXPR_FORCE16
     sta expr_flags
     pla
 +   cmp #'9'+1
@@ -1335,7 +1335,7 @@ tokenize:
     bcc +++
     ; Push tk_number_literal, line_pos, expr_result (4 bytes)
     lda expr_flags
-    and #F_EXPR_BRACKET_ZERO
+    and #F_EXPR_FORCE16
     beq +
     lda #tk_number_literal_leading_zero
     bra ++
@@ -2184,7 +2184,7 @@ expect_literal:
     lda tokbuf,x
     cmp #tk_number_literal_leading_zero
     bne +
-    lda #F_EXPR_BRACKET_ZERO
+    lda #F_EXPR_FORCE16
     bra ++
 +   cmp #tk_number_literal
     bne @fail
@@ -2382,7 +2382,7 @@ expect_primary:
     lda [attic_ptr],z  ; flags
     and #F_SYMTBL_LEADZERO
     beq +
-    lda #F_EXPR_BRACKET_ZERO
+    lda #F_EXPR_FORCE16
     sta expr_flags
 +   bra @succeed
 
@@ -2618,14 +2618,74 @@ expect_negate:
     rts
 
 
-; TODO: the rest of the owl
 ; factor    ::= negate ((* DIV / %) negate)*
+expect_factor:
+    jsr expect_negate
+    lbcs @end
+
+    ; Special error message for unsupported fraction operator
+    lda #tk_fraction
+    jsr expect_token
+    bcs +
+    lda #err_fraction_not_supported
+    sta err_code
+    sec
+    lbra @end
++
+
+@factor_loop
+    lda #tk_multiply
+    jsr expect_token
+    bcc +
+    lda #tk_remainder
+    jsr expect_token
+    bcc +
+    lda #0
+    ldx #<kw_div
+    ldy #>kw_div
+    jsr expect_keyword
+    lbcs @ok
+
++   sta expr_a
+    ldq expr_result
+    stq multina
+    jsr expect_negate
+    lbcs @end  ; Operator but no term, fail
+    ldq expr_result
+    stq multinb
+    lda expr_a
+
+    ; A=tk_multiply, tk_remainder, or 0 for DIV
+    cmp #tk_multiply
+    bne +
+    ldq product
+    bra ++
++   ; DIV and remainder need to wait for DIVBUSY bit
+-   ldx mathbusy
+    bmi -
+    cmp #tk_remainder
+    bne +
+    ldq divrema  ; fractional part
+    stq multina
+    ldq product+4  ; frac * divisor
+    bra ++
++   ldq divquot
+++  stq expr_result
+    lbra @factor_loop
+
+@ok
+    clc
+@end
+    rts
+
+
+; TODO: the rest of the owl
 ; term      ::= factor ((+ -) factor)*
 ; shift     ::= term ((<< >> >>>) term)*
 ; bytesel   ::= (< > ^ ^^)? shift
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    jmp expect_negate
+    jmp expect_factor
 
 
 ; Input: tokbuf, tok_pos
@@ -2861,7 +2921,7 @@ assemble_label:
     ldq expr_result
     jsr set_symbol_value
     lda expr_flags
-    and #F_EXPR_BRACKET_ZERO
+    and #F_EXPR_FORCE16
     beq +
     ldz #3
     lda [attic_ptr],z
@@ -2915,7 +2975,7 @@ is_expr_16bit:
     cmp #F_ASM_FORCE8
     beq @no_16
     lda expr_flags
-    and #F_EXPR_BRACKET_ZERO
+    and #F_EXPR_FORCE16
     bne @yes_16
     lda expr_result+1
     ora expr_result+2
@@ -3752,7 +3812,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12
 
 err_messages:
 err_syntax = 1
@@ -3777,6 +3837,9 @@ err_unimplemented = 10
 e10: !pet "unimplemented feature",0
 err_exponent_negative = 11
 e11: !pet "exponent cannot be negative",0
+err_fraction_not_supported = 12
+e12: !pet "fraction operator not supported",0
+
 
 warn_message_tbl:
 !word w01
@@ -4028,8 +4091,10 @@ tk_lbracket = last_po + 20
 !pet "[",0
 tk_rbracket = last_po + 21
 !pet "]",0
+tk_fraction = last_po + 22  ; (Not supported, but special error message)
+!pet "/",0
 !byte 0
-last_tk = tk_rbracket + 1
+last_tk = tk_fraction + 1
 
 ; Other token IDs
 tk_number_literal = last_tk + 0

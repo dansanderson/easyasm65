@@ -100,7 +100,7 @@ run_test_suite_cmd:
     +test_expect_addressing_expr $08, test_expect_addressing_expr_8, 0, MODE_ABSOLUTE, $d020, 0, 9, 0, 0
     +test_expect_addressing_expr $09, test_expect_addressing_expr_9, 0, MODE_ABSOLUTE_X, $d020, 0, 14, 0, 0
     +test_expect_addressing_expr $0a, test_expect_addressing_expr_10, 0, MODE_ABSOLUTE_Y, $d020, 0, 14, 0, 0
-    +test_expect_addressing_expr $0b, test_expect_addressing_expr_11, 0, MODE_ABSOLUTE_X, $fe, F_EXPR_BRACKET_ZERO, 14, 0, 0
+    +test_expect_addressing_expr $0b, test_expect_addressing_expr_11, 0, MODE_ABSOLUTE_X, $fe, F_EXPR_FORCE16, 14, 0, 0
     +test_expect_addressing_expr $0c, test_expect_addressing_expr_12, 0, MODE_ABSOLUTE_IND, $fffe, F_EXPR_BRACKET_PAREN, 13, 0, 0
     +test_expect_addressing_expr $0d, test_expect_addressing_expr_13, 0, MODE_ABSOLUTE_IND_X, $c000, 0, 18, 0, 0
     +test_expect_addressing_expr $0e, test_expect_addressing_expr_14, 0, MODE_BASE_PAGE_IND_X, $fe, 0, 18, 0, 0

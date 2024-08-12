@@ -195,7 +195,7 @@ test_accept_ident_4: !pet "!label",0
 }
 
     lda expr_flags
-    and #F_EXPR_BRACKET_ZERO
+    and #F_EXPR_FORCE16
 !if .ezeroflag {
     bne +
     brk
