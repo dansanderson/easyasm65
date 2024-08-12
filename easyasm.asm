@@ -2077,10 +2077,10 @@ expect_label:
     inx
     lda tokbuf,x
     inx
-    ldy tokbuf,x
+    ldy tokbuf,x  ; Y = label token length
     inx
     stx tok_pos
-    tax
+    tax   ; X = label token line pos
     clc
     bra @end
 @fail
@@ -2370,8 +2370,6 @@ expect_primary:
     ; <label>
 +++ jsr expect_label
     lbcs +++
-    stx label_pos
-    sty label_length
     jsr find_or_add_label
     jsr get_symbol_value
     bcs ++
@@ -3003,12 +3001,15 @@ determine_label_type:
     rts
 
 
-; Input: line_addr, label_pos, label_length
+; Input: line_addr, X=label line pos, Y=label length
 ; Output:
 ; - C=0 found or added, attic_ptr=entry address
 ; - C=1 out of memory error
 ; Uses strbuf, expr_a.
 find_or_add_label:
+    phx
+    phy
+
     ldx #0  ; strbuf position
 
     ; TODO: relative labels
@@ -3050,14 +3051,14 @@ find_or_add_label:
 ++
 
     ; Copy label text to strbuf.
-    lda label_pos    ; line_pos
+    ply  ; Y = length
+    pla  ; A = line pos
     clc
     adc line_addr
     sta bas_ptr
     lda #0
     adc line_addr+1
-    sta bas_ptr+1    ; bas_ptr = line_addr + line_pos
-    ldy label_length
+    sta bas_ptr+1    ; bas_ptr = line_addr + label line_pos
     ldz #0
 -   lda [bas_ptr],z
     sta strbuf,x
@@ -3074,6 +3075,7 @@ find_or_add_label:
     pha
     lda #5
     sta bas_ptr+2
+    ; X = new length (text added to strbuf)
     jsr find_or_add_symbol
     pla
     sta bas_ptr+2  ; Important! reset bas_ptr bank to 0
@@ -3112,6 +3114,8 @@ assemble_label:
 
 ; (This is jsr'd.)
 @find_or_add_symbol_to_define:
+    ldx label_pos
+    ldy label_length
     jsr find_or_add_label
     bcc +
     lda #err_out_of_memory
@@ -4889,8 +4893,8 @@ scr_table:
 ; !source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
-; !source "test_suite_4.asm"
-!source "test_suite_5.asm"
+!source "test_suite_4.asm"
+; !source "test_suite_5.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------

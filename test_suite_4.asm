@@ -125,7 +125,8 @@ test_assemble_pc_assign_line_1: !pet "* = label",0
     sta bas_ptr
     lda #>.lineaddr
     sta bas_ptr+1
-    ldx #5
+    ldx .tokbuf + 1
+    ldy .tokbuf + 2
     jsr find_or_add_label
     jsr get_symbol_value
 

@@ -3,7 +3,7 @@
 EasyAsm is an on-device assembly language programming tool for the MEGA65 personal computer. It uses the MEGA65's operating system as part of a complete assembly language development workflow, and maintains a minimal memory footprint when not in use.
 
 Features:
-* Supports all 45GS02 CPU instruction types and addressing modes.
+* All 45GS02 CPU instruction types and addressing modes.
 * Supports a subset of the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/) syntax and features.
 * Maintains a minimal memory footprint when running your program or during editing, so you can use the full power of your computer.
 * Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
@@ -24,6 +24,7 @@ Release 0.1:
 * Single segment programs only: one `!to` and up to one `* = ...` per source file
 
 1.0 roadmap:
+* Relative labels
 * `!binary`
 * `!source`
 * `runnable` with custom PC (single relocatable segment)
@@ -33,12 +34,11 @@ Release 0.1:
 
 Far future:
 * Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
-* `!symbollist`: List symbol definitions to file
-* `!report`: List disassembly alongside source code to file
+* List symbol definitions
+* List assembled bytes alongside source code
 * Zones and real locals
 * Macros
-* Conditional assembly
-* Conditional expressions
+* Conditional assembly, conditional expressions
 * A nice built-in editor
 
 ## An important note
