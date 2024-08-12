@@ -2679,13 +2679,52 @@ expect_factor:
     rts
 
 
-; TODO: the rest of the owl
 ; term      ::= factor ((+ -) factor)*
+expect_term:
+    jsr expect_factor
+    lbcs @end
+
+@term_loop
+    lda #tk_plus
+    jsr expect_token
+    bcc +
+    lda #tk_minus
+    jsr expect_token
+    lbcs @ok
+
++   sta expr_a
+    ldq expr_result
+    sta expr_b
+    jsr expect_factor
+    lbcs @end  ; Operator but no term, fail
+    ; A=tk_plus or tk_minus
+    lda expr_a
+    cmp #tk_plus
+    bne +
+    ; expr_result = expr_b + expr_result
+    ldq expr_b
+    clc
+    adcq expr_result
+    bra ++
++   ; expr_result = expr_b - expr_result
+    ldq expr_b
+    sec
+    sbcq expr_result
+++  stq expr_result
+    lbra @term_loop
+
+@ok
+    clc
+@end
+    rts
+
+
+; TODO: the rest of the owl
 ; shift     ::= term ((<< >> >>>) term)*
 ; bytesel   ::= (< > ^ ^^)? shift
 ; expr      ::= bytesel ((& XOR |) bytesel)*
 expect_expr:
-    jmp expect_factor
+    jmp expect_term
 
 
 ; Input: tokbuf, tok_pos
@@ -4654,6 +4693,7 @@ scr_table:
 !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
+; !source "test_suite_5.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------

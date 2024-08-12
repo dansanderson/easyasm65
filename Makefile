@@ -6,6 +6,13 @@ DISK_FILES = easyasm.prg \
 	typeme.txt \
 	autoboot.bas
 
+TEST_SUITES = \
+	test_suite_1.asm \
+	test_suite_2.asm \
+	test_suite_3.asm \
+	test_suite_4.asm \
+	test_suite_5.asm
+
 %.prg: %.asm
 	${ACME} -f cbm -o $@ -l $@.lst -r $@.rpt $<
 
@@ -16,7 +23,7 @@ all: easyasm.d81
 clean:
 	rm *.prg *.d81 *.lst
 
-easyasm.prg: easyasm.asm test_common.asm test_suite_1.asm test_suite_2.asm test_suite_3.asm test_suite_4.asm
+easyasm.prg: easyasm.asm test_common.asm ${TEST_SUITES}
 
 easyasm.d81: ${DISK_FILES} files.json makedisk.py
 	${PYTHON3} makedisk.py files.json
