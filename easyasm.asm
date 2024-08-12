@@ -2535,9 +2535,9 @@ expect_power:
     bne +
     lda #1
     sta expr_result
-    dez
-    bra @power_loop
+    bra @continue_power_loop
 +
+
     ldq expr_a
     stq multina
     ldq expr_b  ; Start with A * 1
@@ -2554,6 +2554,7 @@ expect_power:
 +   ldq product
     stq expr_result
 
+@continue_power_loop
     ; Restore Z = operand count. Proceed to next operand.
     plz
     dez
