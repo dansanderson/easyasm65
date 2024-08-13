@@ -4,7 +4,8 @@ PYTHON3 = python3
 DISK_FILES = easyasm.prg \
 	easyasm-e.prg \
 	typeme.txt \
-	autoboot.bas
+	autoboot.bas \
+	testdata/everyopcode.txt
 
 TEST_SUITES = \
 	test_suite_1.asm \

@@ -1,0 +1,413 @@
+
+; !cpu m65
+; !to "everyopcode.prg",cbm
+*=$1600
+
+imm8 = 7
+imm16 = 257
+zp = $fc
+abs16 = $d020
+o8 = 13
+
+adc #imm8
+adc (zp), y
+adc (zp), z
+adc (zp, x)
+adc [zp], z
+adc abs16
+adc abs16, x
+adc abs16, y
+adc zp
+adc zp, x
+adcq (zp)
+;  adcq (zp), y
+;  adcq (zp, x)
+adcq [zp]
+adcq abs16
+;  adcq abs16, x
+;  adcq abs16, y
+adcq zp
+;  adcq zp, x
+and #imm8
+and (zp), y
+and (zp), z
+and (zp, x)
+and [zp], z
+and abs16
+and abs16, x
+and abs16, y
+and zp
+and zp, x
+andq (zp)
+;  andq (zp), y
+;  andq (zp, x)
+andq [zp]
+andq abs16
+;  andq abs16, x
+;  andq abs16, y
+andq zp
+;  andq zp, x
+asl
+asl abs16
+asl abs16, x
+asl zp
+asl zp, x
+aslq
+aslq abs16
+aslq abs16, x
+aslq zp
+aslq zp, x
+asr
+asr zp
+asr zp, x
+asw abs16
+aug
+l0:
+bbr0 zp, l0
+l1:
+bbr1 zp, l1
+l2:
+bbr2 zp, l2
+l3:
+bbr3 zp, l3
+l4:
+;  bbr4 zp, l4
+l5:
+bbr5 zp, l5
+l6:
+bbr6 zp, l6
+l7:
+bbr7 zp, l7
+l8:
+bbs0 zp, l8
+l9:
+bbs1 zp, l9
+l10:
+bbs2 zp, l10
+l11:
+bbs3 zp, l11
+l12:
+bbs4 zp, l12
+l13:
+bbs5 zp, l13
+l14:
+bbs6 zp, l14
+l15:
+bbs7 zp, l15
+l16:
+lbcc l16
+l17:
+bcc l17
+l18:
+lbcs l18
+l19:
+bcs l19
+l20:
+lbeq l20
+l21:
+beq l21
+bit #imm8
+bit abs16
+bit abs16, x
+bit zp
+bit zp, x
+l22:
+lbmi l22
+l23:
+;  bmi l23
+l24:
+lbne l24
+l25:
+bne l25
+l26:
+lbpl l26
+l27:
+bpl l27
+l28:
+lbra l28
+l29:
+bra l29
+brk
+l30:
+bsr l30
+l31:
+lbvc l31
+l32:
+bvc l32
+l33:
+lbvs l33
+l34:
+bvs l34
+clc
+cld
+cle
+cli
+clv
+cmp #imm8
+cmp (zp), y
+cmp (zp), z
+cmp (zp, x)
+cmp [zp], z
+cmp abs16
+cmp abs16, x
+cmp abs16, y
+cmp zp
+cmp zp, x
+cpq (zp)
+;  cpq (zp), y
+;  cpq (zp, x)
+;  cpq [zp]
+cpq abs16
+;  cpq abs16, x
+;  cpq abs16, y
+cpq zp
+;  cpq zp, x
+cpx #imm8
+cpx abs16
+cpx zp
+cpy #imm8
+cpy abs16
+cpy zp
+cpz #imm8
+cpz abs16
+cpz zp
+dec
+dec abs16
+dec abs16, x
+dec zp
+;  dec zp, x
+deq
+deq abs16
+deq abs16, x
+deq zp
+deq zp, x
+dew zp
+dex
+dey
+dez
+eor #imm8
+eor (zp), y
+eor (zp), z
+eor (zp, x)
+eor [zp], z
+eor abs16
+eor abs16, x
+eor abs16, y
+eor zp
+eor zp, x
+eorq (zp)
+;  eorq (zp), y
+;  eorq (zp, x)
+eorq [zp]
+eorq abs16
+;  eorq abs16, x
+;  eorq abs16, y
+eorq zp
+;  eorq zp, x
+inc
+inc abs16
+inc abs16, x
+inc zp
+inc zp, x
+inq
+inq abs16
+inq abs16, x
+inq zp
+inq zp, x
+inw zp
+inx
+iny
+inz
+jmp (abs16)
+jmp (abs16, x)
+jmp abs16
+jsr (abs16)
+jsr (abs16, x)
+jsr abs16
+lda #imm8
+lda (o8, sp), y
+lda (zp), y
+lda (zp), z
+lda (zp, x)
+lda [zp], z
+lda abs16
+lda abs16, x
+lda abs16, y
+lda zp
+lda zp, x
+ldq (zp)
+;  ldq (zp), y
+;  ldq (zp, sp), y
+;  ldq (zp, x)
+ldq [zp]
+ldq abs16
+;  ldq abs16, x
+;  ldq abs16, y
+ldq zp
+;  ldq zp, x
+ldx #imm8
+ldx abs16
+ldx abs16, y
+ldx zp
+ldx zp, y
+ldy #imm8
+ldy abs16
+ldy abs16, x
+ldy zp
+ldy zp, x
+ldz #imm8
+ldz abs16
+ldz abs16, x
+lsr
+lsr abs16
+lsr abs16, x
+lsr zp
+lsr zp, x
+lsrq
+lsrq abs16
+lsrq abs16, x
+lsrq zp
+lsrq zp, x
+neg
+ora #imm8
+ora (zp), y
+ora (zp), z
+ora (zp, x)
+ora [zp], z
+ora abs16
+ora abs16, x
+ora abs16, y
+ora zp
+ora zp, x
+orq (zp)
+;  orq (zp), y
+;  orq (zp, x)
+orq [zp]
+orq abs16
+;  orq abs16, x
+;  orq abs16, y
+orq zp
+;  orq zp, x
+pha
+php
+phw #imm16
+phw abs16
+phx
+phy
+phz
+pla
+plp
+plx
+ply
+plz
+rmb0 zp
+rmb1 zp
+rmb2 zp
+rmb3 zp
+rmb4 zp
+rmb5 zp
+rmb6 zp
+rmb7 zp
+rol
+rol abs16
+rol abs16, x
+rol zp
+rol zp, x
+rolq
+rolq abs16
+rolq abs16, x
+rolq zp
+rolq zp, x
+ror
+ror abs16
+ror abs16, x
+ror zp
+ror zp, x
+rorq
+rorq abs16
+rorq abs16, x
+rorq zp
+rorq zp, x
+row abs16
+rti
+rts #imm8
+rts
+sbc #imm8
+sbc (zp), y
+sbc (zp), z
+sbc (zp, x)
+sbc [zp], z
+sbc abs16
+sbc abs16, x
+;  sbc abs16, y
+sbc zp
+sbc zp, x
+sbcq (zp)
+;  sbcq (zp), y
+;  sbcq (zp, x)
+sbcq [zp]
+sbcq abs16
+;  sbcq abs16, x
+;  sbcq abs16, y
+sbcq zp
+;  sbcq zp, x
+sec
+sed
+see
+sei
+smb0 zp
+smb1 zp
+smb2 zp
+smb3 zp
+;  smb4 zp
+smb5 zp
+smb6 zp
+smb7 zp
+sta (o8, sp), y
+sta (zp), y
+sta (zp), z
+sta (zp, x)
+sta [zp], z
+sta abs16
+sta abs16, x
+sta abs16, y
+sta zp
+sta zp, x
+stq (zp)
+;  stq (zp), y
+;  stq (zp, sp), y
+;  stq (zp, x)
+stq [zp]
+stq abs16
+;  stq abs16, x
+;  stq abs16, y
+stq zp
+;  stq zp, x
+stx abs16
+stx abs16, y
+stx zp
+stx zp, y
+sty abs16
+sty abs16, x
+sty zp
+sty zp, x
+stz abs16
+stz abs16, x
+stz zp
+stz zp, x
+tab
+tax
+tay
+taz
+tba
+trb abs16
+trb zp
+tsb abs16
+tsb zp
+tsx
+tsy
+txa
+txs
+tya
+tys
+tza

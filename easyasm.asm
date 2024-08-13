@@ -3630,11 +3630,15 @@ assemble_instruction:
 
     ; Force 16-bit if instruction only accepts 16-bit arguments
     ; (Note that FORCE16 will not force Immediate Word mode, so LDZ is fine.)
+    ;
+    ; TODO: Technically this is not implemented correctly. FOO Addr should
+    ; coerce FOO $fc to FOO $00fc even if FOO has other byte-sized operand
+    ; modes. This is only doing it if FOO *only* has word-sized operand modes.
     ldy #0
     lda (instr_mode_rec_addr),y
     and #<MODES_WORD_OPERAND
     bne +
-    iny
+    ldy #1
     lda (instr_mode_rec_addr),y
     and #>MODES_WORD_OPERAND
     beq +++  ; does not have word operand modes
@@ -3642,6 +3646,7 @@ assemble_instruction:
     lda (instr_mode_rec_addr),y
     and #<MODES_BYTE_OPERAND
     bne +++  ; also has byte operand modes, no force
+    ldy #1
     lda (instr_mode_rec_addr),y
     and #>MODES_BYTE_OPERAND
     bne +++
