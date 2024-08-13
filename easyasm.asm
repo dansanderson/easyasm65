@@ -1928,14 +1928,15 @@ assemble_bytes:
 
 ++  ; Write bytes to segment.
     lda expr_a
+    tax  ; X counts down from length to 1, inclusive.
     dec
-    tax
-    taz
--   lda strbuf,x
+    taz  ; Z counts down from length-1 to 0, inclusive.
+-   lda strbuf-1,x
     sta [next_segment_byte_addr],z
-    dex
     dez
-    bpl -
+    dex
+    ; (Can't use bpl here because we need to support unsigned counts up to 255.)
+    bne -
 
     ; Add length to segment length.
     ldz #2
@@ -4116,8 +4117,69 @@ assemble_dir_warn:
     lbra statement_ok_exit
 
 
-assemble_dir_to:
 assemble_dir_fill:
+    jsr expect_expr
+    bcc +
+    lda #err_missing_arg
+    sta err_code
+    lbra statement_err_exit
++   ldq expr_result
+    stq expr_b  ; expr_b = count
+    lda #0      ; default fill value is 0
+    sta expr_result
+    sta expr_result+1
+    sta expr_result+2
+    sta expr_result+3
+    lda #tk_comma
+    jsr expect_token
+    bcs @start_fill
+    jsr expect_expr
+    bcc +
+    lda #err_missing_arg
+    sta err_code
+    lbra statement_err_exit
++   lda expr_result+3  ; custom fill byte must be <256
+    ora expr_result+2
+    ora expr_result+1
+    beq @start_fill
+    lda #err_value_out_of_range
+    sta err_code
+    lbra statement_err_exit
+
+    ; expr_result = fill byte
+    ; expr_a = fill count
+@start_fill
+    ; Completely fill strbuf with the fill byte.
+    lda expr_result  ; fill byte
+    ldx #$00
+-   sta strbuf,x
+    inx
+    bne -
+
+    lda #0
+    tax
+    tay
+    taz
+    lda #$ff
+    sta expr_result  ; expr_result = 255
+
+@fill_loop
+    ldq expr_result
+    cpq expr_b
+    bcs ++  ; count < 255, less than a block remaining
+    ldx #$ff
+    jsr assemble_bytes  ; assemble 255 fill bytes (uses expr_a)
+    ldq expr_b
+    sec
+    sbcq expr_result
+    stq expr_b  ; expr_b = expr_b - 255
+    bra @fill_loop
+++  ldx expr_b  ; remaining (< 255)
+    jsr assemble_bytes  ; (does nothing if X=0)
+    lbra statement_ok_exit
+
+
+assemble_dir_to:
 assemble_dir_pet:
 assemble_dir_scr:
 assemble_dir_source:
@@ -4326,7 +4388,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14
 
 err_messages:
 err_syntax = 1
@@ -4355,6 +4417,8 @@ err_fraction_not_supported = 12
 e12: !pet "fraction operator not supported",0
 err_invalid_arg = 13
 e13: !pet "argument not allowed",0
+err_missing_arg = 14
+e14: !pet "missing argument",0
 
 warn_message_tbl:
 !word w01
