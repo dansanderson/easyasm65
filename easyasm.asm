@@ -2987,7 +2987,8 @@ determine_label_type:
     sta bas_ptr
     lda line_addr+1
     sta bas_ptr+1
-    ldz label_pos
+    lda label_pos
+    taz
     lda [bas_ptr],z
     cmp #'@'
     bne +
@@ -3014,18 +3015,17 @@ find_or_add_label:
     phx
     phy
 
-    ldx #0  ; strbuf position
-
     ; TODO: relative labels
 
     ; Detect cheap local, rewrite name
     jsr determine_label_type
     cpx #lbl_cheaplocal
     bne ++
+    ldx #0  ; strbuf position
     ; Copy last-seen global name to strbuf
     lda last_pc_defined_global_label
     ora last_pc_defined_global_label+1
-    beq ++  ; Never seen a global, no cheap local prefix
+    beq +++  ; Never seen a global, no cheap local prefix
     lda last_pc_defined_global_label
     sta attic_ptr
     lda last_pc_defined_global_label+1
@@ -3047,23 +3047,23 @@ find_or_add_label:
     ldx #0
     ldz #0             ; Copy global name to strbuf
 -   lda [expr_a],z
-    beq ++
+    beq +++
     sta strbuf,x
     inx
     inz
     bra -
-++
+
+++  ldx #0  ; strbuf position
++++
 
     ; Copy label text to strbuf.
     ply  ; Y = length
-    pla  ; A = line pos
-    clc
-    adc line_addr
+    plz  ; Z = line pos
+    lda line_addr
     sta bas_ptr
-    lda #0
-    adc line_addr+1
-    sta bas_ptr+1    ; bas_ptr = line_addr + label line_pos
-    ldz #0
+    lda line_addr+1
+    sta bas_ptr+1
+    ; X is current strbuf position, from above
 -   lda [bas_ptr],z
     sta strbuf,x
     inx
@@ -3631,9 +3631,10 @@ assemble_instruction:
     ; Force 16-bit if instruction only accepts 16-bit arguments
     ; (Note that FORCE16 will not force Immediate Word mode, so LDZ is fine.)
     ;
-    ; TODO: Technically this is not implemented correctly. FOO Addr should
-    ; coerce FOO $fc to FOO $00fc even if FOO has other byte-sized operand
-    ; modes. This is only doing it if FOO *only* has word-sized operand modes.
+    ; TODO: This is not implemented correctly. If there is no FOO ZP, FOO Addr
+    ; should coerce FOO $fc to FOO $00fc, even if FOO has other byte-sized
+    ; operand modes. This is only doing it if FOO *only* has word-sized
+    ; operand modes.
     ldy #0
     lda (instr_mode_rec_addr),y
     and #<MODES_WORD_OPERAND

@@ -71,7 +71,7 @@ bbr2 zp, l2
 l3:
 bbr3 zp, l3
 l4:
-;  bbr4 zp, l4
+bbr4 zp, l4
 l5:
 bbr5 zp, l5
 l6:
@@ -114,7 +114,7 @@ bit zp, x
 l22:
 lbmi l22
 l23:
-;  bmi l23
+bmi l23
 l24:
 lbne l24
 l25:
@@ -156,7 +156,7 @@ cmp zp, x
 cpq (zp)
 ;  cpq (zp), y
 ;  cpq (zp, x)
-;  cpq [zp]
+cpq [zp]
 cpq abs16
 ;  cpq abs16, x
 ;  cpq abs16, y
@@ -175,7 +175,7 @@ dec
 dec abs16
 dec abs16, x
 dec zp
-;  dec zp, x
+dec zp, x
 deq
 deq abs16
 deq abs16, x
@@ -339,7 +339,7 @@ sbc (zp, x)
 sbc [zp], z
 sbc abs16
 sbc abs16, x
-;  sbc abs16, y
+sbc abs16, y
 sbc zp
 sbc zp, x
 sbcq (zp)
@@ -359,7 +359,7 @@ smb0 zp
 smb1 zp
 smb2 zp
 smb3 zp
-;  smb4 zp
+smb4 zp
 smb5 zp
 smb6 zp
 smb7 zp
