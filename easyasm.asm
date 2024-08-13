@@ -286,16 +286,14 @@ do_menu:
     bne -
 
     +kprimm_start
-    !pet "https://github.com/dansanderson/easyasm65  ",13
-    !pet "                                           ",13
-    !pet " 1. assemble to memory                     ",13
-    !pet " 2. assemble to disk                       ",13
-    !pet " 3. restore source                         ",13,0
+    !pet "https://github.com/dansanderson/easyasm65",13,13
+    !pet " 1. assemble and test",13
+    !pet " 2. assemble to disk",13
+    !pet " 3. restore source",13,0
     +kprimm_end
     +kprimm_start
-    !pet " run/stop: close menu                      ",13
-    !pet "                                           ",13
-    !pet " your choice? ",15,166,143,"                            ",13
+    !pet " run/stop: close menu",13,13
+    !pet " your choice? ",15,166,143,13
     !pet 145,29,29,29,29,29,29,29,29,29,29,29,29,29,29,0
     +kprimm_end
 
@@ -330,9 +328,8 @@ do_menu:
 
 
 assemble_to_memory_cmd:
-    jsr do_banner
     +kprimm_start
-    !pet "# assembling to memory...",13,13,0
+    !pet "# assembling...",13,13,0
     +kprimm_end
 
     jsr stash_source
@@ -348,7 +345,6 @@ assemble_to_memory_cmd:
 
 
 assemble_to_disk_cmd:
-    jsr do_banner
     +kprimm_start
     !pet "# assembling to disk...",13,13,0
     +kprimm_end
@@ -364,11 +360,6 @@ assemble_to_disk_cmd:
 
 
 restore_source_cmd:
-    jsr do_banner
-    +kprimm_start
-    !pet "# restoring source...",13,13,0
-    +kprimm_end
-
     ; Safety check: probably never stashed source before
     ldz #0
     lda #<attic_source_stash
@@ -438,6 +429,35 @@ print_cstr:
     inw $fc
     bra -
 +
+    ; Restore B
+    lda #easyasm_base_page
+    tab
+    rts
+
+
+; Print a string from a source line
+; Input: line_addr, X=line pos, Y=length
+print_bas_str:
+    lda line_addr
+    sta $00fc
+    lda line_addr+1
+    sta $00fd
+    lda #0
+    sta $00fe
+    sta $00ff
+
+    ; Manage B manually, for speed
+    lda #kernal_base_page
+    tab
+
+    txa
+    taz
+-   lda [$fc],z
+    jsr bsout
+    inz
+    dey
+    bne -
+
     ; Restore B
     lda #easyasm_base_page
     tab
@@ -687,11 +707,9 @@ print_error:
 +++ rts
 
 
-; Input: A=warning ID
-; Output: prints message with line number, sets F_ASM_WARN
-print_warning:
-    pha
-
+; (Used by print_warning and do_warn)
+; Inits bas_ptr=line_addr for caller to use
+print_warning_line_number:
     +kprimm_start
     !pet "line ",0
     +kprimm_end
@@ -711,7 +729,14 @@ print_warning:
     +kprimm_start
     !pet ": ",0
     +kprimm_end
+    rts
 
+
+; Input: A=warning ID
+; Output: prints message with line number, sets F_ASM_WARN
+print_warning:
+    pha
+    jsr print_warning_line_number
     pla
     dec
     asl
@@ -3898,24 +3923,233 @@ assemble_instruction:
     lda #0
     sta err_code
     bra ++
-+  lbra statement_err_exit
-++ lbra statement_ok_exit
++   lbra statement_err_exit
+++  lbra statement_ok_exit
 
 
 ; ------------------------------------------------------------
 ; Directives
 ; ------------------------------------------------------------
 
+; Input: tokbuf, tok_pos, line_addr
+; Output:
+;  C=0 ok, tok_pos advanced; X=line pos, Y=length
+;  C=1 not found, tok_pos preserved
+;    err_code>0, line_pos: report error in expression
+expect_string_arg:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #tk_string_literal
+    beq +
+    sec
+    rts
++   inx
+    lda tokbuf,x
+    taz
+    inx
+    ldy tokbuf,x
+    inx
+    stx tok_pos
+    tza
+    tax
+    inx  ; Starting quote not included
+    clc
+    rts
+
+; Directives that process arg lists of arbitrary length use the
+; process_arg_list macro and a handler routine with the following API:
+;
+; Input:
+;   A==arg_type_string: string arg, X=line pos, Y=length
+;   A==arg_type_expr: expression arg, expr_result
+; Output:
+;   err_code>0 : abort with error
+arg_type_string = 1
+arg_type_expr = 2
+!macro process_arg_list .handler {
+.loop
+    jsr expect_string_arg
+    bcs +
+    lda #arg_type_string
+    jsr .handler
+    bra ++
++   jsr expect_expr
+    bcs +
+    lda #arg_type_expr
+    jsr .handler
+    bra ++
++   lda #err_syntax
+    sta err_code
+    lbra statement_err_exit
+++  lda err_code
+    lbne statement_err_exit
+    lda #tk_comma
+    jsr expect_token
+    lbcc .loop
+}
+
+
+; General handler for byte/word/lword
+; Input: A=arg type, etc.; Z=width (1, 2, 4)
+do_assemble_bytes:
+    cmp #arg_type_string
+    bne +
+    lda #err_invalid_arg
+    sta err_code
+    rts
++   ldx #0
+    lda expr_result
+    sta strbuf,x
+    inx
+    cpz #2
+    bcc @end
+    lda expr_result+1
+    sta strbuf,x
+    inx
+    cpz #4
+    bcc @end
+    lda expr_result+2
+    sta strbuf,x
+    inx
+    lda expr_result+3
+    sta strbuf,x
+    inx
+@end
+    jsr assemble_bytes
+    rts
+
+; !byte ...
+; !8 ...
+; Assembles byte values.
+do_byte:
+    ldz #1
+    lbra do_assemble_bytes
+assemble_dir_byte:
+    +process_arg_list do_byte
+    lbra statement_ok_exit
+
+; !byte ...
+; !8 ...
+; Assembles word values, little-endian.
+do_word:
+    ldz #2
+    lbra do_assemble_bytes
+assemble_dir_word:
+    +process_arg_list do_word
+    lbra statement_ok_exit
+
+; !32 ...
+; Assembles long word values, little-endian.
+do_lword:
+    ldz #4
+    lbra do_assemble_bytes
+assemble_dir_lword:
+    +process_arg_list do_lword
+    lbra statement_ok_exit
+
+
+; !warn ...
+; Prints "Line #: " followed by one or more arguments.
+; Value arguments print: "<dec> ($<hex>) "
+; String arguments print their contents.
+do_warn:
+    taz
+
+    lda pass
+    cmp #$ff
+    beq +
+    rts
++
+
+    cpz #arg_type_string
+    bne +
+    jsr print_bas_str
+    rts
+
++   ldq expr_result
+    jsr print_dec32
+    +kprimm_start
+    !pet " ($",0
+    +kprimm_end
+
+    ; Print expr_result as hex, adjusting for leading zeroes (32, 16, or 8 bit)
+    lda expr_result+3
+    ora expr_result+2
+    ora expr_result+1
+    beq ++
+    lda expr_result+3
+    ora expr_result+2
+    beq +
+    lda expr_result+3
+    jsr print_hex8
+    lda expr_result+2
+    jsr print_hex8
++   lda expr_result+1
+    jsr print_hex8
+++  lda expr_result
+    jsr print_hex8
+
+    +kprimm_start
+    !pet ") ",0
+    +kprimm_end
+    rts
+
+assemble_dir_warn:
+    ; Only print warnings on final pass.
+    ; (Acme prints on every pass. Will I regret this?)
+    lda pass
+    cmp #$ff
+    bne +
+    jsr print_warning_line_number
++
+    +process_arg_list do_warn
+
+    lda pass
+    cmp #$ff
+    bne +
+    lda #chr_cr
+    +kcall bsout
++
+    lda asm_flags
+    ora #F_ASM_WARN
+    sta asm_flags
+    lbra statement_ok_exit
+
+
+assemble_dir_to:
+assemble_dir_fill:
+assemble_dir_pet:
+assemble_dir_scr:
+assemble_dir_source:
+assemble_dir_binary:
+    lda #err_unimplemented
+    sta err_code
+    lbra statement_err_exit
+
+
+directive_jump_table:
+; Sorted by token ID
+!word assemble_dir_to
+!word assemble_dir_byte, assemble_dir_byte
+!word assemble_dir_word, assemble_dir_word
+!word assemble_dir_lword
+!word assemble_dir_fill
+!word assemble_dir_pet
+!word assemble_dir_scr
+!word assemble_dir_source
+!word assemble_dir_binary
+!word assemble_dir_warn
 
 assemble_directive:
     ; <pseudoop> arglist
     jsr expect_pseudoop
     lbcs statement_err_exit
     ; A=token ID
-    ; TODO: handle specific directive; let directive parse the arg list
-
-    lbra statement_err_exit
-    lbra statement_ok_exit
+    sec
+    sbc #mnemonic_count
+    asl
+    tax
+    jmp (directive_jump_table,x)
 
 
 ; ------------------------------------------------------------
@@ -4092,7 +4326,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13
 
 err_messages:
 err_syntax = 1
@@ -4119,7 +4353,8 @@ err_exponent_negative = 11
 e11: !pet "exponent cannot be negative",0
 err_fraction_not_supported = 12
 e12: !pet "fraction operator not supported",0
-
+err_invalid_arg = 13
+e13: !pet "argument not allowed",0
 
 warn_message_tbl:
 !word w01
@@ -4942,7 +5177,7 @@ scr_table:
 
 ; ---------------------------------------------------------
 
-!warn "EasyAsm remaining code space: ", max_end_of_program - *
+; !warn "EasyAsm remaining code space: ", max_end_of_program - *
 !if * >= max_end_of_program {
     !error "EasyAsm code is too large, * = ", *
 }
