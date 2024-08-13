@@ -2065,7 +2065,7 @@ add_forced16:
 
 
 ; ------------------------------------------------------------
-; Assembler
+; Parser primitives
 ; ------------------------------------------------------------
 
 ; Input: A=token; tokbuf, tok_pos
@@ -2234,6 +2234,10 @@ expect_literal:
 @end
     rts
 
+
+; ------------------------------------------------------------
+; Expressions
+; ------------------------------------------------------------
 
 ; Input: expr_result
 ;   C=1 if signed, C=0 unsigned
@@ -2926,6 +2930,10 @@ expect_expr:
     rts
 
 
+; ------------------------------------------------------------
+; PC assignment
+; ------------------------------------------------------------
+
 ; Input: tokbuf, tok_pos
 ; Output:
 ;   C=0 success, PC updated, tok_pos advanced
@@ -2971,6 +2979,10 @@ assemble_pc_assign:
     jsr set_pc
     lbra statement_ok_exit
 
+
+; ------------------------------------------------------------
+; Label assignment
+; ------------------------------------------------------------
 
 ; Input: line_addr, label_pos
 ; Output:
@@ -3207,6 +3219,10 @@ assemble_label:
     ldz #1  ; Return value
     lbra statement_ok_exit
 
+
+; ------------------------------------------------------------
+; Instructions
+; ------------------------------------------------------------
 
 ; Input: expr_result, expr_flags
 ; Output: C=1 if expr is > 256 or is forced to 16-bit with leading zero
@@ -3886,6 +3902,11 @@ assemble_instruction:
 ++ lbra statement_ok_exit
 
 
+; ------------------------------------------------------------
+; Directives
+; ------------------------------------------------------------
+
+
 assemble_directive:
     ; <pseudoop> arglist
     jsr expect_pseudoop
@@ -3895,6 +3916,11 @@ assemble_directive:
 
     lbra statement_err_exit
     lbra statement_ok_exit
+
+
+; ------------------------------------------------------------
+; Assembler
+; ------------------------------------------------------------
 
 
 statement_err_exit
@@ -4057,6 +4083,10 @@ assemble_source:
     jsr print_error
     rts
 
+
+; ------------------------------------------------------------
+; Data
+; ------------------------------------------------------------
 
 ; ---------------------------------------------------------
 ; Error message strings
@@ -4711,6 +4741,7 @@ addressing_modes:
 !word %1000000000000000  ; tza
 !word enc_tza
 
+; ------------------------------------------------------------
 ; Encoding lists
 ; Single-byte encodings for each supported addressing mode, msb to lsb in the bitfield
 ; Quad prefix $42 $42 and 32-bit Indirect prefix $ea are added in code.
@@ -4897,19 +4928,21 @@ scr_table:
 
 ; ---------------------------------------------------------
 ; Tests
+; ---------------------------------------------------------
+
 ; A test suite provides run_test_suite_cmd, run with: SYS $1E04,4
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
-!source "test_suite_4.asm"
-; !source "test_suite_5.asm"
+; !source "test_suite_4.asm"
+!source "test_suite_5.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
 
-; !warn "EasyAsm remaining code space: ", max_end_of_program - *
+!warn "EasyAsm remaining code space: ", max_end_of_program - *
 !if * >= max_end_of_program {
     !error "EasyAsm code is too large, * = ", *
 }
