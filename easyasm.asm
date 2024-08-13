@@ -188,6 +188,28 @@ chr_doublequote = 34
     +kprimm_end
 }
 
+!macro push32 .addr {
+    lda .addr
+    pha
+    lda .addr+1
+    pha
+    lda .addr+2
+    pha
+    lda .addr+3
+    pha
+}
+
+!macro pull32 .addr {
+    pla
+    sta .addr+3
+    pla
+    sta .addr+2
+    pla
+    sta .addr+1
+    pla
+    sta .addr
+}
+
 ; ------------------------------------------------------------
 ; Dispatch
 ; ------------------------------------------------------------
@@ -2449,28 +2471,6 @@ expect_inversion:
 @end
     rts
 
-!macro push32 .addr {
-    lda .addr
-    pha
-    lda .addr+1
-    pha
-    lda .addr+2
-    pha
-    lda .addr+3
-    pha
-}
-
-!macro pull32 .addr {
-    pla
-    sta .addr+3
-    pla
-    sta .addr+2
-    pla
-    sta .addr+1
-    pla
-    sta .addr
-}
-
 ; power     ::= inversion (^ inversion)*
 expect_power:
     jsr expect_inversion
@@ -2644,10 +2644,12 @@ expect_factor:
     jsr expect_keyword
     lbcs @ok
 
-+   sta expr_a
++   pha
     ldq expr_result
     stq multina
     jsr expect_negate
+    pla
+    sta expr_a
     lbcs @end  ; Operator but no term, fail
     ldq expr_result
     stq multinb
@@ -2690,13 +2692,13 @@ expect_term:
     jsr expect_token
     lbcs @ok
 
-+   sta expr_a
-    ldq expr_result
-    sta expr_b
++   pha
+    +push32 expr_result
     jsr expect_factor
+    +pull32 expr_b
+    pla
     lbcs @end  ; Operator but no term, fail
     ; A=tk_plus or tk_minus
-    lda expr_a
     cmp #tk_plus
     bne +
     ; expr_result = expr_b + expr_result
@@ -2733,10 +2735,11 @@ expect_shift:
     jsr expect_token
     lbcs @ok
 
-+   sta expr_a
-    ldq expr_result
-    stq expr_b
++   pha
+    +push32 expr_result
     jsr expect_term
+    +pull32 expr_b
+    pla
     lbcs @end  ; Operator but no term, fail
 
     ; expr_a = tk_asl, tk_asr, or tk_lsr
@@ -2858,10 +2861,11 @@ expect_expr:
     jsr expect_keyword
     bcs @ok
 
-+   sta expr_a
-    ldq expr_result
-    stq expr_b
++   pha
+    +push32 expr_result
     jsr expect_bytesel
+    +pull32 expr_b
+    pla
     lbcs @end  ; Operator but no term, fail
 
     ; expr_a = tk_ampersand, tk_pipe, or 0 for XOR
