@@ -1130,6 +1130,7 @@ accept_literal:
 ; Locate a substring of strbuf in a null-terminated list of null-terminated lowercase strings
 ; Input:
 ;   strbuf
+;   A=starting count position
 ;   X=strbuf start pos
 ;   code_ptr = first char of first item in match list
 ;   C: 0=no restrictions; 1=next cannot be ident char
@@ -1141,7 +1142,6 @@ find_start_pos = expr_a+1
 find_item_length = expr_a+2
 find_word_boundary = expr_a+3
 find_in_token_list:
-    lda #0
     sta find_item_count
     stx find_start_pos
     lda #0
@@ -1206,6 +1206,7 @@ tokenize_mnemonic:
     lda #>mnemonics
     sta code_ptr+1
     sec  ; Must not immediately precede an identifier character.
+    lda #1  ; Start counting mnemonics at 1
     jsr find_in_token_list
     bcc @end
     stx line_pos  ; new line_pos
@@ -1258,12 +1259,13 @@ tokenize_pseudoop:
     lda #>pseudoops
     sta code_ptr+1
     sec  ; Must not immediately precede an identifier character.
+    lda #0  ; list starting pos
     jsr find_in_token_list
     bcc @not_found
     stx line_pos  ; new line pos
     tya
     clc
-    adc #mnemonic_count  ; Y+mnemonic_count = pseudoop token ID
+    adc #tokid_after_mnemonics  ; Y+tokid_after_mnemonics = pseudoop token ID
     tax
     sec
     rts
@@ -1287,6 +1289,7 @@ tokenize_other:
     lda #>other_tokens
     sta code_ptr+1
     clc  ; Allow an identifier character immediately after.
+    lda #0  ; list starting pos
     jsr find_in_token_list
     bcc @end
     stx line_pos  ; new line pos
@@ -2189,7 +2192,7 @@ expect_opcode:
     ldx tok_pos
     lda tokbuf,x
     beq @fail
-    cmp #mnemonic_count
+    cmp #tokid_after_mnemonics
     bcs @fail
     inx
     inx
@@ -4331,7 +4334,7 @@ assemble_directive:
     lbcs statement_err_exit
     ; A=token ID
     sec
-    sbc #mnemonic_count
+    sbc #tokid_after_mnemonics
     asl
     tax
     jmp (directive_jump_table,x)
@@ -4551,180 +4554,181 @@ w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
-mnemonic_count = 145
+tokid_after_mnemonics = 146
 mnemonics:
-!pet "adc",0   ; $00
-!pet "adcq",0  ; $01
-mnemonic_adcq = $01
-!pet "and",0   ; $02
-!pet "andq",0  ; $03
-mnemonic_andq = $03
-!pet "asl",0   ; $04
-!pet "aslq",0  ; $05
-mnemonic_aslq = $05
-!pet "asr",0   ; $06
-!pet "asrq",0  ; $07
-mnemonic_asrq = $07
-!pet "asw",0   ; $08
-!pet "bbr0",0  ; $09
-mnemonic_bbr0 = $09
-!pet "bbr1",0  ; $0A
-!pet "bbr2",0  ; $0B
-!pet "bbr3",0  ; $0C
-!pet "bbr4",0  ; $0D
-!pet "bbr5",0  ; $0E
-!pet "bbr6",0  ; $0F
-!pet "bbr7",0  ; $10
-!pet "bbs0",0  ; $11
-!pet "bbs1",0  ; $12
-!pet "bbs2",0  ; $13
-!pet "bbs3",0  ; $14
-!pet "bbs4",0  ; $15
-!pet "bbs5",0  ; $16
-!pet "bbs6",0  ; $17
-!pet "bbs7",0  ; $18
-mnemonic_bbs7 = $18
-!pet "bcc",0   ; $19
-!pet "bcs",0   ; $1A
-!pet "beq",0   ; $1B
-!pet "bit",0   ; $1C
-mnemonic_bit = $1C
-!pet "bitq",0  ; $1D
-mnemonic_bitq = $1D
-!pet "bmi",0   ; $1E
-!pet "bne",0   ; $1F
-!pet "bpl",0   ; $20
-!pet "bra",0   ; $21
-!pet "brk",0   ; $22
-mnemonic_brk = $22
-!pet "bsr",0   ; $23
-!pet "bvc",0   ; $24
-!pet "bvs",0   ; $25
-mnemonic_bvs = $25
-!pet "clc",0   ; $26
-!pet "cld",0   ; $27
-!pet "cle",0   ; $28
-!pet "cli",0   ; $29
-!pet "clv",0   ; $2A
-!pet "cmp",0   ; $2B
-!pet "cmpq",0  ; $2C
-mnemonic_cmpq = $2c
-!pet "cpq",0   ; $2D
-mnemonic_cpq = $2d
-!pet "cpx",0   ; $2E
-!pet "cpy",0   ; $2F
-!pet "cpz",0   ; $30
-!pet "dec",0   ; $31
-!pet "deq",0   ; $32
-mnemonic_deq = $32
-!pet "dew",0   ; $33
-!pet "dex",0   ; $34
-!pet "dey",0   ; $35
-!pet "dez",0   ; $36
-!pet "eom",0   ; $37
-!pet "eor",0   ; $38
-!pet "eorq",0  ; $39
-mnemonic_eorq = $39
-!pet "inc",0   ; $3A
-!pet "inq",0   ; $3B
-mnemonic_inq = $3b
-!pet "inw",0   ; $3C
-!pet "inx",0   ; $3D
-!pet "iny",0   ; $3E
-!pet "inz",0   ; $3F
-!pet "jmp",0   ; $40
-!pet "jsr",0   ; $41
-!pet "lbcc",0   ; $42
-mnemonic_lbcc = $42
-!pet "lbcs",0   ; $43
-!pet "lbeq",0   ; $44
-!pet "lbmi",0   ; $45
-!pet "lbne",0   ; $46
-!pet "lbpl",0   ; $47
-!pet "lbra",0   ; $48
-!pet "lbvc",0   ; $49
-!pet "lbvs",0   ; $4A
-mnemonic_lbvs = $4A
-!pet "lda",0   ; $4B
-!pet "ldq",0   ; $4C
-mnemonic_ldq = $4c
-!pet "ldx",0   ; $4D
-!pet "ldy",0   ; $4E
-!pet "ldz",0   ; $4F
-mnemonic_ldz = $4F
-!pet "lsr",0   ; $50
-!pet "lsrq",0  ; $51
-mnemonic_lsrq = $51
-!pet "map",0   ; $52
-!pet "neg",0   ; $53
-!pet "ora",0   ; $54
-!pet "orq",0   ; $55
-mnemonic_orq = $55
-!pet "pha",0   ; $56
-!pet "php",0   ; $57
-!pet "phw",0   ; $58
-mnemonic_phw = $58
-!pet "phx",0   ; $59
-!pet "phy",0   ; $5A
-!pet "phz",0   ; $5B
-!pet "pla",0   ; $5C
-!pet "plp",0   ; $5D
-!pet "plx",0   ; $5E
-!pet "ply",0   ; $5F
-!pet "plz",0   ; $60
-!pet "rmb0",0  ; $61
-!pet "rmb1",0  ; $62
-!pet "rmb2",0  ; $63
-!pet "rmb3",0  ; $64
-!pet "rmb4",0  ; $65
-!pet "rmb5",0  ; $66
-!pet "rmb6",0  ; $67
-!pet "rmb7",0  ; $68
-!pet "rol",0   ; $69
-!pet "rolq",0  ; $6A
-mnemonic_rolq = $6a
-!pet "ror",0   ; $6B
-!pet "rorq",0  ; $6C
-mnemonic_rorq = $6c
-!pet "row",0   ; $6D
-!pet "rti",0   ; $6E
-!pet "rts",0   ; $6F
-!pet "sbc",0   ; $70
-!pet "sbcq",0  ; $71
-mnemonic_sbcq = $71
-!pet "sec",0   ; $72
-!pet "sed",0   ; $73
-!pet "see",0   ; $74
-!pet "sei",0   ; $75
-!pet "smb0",0  ; $76
-!pet "smb1",0  ; $77
-!pet "smb2",0  ; $78
-!pet "smb3",0  ; $79
-!pet "smb4",0  ; $7A
-!pet "smb5",0  ; $7B
-!pet "smb6",0  ; $7C
-!pet "smb7",0  ; $7D
-!pet "sta",0   ; $7E
-!pet "stq",0   ; $7F
-mnemonic_stq = $7f
-!pet "stx",0   ; $80
-!pet "sty",0   ; $81
-!pet "stz",0   ; $82
-!pet "tab",0   ; $83
-!pet "tax",0   ; $84
-!pet "tay",0   ; $85
-!pet "taz",0   ; $86
-!pet "tba",0   ; $87
-!pet "trb",0   ; $88
-!pet "tsb",0   ; $89
-!pet "tsx",0   ; $8A
-!pet "tsy",0   ; $8B
-!pet "txa",0   ; $8C
-!pet "txs",0   ; $8D
-!pet "tya",0   ; $8E
-!pet "tys",0   ; $8F
-!pet "tza",0   ; $90
+!pet "adc",0   ; $01
+!pet "adcq",0  ; $02
+mnemonic_adcq = $02
+!pet "and",0   ; $03
+!pet "andq",0  ; $04
+mnemonic_andq = $04
+!pet "asl",0   ; $05
+!pet "aslq",0  ; $06
+mnemonic_aslq = $06
+!pet "asr",0   ; $07
+!pet "asrq",0  ; $08
+mnemonic_asrq = $08
+!pet "asw",0   ; $09
+!pet "bbr0",0  ; $0A
+mnemonic_bbr0 = $0A
+!pet "bbr1",0  ; $0B
+!pet "bbr2",0  ; $0C
+!pet "bbr3",0  ; $0D
+!pet "bbr4",0  ; $0E
+!pet "bbr5",0  ; $0F
+!pet "bbr6",0  ; $10
+!pet "bbr7",0  ; $11
+!pet "bbs0",0  ; $12
+!pet "bbs1",0  ; $13
+!pet "bbs2",0  ; $14
+!pet "bbs3",0  ; $15
+!pet "bbs4",0  ; $16
+!pet "bbs5",0  ; $17
+!pet "bbs6",0  ; $18
+!pet "bbs7",0  ; $19
+mnemonic_bbs7 = $19
+!pet "bcc",0   ; $1A
+!pet "bcs",0   ; $1B
+!pet "beq",0   ; $1C
+!pet "bit",0   ; $1D
+mnemonic_bit = $1D
+!pet "bitq",0  ; $1E
+mnemonic_bitq = $1E
+!pet "bmi",0   ; $1F
+!pet "bne",0   ; $20
+!pet "bpl",0   ; $21
+!pet "bra",0   ; $22
+!pet "brk",0   ; $23
+mnemonic_brk = $23
+!pet "bsr",0   ; $24
+!pet "bvc",0   ; $25
+!pet "bvs",0   ; $26
+mnemonic_bvs = $26
+!pet "clc",0   ; $27
+!pet "cld",0   ; $28
+!pet "cle",0   ; $29
+!pet "cli",0   ; $2A
+!pet "clv",0   ; $2B
+!pet "cmp",0   ; $2C
+!pet "cmpq",0  ; $2D
+mnemonic_cmpq = $2D
+!pet "cpq",0   ; $2E
+mnemonic_cpq = $2E
+!pet "cpx",0   ; $2F
+!pet "cpy",0   ; $30
+!pet "cpz",0   ; $31
+!pet "dec",0   ; $32
+!pet "deq",0   ; $33
+mnemonic_deq = $33
+!pet "dew",0   ; $34
+!pet "dex",0   ; $35
+!pet "dey",0   ; $36
+!pet "dez",0   ; $37
+!pet "eom",0   ; $38
+!pet "eor",0   ; $39
+!pet "eorq",0  ; $3A
+mnemonic_eorq = $3A
+!pet "inc",0   ; $3B
+!pet "inq",0   ; $3C
+mnemonic_inq = $3C
+!pet "inw",0   ; $3D
+!pet "inx",0   ; $3E
+!pet "iny",0   ; $3F
+!pet "inz",0   ; $40
+!pet "jmp",0   ; $41
+!pet "jsr",0   ; $42
+!pet "lbcc",0  ; $43
+mnemonic_lbcc = $43
+!pet "lbcs",0  ; $44
+!pet "lbeq",0  ; $45
+!pet "lbmi",0  ; $46
+!pet "lbne",0  ; $47
+!pet "lbpl",0  ; $48
+!pet "lbra",0  ; $49
+!pet "lbvc",0  ; $4A
+!pet "lbvs",0  ; $4B
+mnemonic_lbvs = $4B
+!pet "lda",0   ; $4C
+!pet "ldq",0   ; $4D
+mnemonic_ldq = $4D
+!pet "ldx",0   ; $4E
+!pet "ldy",0   ; $4F
+!pet "ldz",0   ; $50
+mnemonic_ldz = $50
+!pet "lsr",0   ; $51
+!pet "lsrq",0  ; $52
+mnemonic_lsrq = $52
+!pet "map",0   ; $53
+!pet "neg",0   ; $54
+!pet "ora",0   ; $55
+!pet "orq",0   ; $56
+mnemonic_orq = $56
+!pet "pha",0   ; $57
+!pet "php",0   ; $58
+!pet "phw",0   ; $59
+mnemonic_phw = $59
+!pet "phx",0   ; $5A
+!pet "phy",0   ; $5B
+!pet "phz",0   ; $5C
+!pet "pla",0   ; $5D
+!pet "plp",0   ; $5E
+!pet "plx",0   ; $5F
+!pet "ply",0   ; $60
+!pet "plz",0   ; $61
+!pet "rmb0",0  ; $62
+!pet "rmb1",0  ; $63
+!pet "rmb2",0  ; $64
+!pet "rmb3",0  ; $65
+!pet "rmb4",0  ; $66
+!pet "rmb5",0  ; $67
+!pet "rmb6",0  ; $68
+!pet "rmb7",0  ; $69
+!pet "rol",0   ; $6A
+!pet "rolq",0  ; $6B
+mnemonic_rolq = $6B
+!pet "ror",0   ; $6C
+!pet "rorq",0  ; $6D
+mnemonic_rorq = $6D
+!pet "row",0   ; $6E
+!pet "rti",0   ; $6F
+!pet "rts",0   ; $70
+!pet "sbc",0   ; $71
+!pet "sbcq",0  ; $72
+mnemonic_sbcq = $72
+!pet "sec",0   ; $73
+!pet "sed",0   ; $74
+!pet "see",0   ; $75
+!pet "sei",0   ; $76
+!pet "smb0",0  ; $77
+!pet "smb1",0  ; $78
+!pet "smb2",0  ; $79
+!pet "smb3",0  ; $7A
+!pet "smb4",0  ; $7B
+!pet "smb5",0  ; $7C
+!pet "smb6",0  ; $7D
+!pet "smb7",0  ; $7E
+!pet "sta",0   ; $7F
+!pet "stq",0   ; $80
+mnemonic_stq = $80
+!pet "stx",0   ; $81
+!pet "sty",0   ; $82
+!pet "stz",0   ; $83
+!pet "tab",0   ; $84
+!pet "tax",0   ; $85
+!pet "tay",0   ; $86
+!pet "taz",0   ; $87
+!pet "tba",0   ; $88
+!pet "trb",0   ; $89
+!pet "tsb",0   ; $8A
+!pet "tsx",0   ; $8B
+!pet "tsy",0   ; $8C
+!pet "txa",0   ; $8D
+!pet "txs",0   ; $8E
+!pet "tya",0   ; $8F
+!pet "tys",0   ; $90
+!pet "tza",0   ; $91
 !byte 0
+tokid_after_mnemonics = $92
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
@@ -4737,29 +4741,29 @@ q_mnemonics:
 ; Pseudo-op table
 ; These tokens are preceded with a "!" character.
 pseudoops:
-po_to = mnemonic_count + 0
+po_to = tokid_after_mnemonics + 0
 !pet "to",0
-po_byte = mnemonic_count + 1
+po_byte = tokid_after_mnemonics + 1
 !pet "byte",0
-po_8 = mnemonic_count + 2
+po_8 = tokid_after_mnemonics + 2
 !pet "8",0
-po_word = mnemonic_count + 3
+po_word = tokid_after_mnemonics + 3
 !pet "word",0
-po_16 = mnemonic_count + 4
+po_16 = tokid_after_mnemonics + 4
 !pet "16",0
-po_32 = mnemonic_count + 5
+po_32 = tokid_after_mnemonics + 5
 !pet "32",0
-po_fill = mnemonic_count + 6
+po_fill = tokid_after_mnemonics + 6
 !pet "fill",0
-po_pet = mnemonic_count + 7
+po_pet = tokid_after_mnemonics + 7
 !pet "pet",0
-po_scr = mnemonic_count + 8
+po_scr = tokid_after_mnemonics + 8
 !pet "scr",0
-po_source = mnemonic_count + 9
+po_source = tokid_after_mnemonics + 9
 !pet "source",0
-po_binary = mnemonic_count + 10
+po_binary = tokid_after_mnemonics + 10
 !pet "binary",0
-po_warn = mnemonic_count + 11
+po_warn = tokid_after_mnemonics + 11
 !pet "warn",0
 !byte 0
 last_po = po_warn + 1
@@ -4892,6 +4896,7 @@ MODE_BASE_PAGE_IND_Z = %0000000000000100
 MODE_32BIT_IND       = %0000000000000010
 MODE_STACK_REL       = %0000000000000001
 addressing_modes:
+!word 0,0 ; dummy entry "0" (tok IDs start at 1)
 !word %0101101110011110  ; adc
 !word enc_adc
 !word %0001001000000110  ; adcq

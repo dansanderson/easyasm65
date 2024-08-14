@@ -260,6 +260,7 @@ test_accept_literal_28: !pet 0
 } else {
     clc
 }
+    lda #1  ; mnemonics start at 1
     jsr find_in_token_list
 !if .ec {
     bcs +
@@ -488,7 +489,7 @@ test_tokenize_5e:
     !32 $deadbeef
     !byte 0, $ff
 test_tokenize_6: !pet "tZa",0
-test_tokenize_6e: !byte 144, 4, 0, 0, $ff
+test_tokenize_6e: !byte 145, 4, 0, 0, $ff
 test_tokenize_7: !pet "!wOrD",0
 test_tokenize_7e: !byte po_word, 4, 0, $ff
 test_tokenize_8: !pet "xOr",0
@@ -503,7 +504,7 @@ test_tokenize_12: !pet "label: lda (45, sp), y  ; comment",0
 test_tokenize_12e:
     !byte tk_label_or_reg, 4, 5
     !byte tk_colon, 9
-    !byte 75, 11, 0
+    !byte 76, 11, 0
     !byte tk_lparen, 15
     !byte tk_number_literal, 16
     !32 45
@@ -538,7 +539,7 @@ test_tokenize_15e:
     !byte 0, $ff
 test_tokenize_16: !pet "lda $000a",0
 test_tokenize_16e:
-    !byte 75, 4, 0
+    !byte 76, 4, 0
     !byte tk_number_literal_leading_zero, 8
     !32 $000a
     !byte 0, $ff
@@ -670,28 +671,28 @@ run_test_suite_cmd:
 
     +print_chr chr_cr
     +print_strlit_line "find-in-token-list"
-    +test_find_in_token_list $01, test_find_in_token_list_1, 0, 1, 1, 0, 3
-    +test_find_in_token_list $02, test_find_in_token_list_2, 0, 1, 1, 1, 4
-    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 144, 3
-    +test_find_in_token_list $04, test_find_in_token_list_4, 0, 1, 0, 0, 0
-    +test_find_in_token_list $05, test_find_in_token_list_5, 0, 0, 1, 0, 3
-    +test_find_in_token_list $06, test_find_in_token_list_5, 0, 1, 0, 0, 0
-    +test_find_in_token_list $07, test_find_in_token_list_6, 0, 0, 1, 0, 3
-    +test_find_in_token_list $08, test_find_in_token_list_6, 0, 1, 1, 0, 3
-    +test_find_in_token_list $09, test_find_in_token_list_7, 1, 1, 1, 0, 4
+    +test_find_in_token_list $01, test_find_in_token_list_1, 0, 1, 1, 1, 3
+    +test_find_in_token_list $02, test_find_in_token_list_2, 0, 1, 1, 2, 4
+    +test_find_in_token_list $03, test_find_in_token_list_3, 0, 1, 1, 145, 3
+    +test_find_in_token_list $04, test_find_in_token_list_4, 0, 1, 0, 1, 0
+    +test_find_in_token_list $05, test_find_in_token_list_5, 0, 0, 1, 1, 3
+    +test_find_in_token_list $06, test_find_in_token_list_5, 0, 1, 0, 1, 0
+    +test_find_in_token_list $07, test_find_in_token_list_6, 0, 0, 1, 1, 3
+    +test_find_in_token_list $08, test_find_in_token_list_6, 0, 1, 1, 1, 3
+    +test_find_in_token_list $09, test_find_in_token_list_7, 1, 1, 1, 1, 4
 
     +print_chr chr_cr
     +print_strlit_line "tokenize-mnemonic"
     ; .tnum, .str, .pos, .ec, .etoken, .epos, .eflags
-    +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 0, 3, 0
-    +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 1, 4, 0
-    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 144, 3, 0
+    +test_tokenize_mnemonic $01, test_find_in_token_list_1, 0, 1, 1, 3, 0
+    +test_tokenize_mnemonic $02, test_find_in_token_list_2, 0, 1, 2, 4, 0
+    +test_tokenize_mnemonic $03, test_find_in_token_list_3, 0, 1, 145, 3, 0
     +test_tokenize_mnemonic $04, test_find_in_token_list_4, 0, 0, 0, 0, 0
     +test_tokenize_mnemonic $05, test_find_in_token_list_5, 0, 0, 0, 0, 0
-    +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 0, 3, 0
-    +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 0, 4, 0
-    +test_tokenize_mnemonic $08, test_find_in_token_list_8, 0, 1, 0, 5, F_ASM_FORCE8
-    +test_tokenize_mnemonic $09, test_find_in_token_list_9, 0, 1, 0, 5, F_ASM_FORCE16
+    +test_tokenize_mnemonic $06, test_find_in_token_list_6, 0, 1, 1, 3, 0
+    +test_tokenize_mnemonic $07, test_find_in_token_list_7, 1, 1, 1, 4, 0
+    +test_tokenize_mnemonic $08, test_find_in_token_list_8, 0, 1, 1, 5, F_ASM_FORCE8
+    +test_tokenize_mnemonic $09, test_find_in_token_list_9, 0, 1, 1, 5, F_ASM_FORCE16
 
     +print_chr chr_cr
     +print_strlit_line "tokenize-pseudoop"
