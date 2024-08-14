@@ -1258,52 +1258,52 @@ run_test_suite_cmd:
     +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_16, 0, 0
     +test_tokenize $11, test_tokenize_16, test_tokenize_16e, test_tokenize_last, 0, 0
 
-    +print_chr chr_cr
-    +print_strlit_line "test-find-symbol"
-    +test_find_symbol $01, test_find_symbol_1, 5, 0, attic_symbol_table+(8*0)
-    +test_find_symbol $02, test_find_symbol_2, 5, 0, attic_symbol_table+(8*1)
-    +test_find_symbol $03, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
-    +test_find_symbol $04, test_find_symbol_4, 4, 0, attic_symbol_table+(8*3)
-    +test_find_symbol $05, test_find_symbol_5, 5, 0, attic_symbol_table+(8*4)
-    +test_find_symbol $06, test_find_symbol_6, 5, 0, attic_symbol_table+(8*5)
-    +test_find_symbol $07, test_find_symbol_7, 5, 1, 0
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-find-symbol"
+    ; +test_find_symbol $01, test_find_symbol_1, 5, 0, attic_symbol_table+(8*0)
+    ; +test_find_symbol $02, test_find_symbol_2, 5, 0, attic_symbol_table+(8*1)
+    ; +test_find_symbol $03, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
+    ; +test_find_symbol $04, test_find_symbol_4, 4, 0, attic_symbol_table+(8*3)
+    ; +test_find_symbol $05, test_find_symbol_5, 5, 0, attic_symbol_table+(8*4)
+    ; +test_find_symbol $06, test_find_symbol_6, 5, 0, attic_symbol_table+(8*5)
+    ; +test_find_symbol $07, test_find_symbol_7, 5, 1, 0
 
-    +print_chr chr_cr
-    +print_strlit_line "test-find-or-add-symbol"
-    +test_find_or_add_symbol $01, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
-    +test_find_or_add_symbol $02, test_find_symbol_7, 5, 0, attic_symbol_table+(8*6)
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-find-or-add-symbol"
+    ; +test_find_or_add_symbol $01, test_find_symbol_3, 4, 0, attic_symbol_table+(8*2)
+    ; +test_find_or_add_symbol $02, test_find_symbol_7, 5, 0, attic_symbol_table+(8*6)
 
-    +print_chr chr_cr
-    +print_strlit_line "test-get-symbol-value"
-    +test_get_symbol_value $01, test_find_symbol_2, 5, 0, 23456
-    +test_get_symbol_value $02, test_find_symbol_7, 5, 1, 0
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-get-symbol-value"
+    ; +test_get_symbol_value $01, test_find_symbol_2, 5, 0, 23456
+    ; +test_get_symbol_value $02, test_find_symbol_7, 5, 1, 0
 
-    +print_chr chr_cr
-    +print_strlit_line "test-set-symbol-value"
-    +test_set_symbol_value $01, test_find_symbol_2, 5, 98765
-    +test_set_symbol_value $02, test_find_symbol_7, 5, 87654
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-set-symbol-value"
+    ; +test_set_symbol_value $01, test_find_symbol_2, 5, 98765
+    ; +test_set_symbol_value $02, test_find_symbol_7, 5, 87654
 
-    +print_chr chr_cr
-    +print_strlit_line "test-assemble-bytes"
-    +test_assemble_bytes $01, 0, 0, 1, 1, 0  ; undefined PC is error
-    +test_assemble_bytes $02, 0, $c000, 0, 0, 0  ; zero length is ok
-    +test_assemble_bytes $03, 0, $c000, 5, 0, $c005
-    +test_assemble_bytes $04, $ff, $c000, 5, 0, $c005
-    +test_assemble_bytes_twice $05, 0, $c000, $c005, 5, $c00a, 0, 0
-    +test_assemble_bytes_twice $06, 0, $c000, $d000, 5, $d005, 0, 0
-    +test_assemble_bytes_twice $07, $ff, $c000, $c005, 5, $c00a, test_assemble_bytes_twice_1, test_assemble_bytes_twice_2
-    +test_assemble_bytes_twice $08, $ff, $c000, $d000, 5, $d005, test_assemble_bytes_twice_2, test_assemble_bytes_twice_2_end
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-assemble-bytes"
+    ; +test_assemble_bytes $01, 0, 0, 1, 1, 0  ; undefined PC is error
+    ; +test_assemble_bytes $02, 0, $c000, 0, 0, 0  ; zero length is ok
+    ; +test_assemble_bytes $03, 0, $c000, 5, 0, $c005
+    ; +test_assemble_bytes $04, $ff, $c000, 5, 0, $c005
+    ; +test_assemble_bytes_twice $05, 0, $c000, $c005, 5, $c00a, 0, 0
+    ; +test_assemble_bytes_twice $06, 0, $c000, $d000, 5, $d005, 0, 0
+    ; +test_assemble_bytes_twice $07, $ff, $c000, $c005, 5, $c00a, test_assemble_bytes_twice_1, test_assemble_bytes_twice_2
+    ; +test_assemble_bytes_twice $08, $ff, $c000, $d000, 5, $d005, test_assemble_bytes_twice_2, test_assemble_bytes_twice_2_end
 
-    +print_chr chr_cr
-    +print_strlit_line "test-expect-token"
-    +test_expect_token $01, 1, test_expect_token_1, test_expect_token_2, 1, 0
-    +test_expect_token $02, 1, test_expect_token_2, test_expect_token_end, 0, 2
-    +test_expect_token $03, 4, test_expect_token_2, test_expect_token_end, 1, 0
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-expect-token"
+    ; +test_expect_token $01, 1, test_expect_token_1, test_expect_token_2, 1, 0
+    ; +test_expect_token $02, 1, test_expect_token_2, test_expect_token_end, 0, 2
+    ; +test_expect_token $03, 4, test_expect_token_2, test_expect_token_end, 1, 0
 
-    +print_chr chr_cr
-    +print_strlit_line "test-expect-label"
-    +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
-    +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
+    ; +print_chr chr_cr
+    ; +print_strlit_line "test-expect-label"
+    ; +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
+    ; +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

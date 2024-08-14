@@ -2231,17 +2231,35 @@ expect_pseudoop:
 ;   C=0 ok, tok_pos advanced; expr_result, expr_flags
 ;   C=1 not found, tok_pos preserved
 expect_literal:
+    lda #0
+    sta expr_flags
+
+    ldx tok_pos
+    lda tokbuf+1,x
+    taz
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    lda [bas_ptr],z
+    cmp #chr_singlequote
+    bne +
+    lda expr_flags
+    ora #F_EXPR_BRACKET_CHARLIT
+    sta expr_flags
++
+
     ldx tok_pos
     lda tokbuf,x
     cmp #tk_number_literal_leading_zero
     bne +
-    lda #F_EXPR_FORCE16
+    lda expr_flags
+    ora #F_EXPR_FORCE16
+    sta expr_flags
     bra ++
 +   cmp #tk_number_literal
     bne @fail
-    lda #0
-++  sta expr_flags
-    lda tokbuf+2,x
+++  lda tokbuf+2,x
     sta expr_result
     lda tokbuf+3,x
     sta expr_result+1
@@ -2453,20 +2471,6 @@ expect_primary:
 
     ; <literal>
 +++ ; Test whether this is a char literal, to flag it for !scr.
-    ldx tok_pos
-    lda tokbuf+1,x
-    taz
-    lda line_addr
-    sta bas_ptr
-    lda line_addr+1
-    sta bas_ptr+1
-    lda [bas_ptr],z
-    cmp #chr_singlequote
-    bne +
-    lda expr_flags
-    ora #F_EXPR_BRACKET_CHARLIT
-    sta expr_flags
-+
     jsr expect_literal
     bcs @fail
     bra @succeed
@@ -5337,11 +5341,11 @@ scr_table:
 ; A test suite provides run_test_suite_cmd, run with: SYS $1E04,4
 
 !source "test_common.asm"
-; !source "test_suite_1.asm"
+!source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-!source "test_suite_5.asm"
+; !source "test_suite_5.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
