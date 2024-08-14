@@ -2696,6 +2696,7 @@ expect_factor:
     jsr expect_keyword
     lbcs @ok
 
+    ; A = tk_multiply, tk_remainder, or 0 = DIV
 +   pha
     ldq expr_result
     stq multina
@@ -2707,7 +2708,6 @@ expect_factor:
     stq multinb
     lda expr_a
 
-    ; A=tk_multiply, tk_remainder, or 0 for DIV
     cmp #tk_multiply
     bne +
     ldq product
@@ -2717,10 +2717,19 @@ expect_factor:
     bmi -
     cmp #tk_remainder
     bne +
-    ldq divrema  ; fractional part
-    stq multina
-    ldq product+4  ; frac * divisor
+
+    ; x % y = x - (x DIV y) * y
+    ; We don't use divrema fractional part of the division because frac * y
+    ; will have rounding issues.
+    ldq multina   ; Rip x right out of the math register!
+    stq expr_result
+    ldq divquot   ; x DIV y
+    stq multina   ; product = (x DIV y) * y
+    ldq expr_result
+    sec
+    sbcq product  ; Q = x - (x DIV y) * y
     bra ++
+
 +   ldq divquot
 ++  stq expr_result
     lbra @factor_loop
@@ -5342,10 +5351,10 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-; !source "test_suite_2.asm"
+!source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-!source "test_suite_5.asm"
+; !source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
 ; !source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
