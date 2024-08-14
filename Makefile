@@ -12,7 +12,9 @@ TEST_SUITES = \
 	test_suite_2.asm \
 	test_suite_3.asm \
 	test_suite_4.asm \
-	test_suite_5.asm
+	test_suite_5.asm \
+	test_suite_6.asm \
+	test_suite_7.asm
 
 %.prg: %.asm
 	${ACME} -f cbm -o $@ -l $@.lst -r $@.rpt $<
