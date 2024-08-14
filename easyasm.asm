@@ -4555,12 +4555,16 @@ mnemonic_count = 145
 mnemonics:
 !pet "adc",0   ; $00
 !pet "adcq",0  ; $01
+mnemonic_adcq = $01
 !pet "and",0   ; $02
 !pet "andq",0  ; $03
+mnemonic_andq = $03
 !pet "asl",0   ; $04
 !pet "aslq",0  ; $05
+mnemonic_aslq = $05
 !pet "asr",0   ; $06
 !pet "asrq",0  ; $07
+mnemonic_asrq = $07
 !pet "asw",0   ; $08
 !pet "bbr0",0  ; $09
 mnemonic_bbr0 = $09
@@ -4604,12 +4608,15 @@ mnemonic_bvs = $25
 !pet "clv",0   ; $2A
 !pet "cmp",0   ; $2B
 !pet "cmpq",0  ; $2C
+mnemonic_cmpq = $2c
 !pet "cpq",0   ; $2D
+mnemonic_cpq = $2d
 !pet "cpx",0   ; $2E
 !pet "cpy",0   ; $2F
 !pet "cpz",0   ; $30
 !pet "dec",0   ; $31
 !pet "deq",0   ; $32
+mnemonic_deq = $32
 !pet "dew",0   ; $33
 !pet "dex",0   ; $34
 !pet "dey",0   ; $35
@@ -4617,8 +4624,10 @@ mnemonic_bvs = $25
 !pet "eom",0   ; $37
 !pet "eor",0   ; $38
 !pet "eorq",0  ; $39
+mnemonic_eorq = $39
 !pet "inc",0   ; $3A
 !pet "inq",0   ; $3B
+mnemonic_inq = $3b
 !pet "inw",0   ; $3C
 !pet "inx",0   ; $3D
 !pet "iny",0   ; $3E
@@ -4638,16 +4647,19 @@ mnemonic_lbcc = $42
 mnemonic_lbvs = $4A
 !pet "lda",0   ; $4B
 !pet "ldq",0   ; $4C
+mnemonic_ldq = $4c
 !pet "ldx",0   ; $4D
 !pet "ldy",0   ; $4E
 !pet "ldz",0   ; $4F
 mnemonic_ldz = $4F
 !pet "lsr",0   ; $50
 !pet "lsrq",0  ; $51
+mnemonic_lsrq = $51
 !pet "map",0   ; $52
 !pet "neg",0   ; $53
 !pet "ora",0   ; $54
 !pet "orq",0   ; $55
+mnemonic_orq = $55
 !pet "pha",0   ; $56
 !pet "php",0   ; $57
 !pet "phw",0   ; $58
@@ -4670,13 +4682,16 @@ mnemonic_phw = $58
 !pet "rmb7",0  ; $68
 !pet "rol",0   ; $69
 !pet "rolq",0  ; $6A
+mnemonic_rolq = $6a
 !pet "ror",0   ; $6B
 !pet "rorq",0  ; $6C
+mnemonic_rorq = $6c
 !pet "row",0   ; $6D
 !pet "rti",0   ; $6E
 !pet "rts",0   ; $6F
 !pet "sbc",0   ; $70
 !pet "sbcq",0  ; $71
+mnemonic_sbcq = $71
 !pet "sec",0   ; $72
 !pet "sed",0   ; $73
 !pet "see",0   ; $74
@@ -4691,6 +4706,7 @@ mnemonic_phw = $58
 !pet "smb7",0  ; $7D
 !pet "sta",0   ; $7E
 !pet "stq",0   ; $7F
+mnemonic_stq = $7f
 !pet "stx",0   ; $80
 !pet "sty",0   ; $81
 !pet "stz",0   ; $82
@@ -4712,8 +4728,10 @@ mnemonic_phw = $58
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
-!byte $01, $03, $05, $07, $1D, $2C, $2D, $32, $39, $3B, $4C, $52, $46, $6A
-!byte $6C, $71, $7F
+!byte mnemonic_adcq, mnemonic_andq, mnemonic_aslq, mnemonic_asrq, mnemonic_bitq
+!byte mnemonic_cmpq, mnemonic_cpq,  mnemonic_deq,  mnemonic_eorq, mnemonic_inq
+!byte mnemonic_ldq,  mnemonic_lsrq, mnemonic_orq,  mnemonic_rolq, mnemonic_rorq
+!byte mnemonic_sbcq, mnemonic_stq
 !byte 0
 
 ; Pseudo-op table
