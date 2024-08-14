@@ -1,0 +1,22 @@
+; !cpu m65
+; !to "everyopcode.prg",cbm
+*=$1600
+
+!warn "!$aabbccdd = ", !$aabbccdd
+!warn "2^10 = ", 2^10
+!warn "-45 = ", -45
+!warn "6*7 = ", 6*7
+!warn "19 div 7 = ", 19 div 7
+!warn "19 % 7 = ", 19 % 7
+!warn "244 + 12 = ", 244 + 12
+!warn "256 - 12 = ", 256 - 12
+!warn "1<<5 = ", 1<<5
+!warn "-12>>3 = ", -12>>3
+!warn "-12>>>3 = ", -12>>>3
+!warn "<$aabbccdd = ", <$aabbccdd
+!warn ">$aabbccdd = ", >$aabbccdd
+!warn "^$aabbccdd = ", ^$aabbccdd
+!warn "^^$aabbccdd = ", ^^$aabbccdd
+!warn "$cc & $9d = ", $cc & $9d
+!warn "$cc xor $ff = ", $cc xor $ff
+!warn "$cc | $9d = ", $cc | $9d

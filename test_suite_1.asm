@@ -542,6 +542,24 @@ test_tokenize_16e:
     !byte tk_number_literal_leading_zero, 8
     !32 $000a
     !byte 0, $ff
+test_tokenize_17: !pet "!warn $cc | $9d",0
+test_tokenize_17e:
+    !byte po_warn, 4
+    !byte tk_number_literal, 10
+    !32 $cc
+    !byte tk_pipe2, 14
+    !byte tk_number_literal, 16
+    !32 $9d
+    !byte 0, $ff
+test_tokenize_18: !pet "!warn $cc ", 220, " $9d",0  ; other pipe
+test_tokenize_18e:
+    !byte po_warn, 4
+    !byte tk_number_literal, 10
+    !32 $cc
+    !byte tk_pipe, 14
+    !byte tk_number_literal, 16
+    !32 $9d
+    !byte 0, $ff
 test_tokenize_last:
 
 test_tokenize_error_1: !pet "$$$",0
@@ -717,7 +735,9 @@ run_test_suite_cmd:
     +test_tokenize $0E, test_tokenize_13, test_tokenize_13e, test_tokenize_14, 0, 0
     +test_tokenize $0F, test_tokenize_14, test_tokenize_14e, test_tokenize_15, 0, 0
     +test_tokenize $10, test_tokenize_15, test_tokenize_15e, test_tokenize_16, 0, 0
-    +test_tokenize $11, test_tokenize_16, test_tokenize_16e, test_tokenize_last, 0, 0
+    +test_tokenize $11, test_tokenize_16, test_tokenize_16e, test_tokenize_17, 0, 0
+    +test_tokenize $12, test_tokenize_17, test_tokenize_17e, test_tokenize_18, 0, 0
+    +test_tokenize $13, test_tokenize_18, test_tokenize_18e, test_tokenize_last, 0, 0
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

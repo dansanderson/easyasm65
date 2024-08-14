@@ -5,7 +5,10 @@ DISK_FILES = easyasm.prg \
 	easyasm-e.prg \
 	typeme.txt \
 	autoboot.bas \
-	testdata/everyopcode.txt
+	testdata/border.txt \
+	testdata/bordercycle.txt \
+	testdata/everyopcode.txt \
+	testdata/everyoperator.txt
 
 TEST_SUITES = \
 	test_suite_1.asm \

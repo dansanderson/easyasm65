@@ -9,12 +9,9 @@
         {"file_path": "easyasm.prg", "name": "easyasm"},
         {"file_path": "easyasm-e.prg", "name": "easyasm-e"},
         {"name": "--------------"},
-        {"file_path": "testdata/blanklines.txt", "name": "t-blanklines", "text_style": "plain"},
-        {"file_path": "testdata/commentsonly.txt", "name": "t-commentsonly", "text_style": "plain"},
-        {"file_path": "testdata/emptyfile.txt", "name": "t-emptyfile", "text_style": "plain"},
-        {"file_path": "testdata/border.txt", "name": "t-border", "text_style": "plain"},
-        {"file_path": "testdata/bordercycle.txt", "name": "t-bordercycle", "text_style": "plain"},
-        {"file_path": "testdata/largesource.txt", "name": "t-largesource", "text_style": "plain"},
-        {"file_path": "testdata/everyopcode.txt", "name": "everyopcode", "text_style": "plain"}
+        {"file_path": "testdata/border.txt", "name": "border", "text_style": "plain"},
+        {"file_path": "testdata/bordercycle.txt", "name": "bordercycle", "text_style": "plain"},
+        {"file_path": "testdata/everyopcode.txt", "name": "everyopcode", "text_style": "plain"},
+        {"file_path": "testdata/everyoperator.txt", "name": "everyoperator", "text_style": "plain"}
     ]
 }

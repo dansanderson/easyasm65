@@ -2916,6 +2916,9 @@ expect_expr:
     lda #tk_pipe
     jsr expect_token
     bcc +
+    lda #tk_pipe2
+    jsr expect_token
+    bcc +
     lda #0
     ldx #<kw_xor
     ldy #>kw_xor
@@ -2951,7 +2954,7 @@ expect_expr:
 
 +   cpz #tk_pipe
     beq +
-    cpx #tk_pipe2
+    cpz #tk_pipe2
     bne ++
     ; expr_b | expr_result
 +   lda expr_b
@@ -5354,9 +5357,9 @@ scr_table:
 ; A test suite provides run_test_suite_cmd, run with: SYS $1E04,4
 
 !source "test_common.asm"
-; !source "test_suite_1.asm"
+!source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
-!source "test_suite_3.asm"
+; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
 ; !source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
