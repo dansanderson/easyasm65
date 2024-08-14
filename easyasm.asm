@@ -4746,10 +4746,10 @@ last_po = po_warn + 1
 other_tokens:
 tk_complement = last_po + 0
 !pet "!",0
-tk_power = last_po + 1
-!pet "^",0
-tk_megabyte = last_po + 2
+tk_megabyte = last_po + 1
 !pet "^^",0
+tk_power = last_po + 2
+!pet "^",0
 tk_minus = last_po + 3
 !pet "-",0
 tk_multiply = last_po + 4
@@ -5351,10 +5351,10 @@ scr_table:
 
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
-!source "test_suite_2.asm"
+; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-; !source "test_suite_5.asm"
+!source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
 ; !source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
