@@ -3455,7 +3455,7 @@ expect_addressing_expr:
     lda expr_flags
     and #F_EXPR_BRACKET_MASK
     cmp #F_EXPR_BRACKET_NONE
-    bne +++
+    lbne +++
     ; - Non-brackets:
     jsr is_expr_16bit
     bcs ++
@@ -3484,6 +3484,21 @@ expect_addressing_expr:
     ; <expr-8> "," <expr> (for bit branches)
     ; expr_b = ZP, expr_result = Rel
     jsr make_operand_rel
+    ; Account for bit-branch instructions having a two-wide operand:
+    ;   expr_result = expr_result - 1
+    lda expr_result
+    sec
+    sbc #1
+    sta expr_result
+    lda expr_result+1
+    sbc #0
+    sta expr_result+1
+    lda expr_result+2
+    sbc #0
+    sta expr_result+2
+    lda expr_result+3
+    sbc #0
+    sta expr_result+3
     +expect_addresing_expr_rts MODE_BASE_PAGE
 +   ; Syntax error: <expr-8> "," non-x/y
     lbra @addr_error
@@ -3686,7 +3701,7 @@ assemble_instruction:
     sta instr_mnemonic_id
     ; Reset instruction flags
     lda asm_flags
-    and #!(F_ASM_FORCE_MASK | F_ASM_AREL_MASK)
+    and #!(F_ASM_FORCE_MASK | F_ASM_AREL_MASK | F_ASM_BITBRANCH)
     sta asm_flags
     ; Propagate flags from tokenizer: 8-bit if +1, 16-bit if +2
     tya
@@ -5380,13 +5395,13 @@ scr_table:
 ; A test suite provides run_test_suite_cmd, run with: SYS $1E04,4
 
 !source "test_common.asm"
-!source "test_suite_1.asm"
+; !source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
 ; !source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
-; !source "test_suite_7.asm"
+!source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
