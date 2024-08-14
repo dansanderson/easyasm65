@@ -74,6 +74,8 @@ F_EXPR_BRACKET_NONE   = %00000000
 F_EXPR_BRACKET_PAREN  = %00000001
 ; - Entire expression surrounded by square brackets
 F_EXPR_BRACKET_SQUARE = %00000010
+; - Entire expression is a char literal
+F_EXPR_BRACKET_CHARLIT = %00000011
 ; - Hex/dec number literal with leading zero, or symbol assigned such a literal with =
 F_EXPR_FORCE16   = %00000100
 ; - Expr contains undefined symbol
@@ -150,6 +152,7 @@ chr_uparrow = 94
 chr_backarrow = 95
 chr_megaat = 164
 chr_doublequote = 34
+chr_singlequote = 39
 
 
 ; Call a given KERNAL routine
@@ -968,7 +971,7 @@ accept_literal:
     sta expr_result+3
 
     lda [bas_ptr],z
-    cmp #'\''
+    cmp #chr_singlequote
     bne ++
     ; Char literal
     inz
@@ -976,7 +979,7 @@ accept_literal:
     tax
     inz
     lda [bas_ptr],z
-    cmp #'\''
+    cmp #chr_singlequote
     lbne @not_found
     stx expr_result
     inz
@@ -2449,7 +2452,22 @@ expect_primary:
     bra @fail
 
     ; <literal>
-+++ jsr expect_literal
++++ ; Test whether this is a char literal, to flag it for !scr.
+    ldx tok_pos
+    lda tokbuf+1,x
+    taz
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    lda [bas_ptr],z
+    cmp #chr_singlequote
+    bne +
+    lda expr_flags
+    ora #F_EXPR_BRACKET_CHARLIT
+    sta expr_flags
++
+    jsr expect_literal
     bcs @fail
     bra @succeed
 
@@ -4117,6 +4135,7 @@ assemble_dir_warn:
     lbra statement_ok_exit
 
 
+; !fill <count> [, <val>]
 assemble_dir_fill:
     jsr expect_expr
     bcc +
@@ -4179,9 +4198,95 @@ assemble_dir_fill:
     lbra statement_ok_exit
 
 
-assemble_dir_to:
+do_petscr:
+    ; expr_a=0 for pet, expr_a=$ff for scr
+    stz expr_a
+
+    cmp #arg_type_string
+    beq @do_petscr_string
+
+    ; Emit expression.
+    lda expr_result+3
+    ora expr_result+2
+    ora expr_result+1
+    beq +
+    lda #err_value_out_of_range
+    sta err_code
+    rts
++   ; Convert char literal expressions.
+    bit expr_a
+    bpl +
+    lda expr_flags
+    and #F_EXPR_BRACKET_CHARLIT
+    cmp #F_EXPR_BRACKET_CHARLIT
+    bne +
+    ldx expr_result
+    lda scr_table,x
+    bra ++
++   lda expr_result
+++  ldx #0
+    sta strbuf,x
+    inx
+    lda #0
+    sta strbuf,x
+    ldx #1
+    jsr assemble_bytes
+    rts
+
+@do_petscr_string
+    ; X=line pos Y=len Z=scr
+    cpy #0
+    bne +
+    rts
++
+    txa
+    clc
+    adc line_addr
+    sta bas_ptr
+    lda #0
+    adc line_addr+1
+    sta bas_ptr+1
+    ; bas_ptr = beginning of string
+    ldx #0
+
+    ; Y = length > 0
+    ; X = strbuf pos
+    ; Z = string pos
+    ; expr_a = $ff if scr
+    ldx #0
+    ldz #0
+-   lda [bas_ptr],z
+    bit expr_a
+    bpl +
+    phx
+    tax
+    lda scr_table,x
+    plx
++   sta strbuf,x
+    inx
+    inz
+    dey
+    bne -
+    ; X = length
+    jsr assemble_bytes
+    rts
+
+
+do_pet:
+    ldz #0
+    lbra do_petscr
 assemble_dir_pet:
+    +process_arg_list do_pet
+    lbra statement_ok_exit
+do_scr:
+    ldz #$ff
+    lbra do_petscr
 assemble_dir_scr:
+    +process_arg_list do_scr
+    lbra statement_ok_exit
+
+
+assemble_dir_to:
 assemble_dir_source:
 assemble_dir_binary:
     lda #err_unimplemented
