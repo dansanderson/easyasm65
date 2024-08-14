@@ -5356,9 +5356,9 @@ scr_table:
 !source "test_common.asm"
 ; !source "test_suite_1.asm"
 ; !source "test_suite_2.asm"
-; !source "test_suite_3.asm"
+!source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-!source "test_suite_5.asm"
+; !source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
 ; !source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
