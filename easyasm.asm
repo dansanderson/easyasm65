@@ -2794,7 +2794,8 @@ expect_shift:
     pla
     lbcs @end  ; Operator but no term, fail
 
-    ; expr_a = tk_asl, tk_asr, or tk_lsr
+    taz
+    ; Z = tk_asl, tk_asr, or tk_lsr
     ; Perform operation on expr_b, expr_result times. Store result in expr_result.
 @count_loop
     lda expr_result+3
@@ -2804,8 +2805,7 @@ expect_shift:
     lbeq @finish_count_loop
 
     clc
-    lda expr_a
-    cmp #tk_asl
+    cpz #tk_asl
     bne +
     ; asl
     asl expr_b
@@ -2813,7 +2813,7 @@ expect_shift:
     rol expr_b+2
     rol expr_b+3
     bra +++
-+   cmp #tk_asr
++   cpz #tk_asr
     bne +
     ; asr
     asr expr_b+3
@@ -2920,10 +2920,10 @@ expect_expr:
     pla
     lbcs @end  ; Operator but no term, fail
 
-    ; expr_a = tk_ampersand, tk_pipe, or 0 for XOR
+    taz
+    ; Z = tk_ampersand, tk_pipe, or 0 for XOR
     ; expr_result = expr_b <op> expr_result
-    lda expr_a
-    cmp #tk_ampersand
+    cpz #tk_ampersand
     bne +
     ; expr_b & expr_result
     lda expr_b
@@ -2940,7 +2940,7 @@ expect_expr:
     sta expr_result+3
     lbra @bitop_loop
 
-+   cmp #tk_pipe
++   cpz #tk_pipe
     bne +
     ; expr_b | expr_result
     lda expr_b
@@ -5345,9 +5345,9 @@ scr_table:
 ; !source "test_suite_2.asm"
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
-; !source "test_suite_5.asm"
+!source "test_suite_5.asm"
 ; !source "test_suite_6.asm"
-!source "test_suite_7.asm"
+; !source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
