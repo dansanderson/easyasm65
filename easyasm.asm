@@ -2950,9 +2950,11 @@ expect_expr:
     lbra @bitop_loop
 
 +   cpz #tk_pipe
-    bne +
+    beq +
+    cpx #tk_pipe2
+    bne ++
     ; expr_b | expr_result
-    lda expr_b
++   lda expr_b
     ora expr_result
     sta expr_result
     lda expr_b+1
@@ -2966,7 +2968,7 @@ expect_expr:
     sta expr_result+3
     lbra @bitop_loop
 
-+   ; expr_b XOR expr_result
+++  ; expr_b XOR expr_result
     lda expr_b
     eor expr_result
     sta expr_result
@@ -4771,7 +4773,7 @@ tk_gt = last_po + 11
 tk_ampersand = last_po + 12
 !pet "&",0
 tk_pipe = last_po + 13
-!pet "|",0
+!pet 220,0  ; Typed by Mega + period or Mega + minus
 tk_comma = last_po + 14
 !pet ",",0
 tk_hash = last_po + 15
@@ -4790,8 +4792,10 @@ tk_rbracket = last_po + 21
 !pet "]",0
 tk_fraction = last_po + 22  ; (Not supported, but special error message)
 !pet "/",0
+tk_pipe2 = last_po + 23
+!pet "|",0  ; The other PETSCII "pipe" character, just in case.
 !byte 0
-last_tk = tk_fraction + 1
+last_tk = tk_pipe2 + 1
 
 ; Other token IDs
 tk_number_literal = last_tk + 0
