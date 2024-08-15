@@ -537,6 +537,67 @@ test_expect_label_2: !byte tk_label_or_reg, 99, 5, 0, $ff
 test_expect_label_end:
 
 
+; Input: X=segment count
+; Output: Initialized segment table with X segments,
+;   with starting addresses of $ii00 and legnth of 3,
+;   created in descending order i=X to 1,
+;   e.g. $3300, $2200, $1100. If X=0, no segments
+;   are created.
+set_up_segtable_for_test:
+    phx
+    jsr init_segment_table
+
+    ; Three bytes in strbuf
+    lda #1
+    ldx #0
+    sta strbuf,x
+    inc
+    inx
+    sta strbuf,x
+    inc
+    inx
+    sta strbuf,x
+
+    ply
+-   cpy #0
+    beq +
+    sty program_counter+1
+    lda #0
+    sta program_counter
+    phy
+    ldx #3
+    jsr assemble_bytes
+    ply
+    dey
+    bra -
+
++   rts
+
+!macro create_test_segment_tables .count {
+    ldx #.count
+    jsr set_up_segtable_for_test
+}
+
+!macro test_segment_traversal .tnum, .count {
+    +test_start .tnum
+
+    +create_test_segment_tables .count
+    lda #0
+    sta bas_ptr  ; repurposes bas_ptr.0 as a segment counter
+    jsr start_segment_traversal
+-   jsr is_end_segment_traversal
+    bcs +
+    inc bas_ptr
+    jsr next_segment_traversal
+    bra -
++   lda bas_ptr
+    cmp #.count
+    +assert_eq test_msg_wrong_result
+
+    +test_end
+}
+
+
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
@@ -586,6 +647,12 @@ run_test_suite_cmd:
     +print_strlit_line "test-expect-label"
     +test_expect_label $01, test_expect_label_1, test_expect_label_2, 1, 0, 0, 0
     +test_expect_label $02, test_expect_label_2, test_expect_label_end, 0, 3, 99, 5
+
+    +print_chr chr_cr
+    +print_strlit_line "test-segment-traversal"
+    +test_segment_traversal $01, 0
+    +test_segment_traversal $02, 1
+    +test_segment_traversal $03, 5
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

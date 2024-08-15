@@ -1989,6 +1989,181 @@ assemble_bytes:
 +   rts
 
 
+; Input: completed assembly
+; Output: current_segment = ptr to first segment, or to null segment if table emtpy
+start_segment_traversal:
+    lda #<attic_segments
+    sta current_segment
+    lda #>attic_segments
+    sta current_segment+1
+    lda #^attic_segments
+    sta current_segment+2
+    lda #<(attic_segments >>> 24)
+    sta current_segment+3
+    rts
+
+; Input: completed assembly; current_segment points to an entry or to null terminator
+; Output: If current_segment not null, advanced.
+next_segment_traversal:
+    jsr is_end_segment_traversal
+    bcc +
+    rts
++   ldz #2
+    clc
+    lda [current_segment],z
+    adc #4
+    tay
+    inz
+    lda [current_segment],z
+    adc #0
+    tax
+    tya
+    ldy #0
+    ldz #0  ; Q = length + 4
+    clc
+    adcq current_segment
+    stq current_segment  ; current_segment += length + 4
+    rts
+
+; Input: completed assembly; current_segment points to an entry or to null terminator
+; Output:
+;   C=1: current_segment points to end of list.
+is_end_segment_traversal:
+    ldz #0
+    lda [current_segment],z
+    inz
+    ora [current_segment],z
+    inz
+    ora [current_segment],z
+    inz
+    ora [current_segment],z
+    bne +
+    sec
+    rts
++   clc
+    rts
+
+; Tests whether a segment overlaps a region
+; Input: A/X=start addr, Y/Z=length; completed assembly
+;   C=1 skip an entry if expr_result = current_segment (entry addresses)
+; Output:
+;   C=0 no overlap
+;   C=1 yes overlap; current_segment=ptr to first overlapping segment entry
+; Uses expr_a, expr_b, and asm_flags.
+does_a_segment_overlap:
+    stq expr_a
+    lda #0
+    bcc +
+    lda #$ff
++   sta asm_flags
+
+    ldq expr_a
+    clc
+    adc expr_a+2
+    sta expr_a+2
+    lda expr_a+1
+    adc expr_a+3
+    sta expr_a+3  ; expr_a.0-1: start, expr_a.2-3: end+1
+
+    jsr start_segment_traversal
+
+@search_loop:
+    jsr is_end_segment_traversal
+    bcc +
+    clc
+    rts
++
+    ; If requested, skip the segment if address in expr_result.
+    ; (For do_any_segments_overlap.)
+    bit asm_flags
+    bpl +
+    ldq expr_b
+    cpq current_segment
+    lbeq @next
++
+
+    ldz #0
+    lda [current_segment],z
+    sta expr_b
+    inz
+    lda [current_segment],z
+    sta expr_b+1
+    inz
+    lda [current_segment],z
+    sta expr_b+2
+    inz
+    lda [current_segment],z
+    sta expr_b+3
+    lda expr_b
+    clc
+    adc expr_b+2
+    sta expr_b+2
+    lda expr_b+1
+    adc expr_b+3
+    sta expr_b+3  ; expr_b.0-1: cur start, expr_b.2-3: cur end+1
+
+    ; A start <= B start < A end+1
+    lda expr_b+1
+    cmp expr_a+1
+    beq +
+    lda expr_b
+    cmp expr_a
++   bcc ++
+    lda expr_b+1
+    cmp expr_a+3
+    beq +
+    lda expr_b
+    cmp expr_a+2
++   bcs ++
+    sec
+    rts
+
+++  ; A start <= B end < A end+1
+    lda expr_b+3
+    cmp expr_a+1
+    beq +
+    lda expr_b+2
+    cmp expr_a
++   bcc @next
+    lda expr_b+3
+    cmp expr_a+3
+    beq +
+    lda expr_b+2
+    cmp expr_a+2
++   bcs @next
+    sec
+    rts
+
+@next
+    ; No overlap. Next segment...
+    jsr next_segment_traversal
+    lbra @search_loop
+
+
+; Output:
+;   C=0 no overlap between any two segments
+;   C=1 yes overlap;
+;      current_segment and expr_result are pointers to overlapping entries
+; Uses expr_result.
+do_any_segments_overlap:
+    jsr start_segment_traversal
+@outer_loop
+    jsr is_end_segment_traversal
+    bcc +
+    clc
+    rts
++   ldq current_segment
+    stq expr_result
+    sec
+    jsr does_a_segment_overlap
+    bcc +
+    rts
++   ldq expr_result
+    stq current_segment
+    jsr next_segment_traversal
+    lbra @outer_loop
+
+
 ; ------------------------------------------------------------
 ; Forced 16's list
 ; ------------------------------------------------------------
@@ -5400,8 +5575,8 @@ scr_table:
 ; !source "test_suite_3.asm"
 ; !source "test_suite_4.asm"
 ; !source "test_suite_5.asm"
-; !source "test_suite_6.asm"
-!source "test_suite_7.asm"
+!source "test_suite_6.asm"
+; !source "test_suite_7.asm"
 ; run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
