@@ -66,6 +66,10 @@ symtbl_next_name *=*+3
 last_pc_defined_global_label *=*+2
 
 current_file    *=*+4
+F_FILE_MASK     = %00000011
+F_FILE_CBM      = %00000000
+F_FILE_PLAIN    = %00000001
+F_FILE_RUNNABLE = %00000010
 
 expr_a          *=*+4
 expr_b          *=*+4
@@ -260,6 +264,7 @@ init:
     jsr init_symbol_table
     jsr init_segment_table
     jsr init_forced16
+    jsr init_file_table
 
     rts
 
@@ -527,7 +532,13 @@ assemble_to_memory_cmd:
     jsr start_segment_traversal
     ldz #0
     ldq [current_segment]
+    inz
+    ora [current_segment],z
+    beq +  ; Edge case: no assembled instructions
+    ldz #0
+    ldq [current_segment]
     jsr execute_user_program  ; A/X = PC
++
 
     jsr restore_source
     +kprimm_start
@@ -2094,9 +2105,8 @@ assemble_bytes:
 +
     ; If this isn't the final pass, simply increment the PC and don't do
     ; anything else.
-    lda pass
-    cmp #$ff
-    lbne @increment_pc
+    bit pass
+    lbpl @increment_pc
 
     ; If next_segment_byte_addr+len is beyond maximum segment table address, out
     ; of memory error.
@@ -2927,9 +2937,8 @@ expect_primary:
 
 ++  lda #F_EXPR_UNDEFINED
     sta expr_flags
-    lda pass           ; undefined label is an error in final pass
-    cmp #$ff
-    bne @succeed
+    bit pass           ; undefined label is an error in final pass
+    bpl @succeed
     lda #err_undefined
     sta err_code
     ldx tok_pos
@@ -3674,8 +3683,8 @@ assemble_label:
     lda [attic_ptr],z
     and #F_SYMTBL_DEFINED
     beq +
-    lda pass
-    bne +
+    bit pass
+    bmi +
     lda label_pos
     sta line_pos
     lda #err_already_defined
@@ -4434,8 +4443,8 @@ assemble_instruction:
     ldx instr_buf_pos
     jsr assemble_bytes
     bcc ++
-    lda pass
-    bne +
+    bit pass
+    bmi +
     lda err_code
     cmp #err_pc_undef
     bne +
@@ -4575,9 +4584,8 @@ assemble_dir_lword:
 do_warn:
     taz
 
-    lda pass
-    cmp #$ff
-    beq +
+    bit pass
+    bmi +
     rts
 +
 
@@ -4617,16 +4625,14 @@ do_warn:
 assemble_dir_warn:
     ; Only print warnings on final pass.
     ; (Acme prints on every pass. Will I regret this?)
-    lda pass
-    cmp #$ff
-    bne +
+    bit pass
+    bpl +
     jsr print_warning_line_number
 +
     +process_arg_list do_warn
 
-    lda pass
-    cmp #$ff
-    bne +
+    bit pass
+    bpl +
     lda #chr_cr
     +kcall bsout
 +
@@ -4787,7 +4793,87 @@ assemble_dir_scr:
     lbra statement_ok_exit
 
 
+; !to "<fname>", <mode>
 assemble_dir_to:
+    jsr expect_string_arg
+    bcc +
+    lda #err_missing_arg
+    sta err_code
+    lbra statement_err_exit
++   stx expr_a    ; expr_a = string pos
+    sty expr_a+1  ; expr_a+1 = length
+    lda #tk_comma
+    jsr expect_token
+    bcc +
+    lda #err_syntax
+    sta err_code
+    lbra statement_err_exit
++   ldx #<kw_cbm
+    ldy #>kw_cbm
+    jsr expect_keyword
+    bcs +
+    lda #F_FILE_CBM
+    bra @to_parsed
++   ldx #<kw_plain
+    ldy #>kw_plain
+    jsr expect_keyword
+    bcs +
+    lda #F_FILE_PLAIN
+    bra @to_parsed
++   ldx #<kw_runnable
+    ldy #>kw_runnable
+    jsr expect_keyword
+    bcs +
+    lda #F_FILE_RUNNABLE
+    bra @to_parsed
++   ; Wrong or missing keyword
+    lda #err_syntax
+    sta err_code
+    lbra statement_err_exit
+
+@to_parsed
+    bit pass
+    bmi +
+    lbra statement_ok_exit
++
+    ; expr_a = filename pos, expr_a+1 = filename length, A = mode flag
+    ldz #5
+    sta [current_file],z
+    dez
+    lda expr_a+1
+    sta [current_file],z
+    ; filename address = line_addr + filename pos
+    lda #0
+    sta expr_a+1
+    sta expr_a+2
+    sta expr_a+3
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    ldq bas_ptr    ; Adopt whatever bas_ptr's high bytes are
+    clc
+    adcq expr_a  ; Q = filename address
+    stq [current_file]  ; Z ignored
+
+    ldz #6
+    lda current_segment
+    sta [current_file],z
+    inz
+    lda current_segment+1
+    sta [current_file],z
+    inz
+    lda current_segment+2
+    sta [current_file],z
+    inz
+    lda current_segment+3
+    sta [current_file],z
+
+    jsr next_file_entry
+    jsr make_current_file_zero
+    lbra statement_ok_exit
+
+
 assemble_dir_source:
 assemble_dir_binary:
     lda #err_unimplemented
@@ -4976,9 +5062,8 @@ assemble_source:
     jsr do_assemble_pass
     lda err_code
     bne @done
-    lda pass
-    cmp #$ff
-    beq @done
+    bit pass
+    bmi @done
     lda #$ff
     bra -
 @done
@@ -5316,7 +5401,7 @@ kw_sp: !pet "sp",0
 kw_div: !pet "div",0
 kw_xor: !pet "xor",0
 kw_cbm: !pet "cbm",0
-kw_raw: !pet "raw",0
+kw_plain: !pet "plain",0
 kw_runnable: !pet "runnable",0
 
 
