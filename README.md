@@ -54,7 +54,7 @@ EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. Type `EDI
 
 ## Quick reference
 
-* `RUN "EASYASM"` : install EasyAsm; erases program memory
+* `BOOT` : install EasyAsm; erases program memory
 
 * Press **Help** to launch the EasyAsm interactive menu
 
@@ -65,10 +65,11 @@ EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. Type `EDI
 
 ## Using EasyAsm
 
-To activate EasyAsm, load and run the `EASYASM` program:
+To activate EasyAsm, `BOOT` the `EASYASM.D81` disk:
 
 ```basic
-RUN "EASYASM"
+MOUNT "EASYASM.D81"
+BOOT
 ```
 
 EasyAsm installs itself in the MEGA65's upper memory, clears program memory, configures the **Help** key, and returns to the `READY.` prompt.
