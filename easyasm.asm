@@ -27,7 +27,7 @@ execute_user_program = $1e08
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 59
+* = $100 - 63
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -64,6 +64,8 @@ instr_supported_modes *=*+2
 
 symtbl_next_name *=*+3
 last_pc_defined_global_label *=*+2
+
+current_file    *=*+4
 
 expr_a          *=*+4
 expr_b          *=*+4
@@ -106,17 +108,10 @@ attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
 attic_segments_end  = attic_segments + $b000
 attic_forced16s     = attic_segments + $b000       ; 2.6700-2.7D00 (5.5 KB)
 attic_forced16s_end = attic_forced16s + $1600
+attic_files         = attic_forced16s + $1600      ; 2.7D00-2.8200 (1280 bytes)
+attic_files_end     = attic_files + $0500
 
-; Symbol table constraints
-;
 ; - Symbol table entries are 8 bytes: (name_ptr_24, flags_8, value_32)
-; - 1023 symbols maximum (8KB of entries + list terminator)
-; - Average name length of 23 for all 1023 symbols (24KB of names)
-;
-; For comparison, the BASIC 65 source file has 3301 symbols with an average
-; name length of 15. The source file is 521,778 bytes long, which is >11x the
-; maximum size of an EasyAsm source file. So 32KB of symbol data for EasyAsm
-; is probably overkill.
 SYMTBL_ENTRY_SIZE = 8
 SYMTBL_MAX_ENTRIES = (attic_symbol_names-attic_symbol_table) / SYMTBL_ENTRY_SIZE
 ; - Symbol is defined in the current pass; value is valid
@@ -548,17 +543,35 @@ assemble_to_memory_cmd:
 
 assemble_to_disk_cmd:
     +kprimm_start
-    !pet "# assembling to disk not yet implemented",13,13,0
-    +kprimm_end
-    rts
-
-    +kprimm_start
     !pet "# assembling to disk...",13,13,0
     +kprimm_end
 
+    ; Assemble, abort on assembly error.
     jsr stash_source
     jsr assemble_source
-    ; TODO: the rest of the owl
+    lda err_code
+    beq +
+    jsr print_error
+    +kprimm_start
+    !pet 13,"# assembly encountered an error",13,0
+    +kprimm_end
+    rts
+
+    ; Error if segments overlap.
++   jsr do_overlap_error
+    bcc +
+    rts
+
+    ; If warnings emitted, pause before continuing.
++   jsr do_warning_prompt
+    bcc +
+    rts
+
++   ; TODO: the rest of the owl
+    +kprimm_start
+    !pet "# assembling to disk not yet implemented",13,13,0
+    +kprimm_end
+    rts
 
     +kprimm_start
     !pet 13,"# assemble to disk complete",13,0
@@ -1705,6 +1718,14 @@ tokenize:
 ; ------------------------------------------------------------
 ; Symbol table
 ; ------------------------------------------------------------
+; Record, 8 bytes: (name_ptr_24, flags_8, value_32)
+; - 1023 symbols maximum (8KB of entries + list terminator)
+; - Average name length of 23 for all 1023 symbols (24KB of names)
+;
+; For comparison, the BASIC 65 source file has 3301 symbols with an average
+; name length of 15. The source file is 521,778 bytes long, which is >11x the
+; maximum size of an EasyAsm source file. So 32KB of symbol data for EasyAsm
+; is probably overkill.
 
 init_symbol_table:
     ; Set first symbol table entry to null terminator
@@ -1714,8 +1735,8 @@ init_symbol_table:
     ldz #$08
     stq attic_ptr
     dez
--   lda #0
-    sta [attic_ptr],z
+    lda #0
+-   sta [attic_ptr],z
     dez
     bpl -
 
@@ -1970,6 +1991,8 @@ set_symbol_value:
 ; ------------------------------------------------------------
 ; Segment table
 ; ------------------------------------------------------------
+; Record: (pc16, size16, data...)
+; Null terminated (4-byte header).
 
 ; Initializes the segment table.
 init_segment_table:
@@ -2361,6 +2384,7 @@ do_any_segments_overlap:
 ; ------------------------------------------------------------
 ; Forced 16's list
 ; ------------------------------------------------------------
+; Record, 2 bytes: (pc16)
 ; This is a null-terminated list of 16-bit program counter values
 ; whose addresses are forced to 16-bit widths by the first pass.
 ; Specifically, an undefined operand expression forces 16 bits
@@ -2463,6 +2487,78 @@ add_forced16:
     inz
     sta [attic_ptr],z
 +   rts
+
+
+; ------------------------------------------------------------
+; File table
+; ------------------------------------------------------------
+; Record, 10 bytes: (fnameaddr32, fnamelen8, flags8, segaddr32)
+; List is null terminated
+
+first_file_entry:
+    lda #<attic_files
+    ldx #>attic_files
+    ldy #^attic_files
+    ldz #<(attic_files >>> 24)
+    stq current_file
+    rts
+
+; Outputs: Z=1 if current_file entry is null
+file_entry_is_null:
+    ldz #$0A-1
+    lda [current_file],z
+-   dez
+    ora [current_file],z
+    cpz #0
+    bne -
+    cmp #0
+    rts
+
+make_current_file_zero:
+    ldz #$0A-1
+    lda #0
+-   sta [current_file],z
+    dez
+    bpl -
+    clc
+    rts
+
+init_file_table:
+    jsr first_file_entry
+    jsr make_current_file_zero
+    rts
+
+; Outputs:
+;   C=0 ok, C=1 out of memory
+;   current_file is advanced
+; Does nothing if current_file is pointing at a null entry.
+next_file_entry:
+    jsr file_entry_is_null
+    bne +
+    clc
+    rts
++
+    lda #0
+    tax
+    tay
+    taz
+    lda #$0A
+    clc
+    adcq current_file
+    stq expr_a  ; expr_a = current_file + record length
+    lda #<attic_files_end
+    ldx #>attic_files_end
+    ldy #^attic_files_end
+    ldz #$08
+    cpq expr_a
+    bcs +
+    ; Out of memory
+    sec
+    rts
++
+    ldq expr_a
+    stq current_file
+    rts
 
 
 ; ------------------------------------------------------------
@@ -5762,15 +5858,30 @@ scr_table:
 
 ; A test suite provides run_test_suite_cmd, run with: SYS $1E04,4
 
-!source "test_common.asm"
-; !source "test_suite_1.asm"
-; !source "test_suite_2.asm"
-; !source "test_suite_3.asm"
-; !source "test_suite_4.asm"
-; !source "test_suite_5.asm"
-!source "test_suite_6.asm"
-; !source "test_suite_7.asm"
-; run_test_suite_cmd: rts
+!if TEST_SUITE > 0 {
+    !warn "Adding test suite ", TEST_SUITE
+    !source "test_common.asm"
+    !if TEST_SUITE = 1 {
+        !source "test_suite_1.asm"
+    } else if TEST_SUITE = 2 {
+        !source "test_suite_2.asm"
+    } else if TEST_SUITE = 3 {
+        !source "test_suite_3.asm"
+    } else if TEST_SUITE = 4 {
+        !source "test_suite_4.asm"
+    } else if TEST_SUITE = 5 {
+        !source "test_suite_5.asm"
+    } else if TEST_SUITE = 6 {
+        !source "test_suite_6.asm"
+    } else if TEST_SUITE = 7 {
+        !source "test_suite_7.asm"
+    } else {
+        !error "Invalid TEST_SUITE; check Makefile"
+    }
+} else {
+    !warn "No TEST_SUITE requested"
+    run_test_suite_cmd: rts
+}
 
 ; ---------------------------------------------------------
 

@@ -603,6 +603,8 @@ A set of instructions and data assembled to a contiguous region of memory is kno
 
 When program code assigns a new value to the program counter and this is followed by an instruction or data directive, EasyAsm starts a new segment at that address. The assembler keeps track of all the contiguous segments formed by assembled instructions and data.
 
+In EasyAsm, it is an error if two segment overlap, ala Acme's "strict segments" mode. When assembling to memory, it is an error if a segment overlaps EasyAsm's variable memory region, $1E00-$1EFF.
+
 ### "Pseudo-PC"
 
 EasyAsm currently does not support Acme's "pseudo-PC" feature, which allows for a section of code to be assembled as if the PC were a particular value, but the segment is stored in the PRG file consecutively with the surrounding code. (It would be the program's responsibility to copy the code to the correct location in order to run it.)
