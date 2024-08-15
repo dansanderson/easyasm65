@@ -22,6 +22,7 @@
 
 kernal_base_page = $00
 easyasm_base_page = $1e
+execute_user_program = $1e08
 
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
@@ -135,13 +136,18 @@ bsout = $ffd2
 primm = $ff7d
 
 ; MEGA65 registers
-dmaimm = $d707
+dmaimm   = $d707
+dmamb    = $d704
+dmaba    = $d702
+dmahi    = $d701
+dmalo_e  = $d705
 mathbusy = $d70f
 divrema  = $d768
 divquot  = $d76c
 multina  = $d770
 multinb  = $d774
 product  = $d778
+asciikey = $d610
 
 ; Character constants
 chr_cr = 13
@@ -272,6 +278,7 @@ dispatch:
     txa
     tay  ; Y = argument
     pla
+    ; Continue to invoke_menu_option...
 
 ; A = menu option or 0 for menu, Y = argument (reserved)
 invoke_menu_option:
@@ -298,7 +305,6 @@ do_banner:
     +kprimm_end
     rts
 
-asciikey = $d610
 do_menu:
     lda #147
     +kcall bsout
@@ -317,8 +323,7 @@ do_menu:
     +kprimm_end
     +kprimm_start
     !pet " run/stop: close menu",13,13
-    !pet " your choice? ",15,166,143,13
-    !pet 145,29,29,29,29,29,29,29,29,29,29,29,29,29,29,0
+    !pet " your choice? ",15,166,143,157,0
     +kprimm_end
 
 -   lda asciikey
@@ -351,14 +356,183 @@ do_menu:
     rts
 
 
+; ------------------------------------------------------------
+; Assemble to Memory command
+; ------------------------------------------------------------
+
+; Input: expr_a = ptr to segment entry
+do_overlap_error_segment:
+    +kprimm_start
+    !pet "  $",0
+    +kprimm_end
+    ldz #0
+    ldq [expr_a]
+    pha
+    txa
+    jsr print_hex8
+    pla
+    jsr print_hex8
+    phz
+    phy
+    +kprimm_start
+    !pet ", ",0
+    +kprimm_end
+    lda #0
+    tay
+    taz
+    pla
+    plx
+    jsr print_dec32
+    +kprimm_start
+    !pet " bytes",13,0
+    +kprimm_end
+    rts
+
+do_overlap_error:
+    jsr do_any_segments_overlap
+    bcs +
+    rts
++   +kprimm_start
+    !pet "cannot assemble to memory when segments overlap:",13,0
+    +kprimm_end
+    ldq current_segment
+    stq expr_a
+    jsr do_overlap_error_segment
+    ldq expr_result
+    stq expr_a
+    jsr do_overlap_error_segment
+    sec
+    rts
+
+do_warning_prompt:
+    lda asm_flags
+    and #F_ASM_WARN
+    bne +
+    clc
+    rts
++   +kprimm_start
+    !pet "press a key to run, or run/stop: ",15,166,143,157,0
+    +kprimm_end
+-   sta asciikey
+    lda asciikey
+    bne -
+-   lda asciikey
+    beq -
+    sta asciikey
+    cmp #3  ; Stop key
+    bne +
+    +kprimm_start
+    !pet "stop",13,13,0
+    +kprimm_end
+    lda #0
+    sta $0091  ; Suppress Break Error (naughty!)
+    sec
+    rts
++   +kprimm_start
+    !pet "ok",13,13,0
+    +kprimm_end
+    clc
+    rts
+
+install_segments_to_memory:
+    jsr start_segment_traversal
+@loop
+    jsr is_end_segment_traversal
+    bcc +
+    rts
++   ldz #0
+    ldq [current_segment]
+    sta install_segments_to_memory_dma_to
+    stx install_segments_to_memory_dma_to+1
+    sty install_segments_to_memory_dma_length
+    stz install_segments_to_memory_dma_length+1
+    lda #0
+    sta expr_a+1
+    sta expr_a+2
+    sta expr_a+3
+    lda #4
+    sta expr_a
+    ldq current_segment
+    adcq expr_a
+    sta install_segments_to_memory_dma_from
+    stx install_segments_to_memory_dma_from+1
+    tya
+    and #$0f
+    sta install_segments_to_memory_dma_from+2
+
+    lda #0
+    sta dmamb
+    lda #$05
+    sta dmaba
+    lda #>install_segments_to_memory_dma
+    sta dmahi
+    lda #<install_segments_to_memory_dma
+    sta dmalo_e
+
+    jsr next_segment_traversal
+    bra @loop
+
+install_segments_to_memory_dma:
+!byte $80, <(attic_segments >>> 20)
+!byte $81, $00
+!byte $0b
+!byte $00
+!byte $00  ; copy
+install_segments_to_memory_dma_length:
+!byte $00, $00
+install_segments_to_memory_dma_from:
+!byte $00, $00, $00
+install_segments_to_memory_dma_to:
+!byte $00, $00, $00
+!byte $00, $00, $00
+
 assemble_to_memory_cmd:
     +kprimm_start
     !pet "# assembling...",13,13,0
     +kprimm_end
 
+    ; Assemble, abort on assembly error.
     jsr stash_source
     jsr assemble_source
-    ; TODO: the rest of the owl
+    lda err_code
+    beq +
+    jsr print_error
+    +kprimm_start
+    !pet 13,"# assembly encountered an error",13,0
+    +kprimm_end
+    rts
+
+    ; Error if segments overlap.
++   jsr do_overlap_error
+    bcc +
+    rts
+
+    ; Error if a segment overlaps EasyAsm memory.
++   lda #$00
+    ldx #$1e
+    ldy #$00
+    ldz #$01
+    clc
+    jsr does_a_segment_overlap
+    bcc +
+    +kprimm_start
+    !pet "segment overlaps easyasm $1e00-ff, cannot assemble to memory",13,0
+    +kprimm_end
+    ldq current_segment
+    stq expr_a
+    jsr do_overlap_error_segment
+    rts
+
+    ; If warnings emitted, pause before continuing.
++   jsr do_warning_prompt
+    bcc +
+    rts
+
++   jsr install_segments_to_memory
+    jsr start_segment_traversal
+    ldz #0
+    ldq [current_segment]
+    jsr execute_user_program  ; A/X = PC
 
     jsr restore_source
     +kprimm_start
@@ -368,7 +542,16 @@ assemble_to_memory_cmd:
     rts
 
 
+; ------------------------------------------------------------
+; Assemble to Disk command
+; ------------------------------------------------------------
+
 assemble_to_disk_cmd:
+    +kprimm_start
+    !pet "# assembling to disk not yet implemented",13,13,0
+    +kprimm_end
+    rts
+
     +kprimm_start
     !pet "# assembling to disk...",13,13,0
     +kprimm_end
@@ -383,23 +566,18 @@ assemble_to_disk_cmd:
     rts
 
 
-restore_source_cmd:
-    ; Safety check: probably never stashed source before
-    ldz #0
-    lda #<attic_source_stash
-    sta attic_ptr
-    lda #>attic_source_stash
-    sta attic_ptr+1
-    lda [attic_ptr],z
-    bne +++
+; ------------------------------------------------------------
+; Restore Source command
+; ------------------------------------------------------------
 
+restore_source_cmd:
     jsr restore_source
 
     +kprimm_start
     !pet 13,"# source restored",13,0
     +kprimm_end
 
-+++ rts
+    rts
 
 
 stash_source:
@@ -2107,18 +2285,8 @@ does_a_segment_overlap:
 +
 
     ldz #0
-    lda [current_segment],z
-    sta expr_b
-    inz
-    lda [current_segment],z
-    sta expr_b+1
-    inz
-    lda [current_segment],z
-    sta expr_b+2
-    inz
-    lda [current_segment],z
-    sta expr_b+3
-    lda expr_b
+    ldq [current_segment]
+    stq expr_b
     clc
     adc expr_b+2
     sta expr_b+2
@@ -4718,7 +4886,6 @@ assemble_source:
     lda #$ff
     bra -
 @done
-    jsr print_error
     rts
 
 

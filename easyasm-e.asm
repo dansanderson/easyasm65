@@ -24,7 +24,7 @@
 ; Set EXPECTED_END_OF_DISPATCH according to BP variables declared in
 ; easyasm.asm. (On error, it may be able to raise this limit, just
 ; check easyasm.asm first.)
-EXPECTED_END_OF_DISPATCH = $1e5f
+EXPECTED_END_OF_DISPATCH = $1e9f
 
 * = $1e00
 
@@ -34,7 +34,19 @@ EXPECTED_END_OF_DISPATCH = $1e5f
     ; $1E04: Run menu option A, argument X.
     pha
     phx
+    bra install
+    ; $1E08: Execute user's program.
+    ; A/X = address
+execute_user_program:
+    sta user_address
+    stx user_address+1
+    jsr easyasm_to_sys
+    jsr (user_address)
+    jsr sys_to_easyasm
+    rts
+user_address: !byte $00, $00
 
+install:
     ; Copy EasyAsm from $8700000 to $52000
     lda #0
     sta $d704
@@ -45,6 +57,16 @@ EXPECTED_END_OF_DISPATCH = $1e5f
     lda #<install_dma
     sta $d705
 
+    jsr sys_to_easyasm
+
+    plx
+    pla
+    jsr $2000     ; $52000, EasyAsm dispatch
+
+    jsr easyasm_to_sys
+    rts
+
+sys_to_easyasm:
     ; MAP $2000-$7FFF to bank 5
     ; Keep KERNAL in $E000-$FFFF
     lda #$00
@@ -62,11 +84,9 @@ EXPECTED_END_OF_DISPATCH = $1e5f
     ; Set B = $1Exx
     lda #$1e
     tab
+    rts
 
-    plx
-    pla
-    jsr $2000     ; $52000, EasyAsm dispatch
-
+easyasm_to_sys:
     ; Restore the SYS map
     lda #$00
     ldx #$E0
