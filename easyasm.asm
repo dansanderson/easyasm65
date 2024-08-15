@@ -2177,6 +2177,9 @@ do_any_segments_overlap:
     rts
 +   ldq current_segment
     stq expr_result
+
+    ldz #0
+    ldq [current_segment]
     sec
     jsr does_a_segment_overlap
     bcc +

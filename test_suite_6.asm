@@ -576,6 +576,21 @@ set_up_segtable_for_test:
 
 +   rts
 
+; Call this immediately after set_up_segtable_for_test
+; to create a segment that overlaps an existing one
+set_up_overlapping_segment_for_test:
+    lda #$03
+    sta program_counter+1
+    lda #$01
+    sta program_counter
+    lda asm_flags
+    ora #F_ASM_PC_DEFINED
+    sta asm_flags
+    ldx #3
+    jsr assemble_bytes
+    rts
+
+
 !macro create_test_segment_tables .count {
     ldx #.count
     jsr set_up_segtable_for_test
@@ -633,6 +648,22 @@ set_up_segtable_for_test:
 
     +test_end
 }
+
+!macro test_segment_overlap_any .tnum, .yesoverlap {
+    +test_start .tnum
+    +create_test_segment_tables 5
+    !if .yesoverlap {
+        jsr set_up_overlapping_segment_for_test
+    }
+    jsr do_any_segments_overlap
+    !if .yesoverlap {
+        +assert_cs test_msg_ecs
+    } else {
+        +assert_cc test_msg_ecc
+    }
+    +test_end
+}
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -712,6 +743,8 @@ run_test_suite_cmd:
     +test_segment_overlap $05, $0302, $00ef, 1, 1, 0
     +test_segment_overlap $06, $0302, $00ef, 1, 0, 1
     +test_segment_overlap $07, $01ff, $00ef, 0, 0, 1
+    +test_segment_overlap_any $08, 0
+    +test_segment_overlap_any $09, 1
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
