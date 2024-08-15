@@ -564,6 +564,9 @@ set_up_segtable_for_test:
     sty program_counter+1
     lda #0
     sta program_counter
+    lda asm_flags
+    ora #F_ASM_PC_DEFINED
+    sta asm_flags
     phy
     ldx #3
     jsr assemble_bytes
@@ -597,6 +600,39 @@ set_up_segtable_for_test:
     +test_end
 }
 
+!macro test_segment_overlap .tnum, .start, .length, .c, .set_expr_result, .ec {
+    +test_start .tnum
+
+    +create_test_segment_tables 5
+
+    !if .set_expr_result {
+        jsr start_segment_traversal
+        jsr next_segment_traversal
+        jsr next_segment_traversal
+        ldq current_segment
+        stq expr_result
+    } else {
+        lda #0
+        sta expr_result
+        sta expr_result+1
+        sta expr_result+2
+        sta expr_result+3
+    }
+
+    lda #<.start
+    ldx #>.start
+    ldy #<.length
+    ldz #>.length
+    !if .c { sec } else { clc }
+    jsr does_a_segment_overlap
+    !if .ec {
+        +assert_cs test_msg_ecs
+    } else {
+        +assert_cc test_msg_ecc
+    }
+
+    +test_end
+}
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -653,6 +689,29 @@ run_test_suite_cmd:
     +test_segment_traversal $01, 0
     +test_segment_traversal $02, 1
     +test_segment_traversal $03, 5
+
+    +print_chr chr_cr
+    +print_strlit_line "test-segment-overlap"
+
+    ; $0100 cmp $0080 -> Z=0 C=1
+    ; lda #$00 : sta expr_a : lda #$01 : sta expr_a+1 : lda #$80 : sta expr_a+2 : lda #$00 : sta expr_a+3
+    ; +cmp16 expr_a, expr_a+2
+    ; $007F cmp $0080 -> Z=0 C=0
+    ; lda #$7F : sta expr_a : lda #$00 : sta expr_a+1 : lda #$80 : sta expr_a+2 : lda #$00 : sta expr_a+3
+    ; +cmp16 expr_a, expr_a+2
+    ; $0080 cmp $0080 -> Z=1 C=1
+    ; lda #$80 : sta expr_a : lda #$00 : sta expr_a+1 : lda #$80 : sta expr_a+2 : lda #$00 : sta expr_a+3
+    ; +cmp16 expr_a, expr_a+2
+
+    ; Five test segments: 0100-0102, ..., 0500-0502
+    ; .start, .length, .c, .set_expr_result, .ec
+    +test_segment_overlap $01, $0204, $00ef, 0, 0, 0
+    +test_segment_overlap $02, $0202, $00ef, 0, 0, 1
+    +test_segment_overlap $03, $0204, $00fd, 0, 0, 1
+    +test_segment_overlap $04, $0302, $00ef, 0, 1, 1
+    +test_segment_overlap $05, $0302, $00ef, 1, 1, 0
+    +test_segment_overlap $06, $0302, $00ef, 1, 0, 1
+    +test_segment_overlap $07, $01ff, $00ef, 0, 0, 1
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

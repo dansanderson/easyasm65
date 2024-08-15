@@ -191,6 +191,18 @@ chr_singlequote = 39
     +kprimm_end
 }
 
+!macro debug_print16 .msg, .addr {
+    lda #'['
+    +kcall bsout
+    +debug_print .msg
+    lda .addr+1
+    jsr print_hex8
+    lda .addr
+    jsr print_hex8
+    lda #']'
+    +kcall bsout
+}
+
 !macro push32 .addr {
     lda .addr
     pha
@@ -211,6 +223,15 @@ chr_singlequote = 39
     sta .addr+1
     pla
     sta .addr
+}
+
+!macro cmp16 .a, .b {
+    lda .a+1
+    cmp .b+1
+    bne +
+    lda .a
+    cmp .b
++
 }
 
 ; ------------------------------------------------------------
@@ -2043,6 +2064,7 @@ is_end_segment_traversal:
 +   clc
     rts
 
+
 ; Tests whether a segment overlaps a region
 ; Input: A/X=start addr, Y/Z=length; completed assembly
 ;   C=1 skip an entry if expr_result = current_segment (entry addresses)
@@ -2052,10 +2074,12 @@ is_end_segment_traversal:
 ; Uses expr_a, expr_b, and asm_flags.
 does_a_segment_overlap:
     stq expr_a
-    lda #0
+    lda asm_flags  ; Borrow flag bit 7 for "skip entry enable"
     bcc +
-    lda #$ff
-+   sta asm_flags
+    ora #%10000000
+    bra ++
++   and #%01111111
+++  sta asm_flags
 
     ldq expr_a
     clc
@@ -2077,7 +2101,7 @@ does_a_segment_overlap:
     ; (For do_any_segments_overlap.)
     bit asm_flags
     bpl +
-    ldq expr_b
+    ldq expr_result
     cpq current_segment
     lbeq @next
 +
@@ -2103,36 +2127,35 @@ does_a_segment_overlap:
     sta expr_b+3  ; expr_b.0-1: cur start, expr_b.2-3: cur end+1
 
     ; A start <= B start < A end+1
-    lda expr_b+1
-    cmp expr_a+1
-    beq +
-    lda expr_b
-    cmp expr_a
-+   bcc ++
-    lda expr_b+1
-    cmp expr_a+3
-    beq +
-    lda expr_b
-    cmp expr_a+2
-+   bcs ++
+    ;   AAAA      AAAAA
+    ;     BBBB     BBB
+    +cmp16 expr_b, expr_a
+    bcc ++  ; C=0: B start < A start
+    +cmp16 expr_b, expr_a+2
+    bcs ++  ; C=1: B start >= A end
     sec
     rts
 
 ++  ; A start <= B end < A end+1
-    lda expr_b+3
-    cmp expr_a+1
-    beq +
-    lda expr_b+2
-    cmp expr_a
-+   bcc @next
-    lda expr_b+3
-    cmp expr_a+3
-    beq +
-    lda expr_b+2
-    cmp expr_a+2
-+   bcs @next
+    ;     AAAA    AAAAA
+    ;   BBBB       BBB
+    +cmp16 expr_b+2, expr_a
+    bcc ++  ; C=0: B end < A start
+    +cmp16 expr_b+2, expr_a+2
+    bcs ++  ; C=1: B end >= A end
     sec
     rts
+
+++  ; B start < A start && A end+1 <= B end+1
+    ;    AAA
+    ;   BBBBB
+    +cmp16 expr_b, expr_a
+    bcs ++  ; C=1: B start >= A start
+    +cmp16 expr_b+2, expr_a+2
+    bcc ++  ; C=0: B end < A end
+    sec
+    rts
+++
 
 @next
     ; No overlap. Next segment...
