@@ -54,7 +54,7 @@ EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. Type `EDI
 
 ## Quick reference
 
-* `BOOT` : install EasyAsm; erases program memory
+* `MOUNT "EASYASM.D81" : BOOT` : install EasyAsm; erases program memory
 
 * Press **Help** to launch the EasyAsm interactive menu
 
@@ -157,12 +157,11 @@ Try entering a slightly different program:
 
 Assemble and run the program. This program changes the border color repeatedly, in an infinite loop. It does not exit.
 
-To interrupt this program and return to BASIC, hold **Run/Stop** and press **Restore**. The program stops, the screen clears, and the `OK.` prompt of Edit mode reappears.
+To interrupt this program and return to BASIC, hold **Run/Stop** and press **Restore**. The program stops, and the MEGA65 Monitor starts. Type `X` then press **Return** to exit the Monitor and return to the `OK` prompt.
 
-Now re-enable Edit mode, then type `LIST`:
+Now type `LIST`:
 
 ```basic
-EDIT ON
 LIST
 ```
 
@@ -187,7 +186,7 @@ The Monitor accepts commands through the screen editor. A typical command is a s
 
 To exit the Monitor, enter the `X` command. This returns you to the `OK.` (or `READY.`) prompt.
 
-The Monitor can be especially useful for debugging an assembly language program thanks to a special feature of the MEGA65 operating system. When a program executes a `BRK` instruction, the operating system halts the program, and starts the Monitor. The Monitor displays the status of the CPU registers as they were at that exact point in the program. You can continue to enter Monitor commands to inspect the state of the system. When you're finished, use the `G` command without an argument to continue the program where it left off.
+The Monitor can be especially useful for debugging an assembly language program thanks to a special feature of the MEGA65 operating system. When a program executes a `BRK` instruction, the operating system halts the program, and starts the Monitor. The Monitor displays the status of the CPU registers as they were at the exact point in the program where the `BRK` occurred. You can continue to enter Monitor commands to inspect the state of the system. When you're finished, use the `G` command without an argument to continue the program where it left off.
 
 ```
 10 !TO "BRKDANCE", RUNNABLE
@@ -213,7 +212,7 @@ The Monitor is powerful, but sometimes tricky to use. For example, it is not alw
   * Use the F9 and F11 keys to display the listing as a scrolling display.
   * Use the built-in tools like `AUTO` and `RENUMBER` to manage line numbers.
 
-* Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. EasyAsm does not use line numbers for anything—it relies on labels to identify points in the program code—so this typically does not matter.
+* Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. To insert more possible line numbers at a given line, use the `RENUMBER` command. For example, to renumber all lines starting at line 450 onward to instead start at 1000: `RENUMBER 1000,10,450-`
 
 * Press **Mega+Shift** to toggle lowercase text mode, if you prefer lowercase for assembly language source files. In EasyAsm, labels and strings are case sensitive. Instructions, directives, register names, and hexadecimal literals are not case sensitive.
 
@@ -267,13 +266,13 @@ EasyAsm tries to maintain a minimal memory footprint while you are editing your 
 Of course, EasyAsm has to live somewhere. This is what EasyAsm needs:
 
 * EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8700000-$87FFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
-* EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you invoke EasyAsm. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running.
+* EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you invoke EasyAsm. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running. Overwriting this memory may inhibit EasyAsm's ability to return to the `OK` prompt on `rts`.
 
 As a safety precaution, EasyAsm will not assemble to addresses $1E00-$1EFF when assembling to memory. This restriction does not apply when assembling to disk.
 
 EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
-1. When you load and run `EASYASM` at the start of a session, it overwrites program memory with its installer code. After it is installed, it clears program memory.
+1. When you `BOOT` the EasyAsm disk at the start of a session, it overwrites program memory with its installer code. After it is installed, it clears program memory.
 2. While you are editing source code in Edit mode, your source code occupies program memory. EasyAsm expects to find it there when you invoke the assembler.
 3. To test your program, EasyAsm stashes the source code into Attic RAM, assembles the program to machine code, and installs your machine code in program memory. It runs from this location, as it would when a user loads and runs your program. If the program exits with `rts`, EasyAsm copies the source code back into program memory (overwriting the assembled program) and restores the editing environment.
 
@@ -295,7 +294,7 @@ loop:  ; beginning of the loop
   inc $d020  ; increment the background color
 ```
 
-(Naturally, a semicolon that appears inside a character literal or string is not considered a comment.)
+Naturally, a semicolon that appears inside a character literal or string is not considered a comment.
 
 ### Instructions
 

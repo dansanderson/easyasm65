@@ -411,7 +411,7 @@ do_warning_prompt:
     clc
     rts
 +   +kprimm_start
-    !pet "press a key to run, or run/stop: ",15,166,143,157,0
+    !pet 13,"press a key to run, or run/stop: ",15,166,143,157,0
     +kprimm_end
 -   sta asciikey
     lda asciikey
