@@ -21,16 +21,15 @@ This is EasyAsm version 0.1.
 **All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
 Release 0.1:
-* Single segment programs only: one `!to` and up to one `* = ...` per source file
+* This is a pre-release version. There may still be catastrophic bugs and incorrect assembly. Only assembling to memory is currently supported.
 
 1.0 roadmap:
-* Relative labels
+* `!to "...", cbm` and `plain`; gaps between segments filled on disk
+* `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
+* Multi-file output, multiple `!to` allowed
+* Relative labels (`+`, `++`, `-`, `--`)
 * `!binary`
 * `!source`
-* `runnable` with custom PC (single relocatable segment)
-* Multi-segment programs with `!to "...", cbm` and `plain`; multiple `* = ...` allowed; gaps filled on disk
-* Multi-segment programs with `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
-* Multi-file output, multiple `!to` allowed
 
 Far future:
 * Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
@@ -48,6 +47,10 @@ Far future:
 Writing a program for a microcomputer using the microcomputer itself comes with the inherent risk that a bug in your program will interfere with your programming environment. EasyAsm preserves your source code in memory while you are testing your program, but this cannot be guaranteed to work if the program does something unexpected.
 
 By design, EasyAsm does *not* force you to save your work to disk before testing your program. Please remember to do this yourself.
+
+**Remember to enable Edit Mode.**
+
+EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. Type `EDIT ON` to enable it. When enabled, the "READY" prompt becomes the "OK" prompt. Loading, typing, or saving assembly language while in BASIC mode will produce incorrect results.
 
 ## Quick reference
 
@@ -216,6 +219,10 @@ The Monitor is powerful, but sometimes tricky to use. For example, it is not alw
 * Edit mode supports entering PETSCII codes into strings similarly to BASIC. When you enter a double-quote (`"`), the editor goes into "quote mode," and PETSCII control codes can be typed as special characters. This works well for string literals in EasyAsm assembly language programs.
 
 * To enter a blank line, type the line number, press Shift+Space, then press Return. (This is not normally possible in BASIC.)
+
+* If you accidentally type some assembly language code while in BASIC mode (the "READY" prompt), the code will not be entered into memory correctly. To fix this, list the affected lines to the screen while in BASIC mode, type `EDIT ON` to enable Edit mode, then move the cursor up to the lines and press Return on each line. They will be re-entered correctly as assembly source.
+
+* The `EDIT ON` command cannot be run from a BASIC program. You can bind it to a function key macro with the `KEY` command to make it easier. (This is how EasyAsm binds to the **Help** key, using `KEY 15`.)
 
 A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 
@@ -825,7 +832,7 @@ EasyAsm tries to provide a subset of the features of the Acme assembler, using c
 
 EasyAsm has the following limitations compared to the Acme assembler.
 
-* Per-file source size limit of 44 KB
+* "Edit mode" in-memory source size limit of 44 KB
 * No macros
 * No conditional or looping assembly
 * No symbol list output
@@ -839,6 +846,7 @@ EasyAsm has the following limitations compared to the Acme assembler.
 * No assembler directives (pseudo-ops) or directive aliases other than those listed
 * No mathematical functions or operators other than those listed
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
+* No C-style `//` comments (use `; ...`)
 * No octal literals
 * No way to set a "pseudo-PC"
 
