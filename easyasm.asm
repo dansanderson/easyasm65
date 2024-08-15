@@ -3207,6 +3207,12 @@ expect_factor:
     sbcq product  ; Q = x - (x DIV y) * y
     bra ++
 
++   ldq multinb
+    bne +
+    lda #err_division_by_zero
+    sta err_code
+    sec
+    lbra @end
 +   ldq divquot
 ++  stq expr_result
     lbra @factor_loop
@@ -4507,9 +4513,11 @@ arg_type_expr = 2
     lda #arg_type_expr
     jsr .handler
     bra ++
-+   lda #err_syntax
++   lda err_code
+    bne +
+    lda #err_syntax
     sta err_code
-    lbra statement_err_exit
++   lbra statement_err_exit
 ++  lda err_code
     lbne statement_err_exit
     lda #tk_comma
@@ -5078,7 +5086,7 @@ assemble_source:
 ; Error message strings
 
 err_message_tbl:
-!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14
+!word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
 
 err_messages:
 err_syntax = 1
@@ -5109,6 +5117,8 @@ err_invalid_arg = 13
 e13: !pet "argument not allowed",0
 err_missing_arg = 14
 e14: !pet "missing argument",0
+err_division_by_zero = 15
+e15: !pet "division by zero",0
 
 warn_message_tbl:
 !word w01
