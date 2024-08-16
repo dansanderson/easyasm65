@@ -552,6 +552,234 @@ assemble_to_memory_cmd:
 ; Assemble to Disk command
 ; ------------------------------------------------------------
 
+; Inputs:
+;   segment table entry addresses (32-bit) in tokbuf
+;   tok_pos is index beyond list
+; Outputs:
+;   list in tokbuf sorted by PC
+sort_segments_for_file:
+    ; TODO
+    rts
+
+
+; Inputs: current_file; assembled segments
+; Outputs:
+;   segment table entry addresses to tokbuf
+;   tok_pos is index beyond list; number of segments = tok_pos/4
+;   C=1: too many segments (max 64), result invalid
+; Uses expr_a, expr_b, expr_result.
+generate_segment_list_for_file:
+    lda #0
+    sta tok_pos
+
+    ; expr_a = current_file->[6:10] = first segment address
+    ldz #6
+    ldq [current_file]
+    stq expr_a
+    +push32 expr_a
+
+    ldq current_file
+    stq expr_result   ; stow current_file in expr_result, for lookahead
+    jsr next_file_entry
+    jsr file_entry_is_null
+    bne +
+    ; Last file. Consume all remaining segments.
+    lda #0
+    sta expr_b
+    sta expr_b+1
+    sta expr_b+2
+    sta expr_b+3
+    bra ++
++   ; expr_b = next current_file->[6:10] = first segment of next file
+    ldz #6
+    ldq [current_file]
+    stq expr_b
+
+++  ldq expr_result   ; Restore current file pointer
+    stq current_file
+    +pull32 expr_a
+    ; Scan segment table, populate tokbuf.
+    ; While expr_a != expr_b && [expr_a] != 0...
+    ldq expr_a
+@loop
+    cpq expr_b
+    beq @end_loop
+    ldz #0
+    lda [expr_a],z
+    inz
+    ora [expr_a],z
+    inz
+    ora [expr_a],z
+    inz
+    ora [expr_a],z
+    beq @end_loop
+
+    ; Store expr_a in tokbuf at tok_pos
+    ldx tok_pos
+    lda expr_a
+    sta tokbuf,x
+    lda expr_a+1
+    sta tokbuf+1,x
+    lda expr_a+2
+    sta tokbuf+2,x
+    lda expr_a+3
+    sta tokbuf+3,x
+
+    lda #4
+    adc tok_pos
+    sta tok_pos
+    ; If tok_pos == 0, abort with C=1
+    cmp #0
+    bne +
+    sec
+    rts
++   ; expr_a += expr_a->[2:3] + 4
+    ldz #2
+    lda [expr_a],z
+    clc
+    adc #4
+    sta expr_result
+    inz
+    lda [expr_a],z
+    adc #0
+    sta expr_result+1
+    lda #0
+    sta expr_result+2
+    sta expr_result+3
+    ldq expr_result
+    clc
+    adcq expr_a
+    stq expr_a
+
+    bra @loop
+
+@end_loop
+    clc
+    rts
+
+
+; Input: current_file; source address, length are valid
+;   C=1: current file is null
+print_current_filename:
+    jsr file_entry_is_null
+    bne +
+    sec
+    rts
++
+    ldz #0
+    ldq [current_file]
+    sta line_addr
+    stx line_addr+1
+    sty bas_ptr+2
+    stz bas_ptr+3
+    ldz #4
+    lda [current_file],z
+    tay
+    ldx #0
+    jsr print_bas_str
+    clc
+    rts
+
+
+; Input: current_file; tokbuf, tok_pos with sorted segments
+write_cbm_file:
+    ; Write first segment's PC to file.
+    ; TODO
+    +debug_print "[cbm]"
+    ; Continue to write_plain_file...
+
+; Input: current_file; tokbuf, tok_pos with sorted segments
+write_plain_file:
+    ; TODO
+    ;    For each segment:
+    ;       Print segment msg.
+    ;       Write segment data.
+    ;       If not last segment, write zero fill.
+    +debug_print "[plain]"
+    clc
+    rts
+
+; Input: current_file; tokbuf, tok_pos with sorted segments
+write_runnable_file:
+    ; TODO
+    ;    Write BASIC preamble.
+    ;    If list is one entry at $2014, emit segment data. Print msg.
+    ;    Otherwise, write segment installer, then for each segment:
+    ;       Print segment msg.
+    ;       Emit segment with header.
+    +debug_print "[runnable]"
+    clc
+    rts
+
+
+; Inputs: current_file = file entry to create, non-null; assembled segments
+; Outputs: err_code=0 success; err_code>0 fatal error, stop processing
+create_file_for_segments:
+    +debug_print "[create file]"
+    ; Generate segment list for file, sorted by PC.
+    jsr generate_segment_list_for_file
+    bcc +
+    lda #err_out_of_memory
+    sta err_code
+    rts
++
+    jsr print_current_filename
+    ; If list is empty, say so and exit (ok).
+    lda tok_pos
+    bne +
+    +kprimm_start
+    !pet ": no segments assembled, skipping",13,0
+    +kprimm_end
+    rts
++
+    ; Sort the result by PC.
+    jsr sort_segments_for_file
+
+    ; Open file for writing.
+    ; TODO
+    +debug_print "[open]"
+    ; +kprimm_start
+    ; !pet ": error opening file",13,0
+    ; +kprimm_end
+    ; (err_code?)
+    ; rts
+
+    ; Choose path based on file type.
+    ldz #5
+    lda [current_file],z
+    and #F_FILE_MASK
+    cmp #F_FILE_RUNNABLE
+    bne +
+    +kprimm_start
+    !pet ", runnable:",13,0
+    +kprimm_end
+    jsr write_runnable_file
+    bcc ++
+    rts
++   cmp #F_FILE_CBM
+    bne +
+    +kprimm_start
+    !pet ", cbm:",13,0
+    +kprimm_end
+    jsr write_cbm_file
+    bcc ++
+    rts
++   +kprimm_start
+    !pet ", plain:",13,0
+    +kprimm_end
+    jsr write_plain_file
+    bcc ++
+    rts
+++
+
+    ; Close the file.
+    +debug_print "[close]"
+    ; TODO
+
+    clc
+    rts
+
+
 assemble_to_disk_cmd:
     +kprimm_start
     !pet "# assembling to disk...",13,13,0
@@ -561,31 +789,40 @@ assemble_to_disk_cmd:
     jsr stash_source
     jsr assemble_source
     lda err_code
-    beq +
-    jsr print_error
-    +kprimm_start
-    !pet 13,"# assembly encountered an error",13,0
-    +kprimm_end
-    rts
+    lbne @assemble_to_disk_error
 
     ; Error if segments overlap.
-+   jsr do_overlap_error
-    bcc +
-    rts
+    jsr do_overlap_error
+    lbcs @assemble_to_disk_error_no_pos
 
     ; If warnings emitted, pause before continuing.
-+   jsr do_warning_prompt
+    jsr do_warning_prompt
     bcc +
     rts
++
 
-+   ; TODO: the rest of the owl
+    ; Process each file in file-table order.
+    jsr first_file_entry
+-   jsr file_entry_is_null
+    beq +
+    jsr create_file_for_segments
+    lda err_code
+    bne @assemble_to_disk_error_no_pos
+    jsr next_file_entry
+    bra -
++
     +kprimm_start
-    !pet "# assembling to disk not yet implemented",13,13,0
+    !pet 13,"# assemble to disk complete",13,0
     +kprimm_end
     rts
 
+@assemble_to_disk_error_no_pos
+    lda #$ff
+    sta line_pos
+@assemble_to_disk_error
+    jsr print_error
     +kprimm_start
-    !pet 13,"# assemble to disk complete",13,0
+    !pet 13,"# assemble to disk aborted due to error",13,13,0
     +kprimm_end
     rts
 
@@ -662,14 +899,15 @@ print_cstr:
 
 
 ; Print a string from a source line
-; Input: line_addr, X=line pos, Y=length
+; Input: line_addr, X=line pos, Y=length; bas_ptr bank and megabyte
 print_bas_str:
     lda line_addr
     sta $00fc
     lda line_addr+1
     sta $00fd
-    lda #0
+    lda bas_ptr+2
     sta $00fe
+    lda bas_ptr+3
     sta $00ff
 
     ; Manage B manually, for speed
@@ -872,9 +1110,12 @@ print_error:
     ; Skip printing line if line_pos = $ff
     lda line_pos
     cmp #$ff
-    lbeq +++
+    bne +
+    rts
 
     ; Print line number again.
++   lda #chr_cr
+    +kcall bsout
     plx
     pla
     ldy #0
@@ -930,7 +1171,7 @@ print_error:
     lda #chr_cr
     +kcall bsout
 
-+++ rts
+    rts
 
 
 ; (Used by print_warning and do_warn)
