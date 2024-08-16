@@ -4857,6 +4857,8 @@ assemble_dir_to:
     bmi +
     lbra statement_ok_exit
 +
+    pha  ; mode flag
+
     ; expr_a = filename pos, expr_a+1 = filename length, A = mode flag
     ldz #5
     sta [current_file],z
@@ -4889,6 +4891,19 @@ assemble_dir_to:
     inz
     lda current_segment+3
     sta [current_file],z
+
+    ; Runnable sets PC; other modes un-set PC
+    pla
+    cmp #F_FILE_RUNNABLE
+    bne +
+    ldx #<bootstrap_ml_start
+    ldy #>bootstrap_ml_start
+    jsr set_pc
+    bra ++
++   lda asm_flags
+    and #!F_ASM_PC_DEFINED
+    sta asm_flags
+++
 
     jsr next_file_entry
     jsr make_current_file_zero
@@ -5987,14 +6002,22 @@ scr_table:
 
 ; ------------------------------------------------------------
 ; Bootstrap
+
 bootstrap_basic_preamble:
 !8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
-!pet "$2014"
+!pet "$"
+!byte '0' + ((bootstrap_ml_start >> 12) & $0f)
+!byte '0' + ((bootstrap_ml_start >> 8) & $0f)
+!byte '0' + ((bootstrap_ml_start >> 4) & $0f)
+!byte '0' + (bootstrap_ml_start & $0f)
 !8 $00,$00,$00
 bootstrap_basic_preamble_end:
+; (Acme needs this below the preamble so it is defined in the first pass.)
+bootstrap_ml_start = source_start + 1 + bootstrap_basic_preamble_end - bootstrap_basic_preamble
+
 bootstrap_segment_installer:
-!pseudopc $2014 {
-    ; TODO: Non-default or multi-segment bootstrap
+!pseudopc bootstrap_ml_start {
+    ; TODO: Install segments; jmp to start of first segment
 
     bootstrap_segment_data = *
 }
