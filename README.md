@@ -296,6 +296,8 @@ loop:  ; beginning of the loop
 
 Naturally, a semicolon that appears inside a character literal or string is not considered a comment.
 
+EasyAsm also supports C-style `//` line comments, similar to Acme.
+
 ### Instructions
 
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
@@ -848,7 +850,6 @@ EasyAsm has the following limitations compared to the Acme assembler.
 * No assembler directives (pseudo-ops) or directive aliases other than those listed
 * No mathematical functions or operators other than those listed
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)
-* No C-style `//` comments (use `; ...`)
 * No octal literals
 * No way to set a "pseudo-PC"
 

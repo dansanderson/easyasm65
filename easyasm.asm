@@ -1117,13 +1117,22 @@ accept_whitespace_and_comment:
     bcc +
     inz
     bra -
-+   cmp #';'
-    bne +
++   cmp #';'   ; Traditional line comments
+    beq @do_comment
+    cmp #'/'   ; C-style line comments
+    bne ++
+    inz
+    lda [bas_ptr],z
+    dez
+    cmp #'/'
+    bne ++
+@do_comment
 -   inz            ; Ignore comment to end of line
     lda [bas_ptr],z
     tax
     bne -
-+   stz line_pos
+
+++  stz line_pos
     txa   ; Set flags
     rts
 
