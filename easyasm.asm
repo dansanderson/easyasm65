@@ -4653,11 +4653,13 @@ assemble_dir_warn:
 ; !fill <count> [, <val>]
 assemble_dir_fill:
     jsr expect_expr
-    bcc +
+    bcc ++
+    lda err_code
+    bne +
     lda #err_missing_arg
     sta err_code
-    lbra statement_err_exit
-+   ldq expr_result
++   lbra statement_err_exit
+++  ldq expr_result
     stq expr_b  ; expr_b = count
     lda #0      ; default fill value is 0
     sta expr_result
@@ -4668,11 +4670,13 @@ assemble_dir_fill:
     jsr expect_token
     bcs @start_fill
     jsr expect_expr
-    bcc +
+    bcc ++
+    lda err_code
+    bne +
     lda #err_missing_arg
     sta err_code
-    lbra statement_err_exit
-+   lda expr_result+3  ; custom fill byte must be <256
++   lbra statement_err_exit
+++  lda expr_result+3  ; custom fill byte must be <256
     ora expr_result+2
     ora expr_result+1
     beq @start_fill
@@ -4882,6 +4886,21 @@ assemble_dir_to:
     lbra statement_ok_exit
 
 
+; !cpu m65
+; EasyAsm only supports the "m65" CPU. This directive exists to ignore "!cpu
+; m65" and report an error for any other !cpu value, to make it easier to port
+; Acme programs to EasyAsm.
+assemble_dir_cpu:
+    ldx #<kw_m65
+    ldy #>kw_m65
+    jsr expect_keyword
+    bcs +
+    lbra statement_ok_exit
++   lda #err_unsupported_cpu_mode
+    sta err_code
+    lbra statement_err_exit
+
+
 assemble_dir_source:
 assemble_dir_binary:
     lda #err_unimplemented
@@ -4901,6 +4920,7 @@ directive_jump_table:
 !word assemble_dir_source
 !word assemble_dir_binary
 !word assemble_dir_warn
+!word assemble_dir_cpu
 
 assemble_directive:
     ; <pseudoop> arglist
@@ -5087,6 +5107,7 @@ assemble_source:
 
 err_message_tbl:
 !word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
+!word e16
 
 err_messages:
 err_syntax = 1
@@ -5119,6 +5140,8 @@ err_missing_arg = 14
 e14: !pet "missing argument",0
 err_division_by_zero = 15
 e15: !pet "division by zero",0
+err_unsupported_cpu_mode = 16
+e16: !pet "unsupported cpu mode",0
 
 warn_message_tbl:
 !word w01
@@ -5339,8 +5362,10 @@ po_binary = tokid_after_mnemonics + 10
 !pet "binary",0
 po_warn = tokid_after_mnemonics + 11
 !pet "warn",0
+po_cpu = tokid_after_mnemonics + 12
+!pet "cpu",0
 !byte 0
-last_po = po_warn + 1
+last_po = po_cpu + 1
 
 ; Other tokens table
 ; These tokens are lexed up to their length, in order, with no delimiters.
@@ -5413,6 +5438,7 @@ kw_xor: !pet "xor",0
 kw_cbm: !pet "cbm",0
 kw_plain: !pet "plain",0
 kw_runnable: !pet "runnable",0
+kw_m65: !pet "m65",0
 
 
 ; ------------------------------------------------------------
@@ -5945,6 +5971,22 @@ scr_table:
 !scr 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', $5b, $5c, $5d, $5e, $5f
 !scr $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $6a, $6b, $6c, $6d, $6e, $6f
 !scr $70, $71, $72, $73, $74, $75, $76, $77, $78, $79, $7a, $7b, $7c, $7d, $7e, $7f
+
+
+; ------------------------------------------------------------
+; Bootstrap
+bootstrap_basic_preamble:
+!8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
+!pet "$2014"
+!8 $00,$00,$00
+bootstrap_basic_preamble_end:
+bootstrap_segment_installer:
+!pseudopc $2014 {
+    ; TODO: Non-default or multi-segment bootstrap
+
+    bootstrap_segment_data = *
+}
+bootstrap_segment_installer_end:
 
 
 ; ---------------------------------------------------------
