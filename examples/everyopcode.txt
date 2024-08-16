@@ -3,6 +3,13 @@
 ; !to "everyopcode.prg",cbm
 *=$1600
 
+primm = $ff7d
+
+jsr primm
+!pet "everyopcode demonstrates that easyasm assembles every 45gs02 instruction",13
+!pet "supported by acme. it does not execute the code.",13,13,0
+rts
+
 imm8 = 7
 imm16 = 257
 zp = $fc
@@ -153,6 +160,7 @@ cmp abs16, x
 cmp abs16, y
 cmp zp
 cmp zp, x
+cmpq (zp)  ; Alternate spelling to cpq
 cpq (zp)
 ;  cpq (zp), y
 ;  cpq (zp, x)
@@ -330,7 +338,8 @@ rorq zp
 rorq zp, x
 row abs16
 rti
-rts #imm8
+rtn #imm8
+rts #imm8  ; Alternate spelling for rtn #imm8
 rts
 sbc #imm8
 sbc (zp), y

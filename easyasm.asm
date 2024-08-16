@@ -5151,7 +5151,6 @@ w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
-tokid_after_mnemonics = 146
 mnemonics:
 !pet "adc",0   ; $01
 !pet "adcq",0  ; $02
@@ -5288,44 +5287,45 @@ mnemonic_rolq = $6B
 mnemonic_rorq = $6D
 !pet "row",0   ; $6E
 !pet "rti",0   ; $6F
-!pet "rts",0   ; $70
-!pet "sbc",0   ; $71
-!pet "sbcq",0  ; $72
-mnemonic_sbcq = $72
-!pet "sec",0   ; $73
-!pet "sed",0   ; $74
-!pet "see",0   ; $75
-!pet "sei",0   ; $76
-!pet "smb0",0  ; $77
-!pet "smb1",0  ; $78
-!pet "smb2",0  ; $79
-!pet "smb3",0  ; $7A
-!pet "smb4",0  ; $7B
-!pet "smb5",0  ; $7C
-!pet "smb6",0  ; $7D
-!pet "smb7",0  ; $7E
-!pet "sta",0   ; $7F
-!pet "stq",0   ; $80
-mnemonic_stq = $80
-!pet "stx",0   ; $81
-!pet "sty",0   ; $82
-!pet "stz",0   ; $83
-!pet "tab",0   ; $84
-!pet "tax",0   ; $85
-!pet "tay",0   ; $86
-!pet "taz",0   ; $87
-!pet "tba",0   ; $88
-!pet "trb",0   ; $89
-!pet "tsb",0   ; $8A
-!pet "tsx",0   ; $8B
-!pet "tsy",0   ; $8C
-!pet "txa",0   ; $8D
-!pet "txs",0   ; $8E
-!pet "tya",0   ; $8F
-!pet "tys",0   ; $90
-!pet "tza",0   ; $91
+!pet "rtn",0   ; $70
+!pet "rts",0   ; $71
+!pet "sbc",0   ; $72
+!pet "sbcq",0  ; $73
+mnemonic_sbcq = $73
+!pet "sec",0   ; $74
+!pet "sed",0   ; $75
+!pet "see",0   ; $76
+!pet "sei",0   ; $77
+!pet "smb0",0  ; $78
+!pet "smb1",0  ; $79
+!pet "smb2",0  ; $7A
+!pet "smb3",0  ; $7B
+!pet "smb4",0  ; $7C
+!pet "smb5",0  ; $7D
+!pet "smb6",0  ; $7E
+!pet "smb7",0  ; $7F
+!pet "sta",0   ; $80
+!pet "stq",0   ; $81
+mnemonic_stq = $81
+!pet "stx",0   ; $82
+!pet "sty",0   ; $83
+!pet "stz",0   ; $84
+!pet "tab",0   ; $85
+!pet "tax",0   ; $86
+!pet "tay",0   ; $87
+!pet "taz",0   ; $88
+!pet "tba",0   ; $89
+!pet "trb",0   ; $8A
+!pet "tsb",0   ; $8B
+!pet "tsx",0   ; $8C
+!pet "tsy",0   ; $8D
+!pet "txa",0   ; $8E
+!pet "txs",0   ; $8F
+!pet "tya",0   ; $90
+!pet "tys",0   ; $91
+!pet "tza",0   ; $92
 !byte 0
-tokid_after_mnemonics = $92
+tokid_after_mnemonics = $93
 
 ; Token IDs for the Q mnemonics, which all use a $42 $42 encoding prefix
 q_mnemonics:
@@ -5719,6 +5719,8 @@ addressing_modes:
 !word enc_row
 !word %1000000000000000  ; rti
 !word enc_rti
+!word %0100000000000000  ; rtn
+!word enc_rtn
 !word %1100000000000000  ; rts
 !word enc_rts
 !word %0101101110011110  ; sbc
@@ -5914,6 +5916,7 @@ enc_ror : !byte $6a, $66, $76, $6e, $7e
 enc_rorq: !byte $6a, $66, $76, $6e, $7e
 enc_row : !byte $eb
 enc_rti : !byte $40
+enc_rtn : !byte $62
 enc_rts : !byte $60, $62
 enc_sbc : !byte $e9, $e5, $f5, $ed, $fd, $f9, $e1, $f1, $f2, $f2
 enc_sbcq: !byte $e5, $ed, $f2, $f2
