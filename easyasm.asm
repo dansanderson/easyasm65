@@ -6283,6 +6283,8 @@ bootstrap_segment_installer_end:
         !source "test_suite_8.asm"
     } else if TEST_SUITE = 9 {
         !source "test_suite_9.asm"
+    } else if TEST_SUITE = 10 {
+        !source "test_suite_10.asm"
     } else {
         !error "Invalid TEST_SUITE; check Makefile"
     }
