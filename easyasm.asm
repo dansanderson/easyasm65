@@ -112,8 +112,6 @@ attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
 attic_segments_end  = attic_segments + $b000
 attic_forced16s     = attic_segments + $b000       ; 2.6700-2.7D00 (5.5 KB)
 attic_forced16s_end = attic_forced16s + $1600
-attic_files         = attic_forced16s + $1600      ; 2.7D00-2.8200 (1280 bytes)
-attic_files_end     = attic_files + $0500
 
 ; - Symbol table entries are 8 bytes: (name_ptr_24, flags_8, value_32)
 SYMTBL_ENTRY_SIZE = 8
@@ -264,7 +262,6 @@ init:
     jsr init_symbol_table
     jsr init_segment_table
     jsr init_forced16
-    jsr init_file_table
 
     rts
 
@@ -393,7 +390,7 @@ do_overlap_error:
     bcs +
     rts
 +   +kprimm_start
-    !pet "cannot assemble to memory when segments overlap:",13,0
+    !pet "cannot assemble when segments overlap:",13,0
     +kprimm_end
     ldq current_segment
     stq expr_a
@@ -435,6 +432,7 @@ do_warning_prompt:
     rts
 
 install_segments_to_memory:
+    sec
     jsr start_segment_traversal
 @loop
     jsr is_end_segment_traversal
@@ -469,7 +467,7 @@ install_segments_to_memory:
     lda #<install_segments_to_memory_dma
     sta dmalo_e
 
-    jsr next_segment_traversal
+    jsr next_segment_traversal_skip_file_markers
     bra @loop
 
 install_segments_to_memory_dma:
@@ -529,6 +527,7 @@ assemble_to_memory_cmd:
     rts
 
 +   jsr install_segments_to_memory
+    sec
     jsr start_segment_traversal
     ldz #0
     ldq [current_segment]
@@ -552,132 +551,85 @@ assemble_to_memory_cmd:
 ; Assemble to Disk command
 ; ------------------------------------------------------------
 
-; Inputs:
-;   segment table entry addresses (32-bit) in tokbuf
-;   tok_pos is index beyond list
+; Inputs: current_file; current_segment = first segment; assembled segments
 ; Outputs:
-;   list in tokbuf sorted by PC
-sort_segments_for_file:
-    ; TODO
-    rts
-
-
-; Inputs: current_file; assembled segments
-; Outputs:
+;   current_segment advanced to next file marker or null terminator
 ;   segment table entry addresses to tokbuf
 ;   tok_pos is index beyond list; number of segments = tok_pos/4
 ;   C=1: too many segments (max 64), result invalid
-; Uses expr_a, expr_b, expr_result.
 generate_segment_list_for_file:
     lda #0
     sta tok_pos
 
-    ; expr_a = current_file->[6:10] = first segment address
-    ldz #6
-    ldq [current_file]
-    stq expr_a
-    +push32 expr_a
-
-    ldq current_file
-    stq expr_result   ; stow current_file in expr_result, for lookahead
-    jsr next_file_entry
-    jsr file_entry_is_null
-    bne +
-    ; Last file. Consume all remaining segments.
-    lda #0
-    sta expr_b
-    sta expr_b+1
-    sta expr_b+2
-    sta expr_b+3
-    bra ++
-+   ; expr_b = next current_file->[6:10] = first segment of next file
-    ldz #6
-    ldq [current_file]
-    stq expr_b
-
-++  ldq expr_result   ; Restore current file pointer
-    stq current_file
-    +pull32 expr_a
-    ; Scan segment table, populate tokbuf.
-    ; While expr_a != expr_b && [expr_a] != 0...
-    ldq expr_a
 @loop
-    cpq expr_b
-    beq @end_loop
-    ldz #0
-    lda [expr_a],z
-    inz
-    ora [expr_a],z
-    inz
-    ora [expr_a],z
-    inz
-    ora [expr_a],z
-    beq @end_loop
-
-    ; Store expr_a in tokbuf at tok_pos
     ldx tok_pos
-    lda expr_a
+    lda current_segment
     sta tokbuf,x
-    lda expr_a+1
-    sta tokbuf+1,x
-    lda expr_a+2
-    sta tokbuf+2,x
-    lda expr_a+3
-    sta tokbuf+3,x
+    inx
+    lda current_segment+1
+    sta tokbuf,x
+    inx
+    lda current_segment+2
+    sta tokbuf,x
+    inx
+    lda current_segment+3
+    sta tokbuf,x
+    inx
+    stx tok_pos
 
-    lda #4
-    adc tok_pos
-    sta tok_pos
-    ; If tok_pos == 0, abort with C=1
-    cmp #0
-    bne +
-    sec
-    rts
-+   ; expr_a += expr_a->[2:3] + 4
-    ldz #2
-    lda [expr_a],z
-    clc
-    adc #4
-    sta expr_result
-    inz
-    lda [expr_a],z
-    adc #0
-    sta expr_result+1
-    lda #0
-    sta expr_result+2
-    sta expr_result+3
-    ldq expr_result
-    clc
-    adcq expr_a
-    stq expr_a
-
-    bra @loop
-
-@end_loop
-    clc
-    rts
-
-
-; Input: current_file; source address, length are valid
-;   C=1: current file is null
-print_current_filename:
-    jsr file_entry_is_null
+    cpx #0
     bne +
     sec
     rts
 +
-    ldz #0
+
+    jsr next_segment_traversal
+    jsr is_end_segment_traversal
+    bcc +
+    bra @end
++   jsr is_file_marker_segment_traversal
+    lbcc @loop
+@end
+
+    ; TODO: sort tokbuf by segment PC
+
+    clc
+    rts
+
+
+; Input: current_file = file marker
+print_current_filename:
+    ldz #4
     ldq [current_file]
     sta line_addr
     stx line_addr+1
     sty bas_ptr+2
     stz bas_ptr+3
-    ldz #4
+    ldz #8
     lda [current_file],z
     tay
     ldx #0
     jsr print_bas_str
-    clc
+    rts
+
+; Input: current_file = file marker
+print_current_filetype:
+    ldz #9
+    lda [current_file],z
+    and #F_FILE_MASK
+    cmp #F_FILE_CBM
+    bne +
+    ldx #<kw_cbm
+    ldy #>kw_cbm
+    bra ++
++   cmp #F_FILE_PLAIN
+    bne +
+    ldx #<kw_plain
+    ldy #>kw_plain
+    bra ++
++   ldx #<kw_runnable
+    ldy #>kw_runnable
+++  jsr print_cstr
     rts
 
 
@@ -712,71 +664,98 @@ write_runnable_file:
     rts
 
 
-; Inputs: current_file = file entry to create, non-null; assembled segments
-; Outputs: err_code=0 success; err_code>0 fatal error, stop processing
-create_file_for_segments:
-    +debug_print "[create file]"
-    ; Generate segment list for file, sorted by PC.
+; Input: assembled segment table with file markers
+; Output: err_code>0 fatal error, abort
+create_files_for_segments:
+    clc
+    jsr start_segment_traversal
+
+    ; No segments at all? Say so, exit ok.
+    jsr is_end_segment_traversal
+    bcc +
+    +kprimm_start
+    !pet "nothing to do",13,0
+    +kprimm_end
+    rts
++
+    ; First segment not a file marker? Error.
+    jsr is_file_marker_segment_traversal
+    bcs +
+    lda #err_segment_without_a_file
+    sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
+    rts
++
+
+@file_loop
+    ; current_segment is a file marker.
+    ldq current_segment
+    stq current_file
+    jsr next_segment_traversal
+    lda #chr_doublequote
+    +kcall bsout
+    jsr print_current_filename
+    +kprimm_start
+    !pet "\", ",0
+    +kprimm_end
+    jsr print_current_filetype
+
+    ; Check for empty file states.
+    jsr is_end_segment_traversal
+    bcs +
+    jsr is_file_marker_segment_traversal
+    bcc ++
++   +kprimm_start
+    !pet ": no segments for file, skipping",13,0
+    +kprimm_end
+    jsr is_file_marker_segment_traversal
+    bcs @file_loop
+    ; Early end of segments.
+    rts
+++  lda #':'
+    +kcall bsout
+    lda #chr_cr
+    +kcall bsout
+
+    ; Generate segment list for file on tokbuf, sorted by PC.
     jsr generate_segment_list_for_file
     bcc +
     lda #err_out_of_memory
     sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
     rts
 +
-    jsr print_current_filename
-    ; If list is empty, say so and exit (ok).
-    lda tok_pos
-    bne +
-    +kprimm_start
-    !pet ": no segments assembled, skipping",13,0
-    +kprimm_end
-    rts
-+
-    ; Sort the result by PC.
-    jsr sort_segments_for_file
 
-    ; Open file for writing.
+    ; Open file.
     ; TODO
-    +debug_print "[open]"
-    ; +kprimm_start
-    ; !pet ": error opening file",13,0
-    ; +kprimm_end
-    ; (err_code?)
-    ; rts
 
-    ; Choose path based on file type.
-    ldz #5
+    ; tokbuf contains sorted segment record addresses.
+    ; tok_pos = 4 * number of segments (next tokbuf pos).
+    ldz #9
     lda [current_file],z
     and #F_FILE_MASK
-    cmp #F_FILE_RUNNABLE
+    cmp #F_FILE_CBM
     bne +
-    +kprimm_start
-    !pet ", runnable:",13,0
-    +kprimm_end
-    jsr write_runnable_file
-    bcc ++
-    rts
-+   cmp #F_FILE_CBM
-    bne +
-    +kprimm_start
-    !pet ", cbm:",13,0
-    +kprimm_end
     jsr write_cbm_file
-    bcc ++
-    rts
-+   +kprimm_start
-    !pet ", plain:",13,0
-    +kprimm_end
+    bra ++
++   cmp #F_FILE_PLAIN
+    bne +
     jsr write_plain_file
-    bcc ++
-    rts
+    bra ++
++   jsr write_runnable_file
 ++
-
-    ; Close the file.
-    +debug_print "[close]"
+    ; Close file.
     ; TODO
 
-    clc
+    ; Report errors during write.
+    ; TODO
+
+    jsr is_end_segment_traversal
+    lbcc @file_loop
     rts
 
 
@@ -801,16 +780,10 @@ assemble_to_disk_cmd:
     rts
 +
 
-    ; Process each file in file-table order.
-    jsr first_file_entry
--   jsr file_entry_is_null
-    beq +
-    jsr create_file_for_segments
+    jsr create_files_for_segments
     lda err_code
     bne @assemble_to_disk_error_no_pos
-    jsr next_file_entry
-    bra -
-+
+
     +kprimm_start
     !pet 13,"# assemble to disk complete",13,0
     +kprimm_end
@@ -1071,6 +1044,7 @@ hex_nyb:
 
 ; Input: err_code, line_pos, line_addr
 ; - If line_pos = $FF, don't print line
+; - If line_addr = $0000, don't print line number
 print_error:
     lda err_code
     bne +        ; zero = no error
@@ -1085,6 +1059,15 @@ print_error:
     lda err_message_tbl,x
     tax
     jsr print_cstr
+
+    lda line_addr
+    ora line_addr+1
+    bne +
+    lda #chr_cr
+    +kcall bsout
+    rts
++
+
     +kprimm_start
     !pet " in line ",0
     +kprimm_end
@@ -2252,8 +2235,9 @@ set_symbol_value:
 ; ------------------------------------------------------------
 ; Segment table
 ; ------------------------------------------------------------
-; Record: (pc16, size16, data...)
-; Null terminated (4-byte header).
+; Segment:         (pc16,  size16, data...)
+; File marker:     ($0000, $FFFF,  fnameaddr32, fnamelen8, flags)
+; Null terminator: ($0000, $0000)
 
 ; Initializes the segment table.
 init_segment_table:
@@ -2350,6 +2334,8 @@ assemble_bytes:
     bne +
     lda #err_pc_undef
     sta err_code
+    lda #$ff
+    sta line_pos
     sec
     rts
 +
@@ -2371,6 +2357,9 @@ assemble_bytes:
     bpl +
     lda #err_out_of_memory
     sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
     sec
     rts
 +
@@ -2468,10 +2457,13 @@ assemble_bytes:
     bcc +
     lda #err_pc_overflow
     sta err_code
+    lda #$ff
+    sta line_pos
 +   rts
 
 
 ; Input: completed assembly
+;   C=1: skip file markers
 ; Output: current_segment = ptr to first segment, or to null segment if table emtpy
 start_segment_traversal:
     lda #<attic_segments
@@ -2482,15 +2474,35 @@ start_segment_traversal:
     sta current_segment+2
     lda #<(attic_segments >>> 24)
     sta current_segment+3
-    rts
+
+    bcc +
+    jsr is_file_marker_segment_traversal
+    bcc +
+    jsr next_segment_traversal_skip_file_markers
+
++   rts
+
 
 ; Input: completed assembly; current_segment points to an entry or to null terminator
 ; Output: If current_segment not null, advanced.
 next_segment_traversal:
     jsr is_end_segment_traversal
     bcc +
+    ; Do nothing if current segment is already the end.
     rts
-+   ldz #2
+
++   jsr is_file_marker_segment_traversal
+    bcc +
+    ; Advance across one file marker.
+    lda #0
+    tax
+    tay
+    taz
+    lda #$0a
+    bra ++
+
++   ; Advance across a data segment.
+    ldz #2
     clc
     lda [current_segment],z
     adc #4
@@ -2502,10 +2514,33 @@ next_segment_traversal:
     tya
     ldy #0
     ldz #0  ; Q = length + 4
-    clc
+
+++  clc
     adcq current_segment
     stq current_segment  ; current_segment += length + 4
     rts
+
+skip_file_markers:
+    ; Skip zero or more file markers.
+-   jsr is_file_marker_segment_traversal
+    bcc +
+    ; Skip file marker
+    lda #0
+    tax
+    tay
+    taz
+    lda #$0a
+    clc
+    adcq current_segment
+    stq current_segment
+    bra -
++   rts
+
+next_segment_traversal_skip_file_markers:
+    jsr next_segment_traversal
+    jsr skip_file_markers
+    rts
+
 
 ; Input: completed assembly; current_segment points to an entry or to null terminator
 ; Output:
@@ -2519,6 +2554,31 @@ is_end_segment_traversal:
     ora [current_segment],z
     inz
     ora [current_segment],z
+    bne +
+    sec
+    rts
++   clc
+    rts
+
+; Input: completed assembly; current_segment points to an entry or to null terminator
+; Output:
+;   C=1: current_segment points to end of list.
+is_file_marker_segment_traversal:
+    ldz #0
+    lda [current_segment],z
+    cmp #$00
+    bne +
+    inz
+    lda [current_segment],z
+    cmp #$00
+    bne +
+    inz
+    lda [current_segment],z
+    cmp #$ff
+    bne +
+    inz
+    lda [current_segment],z
+    cmp #$ff
     bne +
     sec
     rts
@@ -2550,6 +2610,7 @@ does_a_segment_overlap:
     adc expr_a+3
     sta expr_a+3  ; expr_a.0-1: start, expr_a.2-3: end+1
 
+    sec
     jsr start_segment_traversal
 
 @search_loop:
@@ -2558,6 +2619,7 @@ does_a_segment_overlap:
     clc
     rts
 +
+
     ; If requested, skip the segment if address in expr_result.
     ; (For do_any_segments_overlap.)
     bit asm_flags
@@ -2610,7 +2672,7 @@ does_a_segment_overlap:
 
 @next
     ; No overlap. Next segment...
-    jsr next_segment_traversal
+    jsr next_segment_traversal_skip_file_markers
     lbra @search_loop
 
 
@@ -2620,6 +2682,7 @@ does_a_segment_overlap:
 ;      current_segment and expr_result are pointers to overlapping entries
 ; Uses expr_result.
 do_any_segments_overlap:
+    sec
     jsr start_segment_traversal
 @outer_loop
     jsr is_end_segment_traversal
@@ -2637,7 +2700,7 @@ do_any_segments_overlap:
     rts
 +   ldq expr_result
     stq current_segment
-    jsr next_segment_traversal
+    jsr next_segment_traversal_skip_file_markers
     lbra @outer_loop
 
 
@@ -2747,78 +2810,6 @@ add_forced16:
     inz
     sta [attic_ptr],z
 +   rts
-
-
-; ------------------------------------------------------------
-; File table
-; ------------------------------------------------------------
-; Record, 10 bytes: (fnameaddr32, fnamelen8, flags8, segaddr32)
-; List is null terminated
-
-first_file_entry:
-    lda #<attic_files
-    ldx #>attic_files
-    ldy #^attic_files
-    ldz #<(attic_files >>> 24)
-    stq current_file
-    rts
-
-; Outputs: Z=1 if current_file entry is null
-file_entry_is_null:
-    ldz #$0A-1
-    lda [current_file],z
--   dez
-    ora [current_file],z
-    cpz #0
-    bne -
-    cmp #0
-    rts
-
-make_current_file_zero:
-    ldz #$0A-1
-    lda #0
--   sta [current_file],z
-    dez
-    bpl -
-    clc
-    rts
-
-init_file_table:
-    jsr first_file_entry
-    jsr make_current_file_zero
-    rts
-
-; Outputs:
-;   C=0 ok, C=1 out of memory
-;   current_file is advanced
-; Does nothing if current_file is pointing at a null entry.
-next_file_entry:
-    jsr file_entry_is_null
-    bne +
-    clc
-    rts
-+
-    lda #0
-    tax
-    tay
-    taz
-    lda #$0A
-    clc
-    adcq current_file
-    stq expr_a  ; expr_a = current_file + record length
-    lda #<attic_files_end
-    ldx #>attic_files_end
-    ldy #^attic_files_end
-    ldz #$08
-    cpq expr_a
-    bcs +
-    ; Out of memory
-    sec
-    rts
-+
-    ldq expr_a
-    stq current_file
-    rts
 
 
 ; ------------------------------------------------------------
@@ -5099,14 +5090,25 @@ assemble_dir_to:
     lbra statement_ok_exit
 +
     pha  ; mode flag
-
-    ; expr_a = filename pos, expr_a+1 = filename length, A = mode flag
-    ldz #5
-    sta [current_file],z
-    dez
     lda expr_a+1
-    sta [current_file],z
-    ; filename address = line_addr + filename pos
+    pha  ; filename length
+
+    ; Add a file marker to the segment table.
+    ; ($0000, $FFFF, fnameaddr32, fnamelen8, flags8)
+    ldz #0
+    lda #0
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
+    inz
+    lda #$ff
+    sta [next_segment_byte_addr],z
+    inz
+    sta [next_segment_byte_addr],z
+    inz
+
+    ; expr_a = filename pos
+    ; expr_a = filename address = line_addr + filename pos
     lda #0
     sta expr_a+1
     sta expr_a+2
@@ -5115,26 +5117,59 @@ assemble_dir_to:
     sta bas_ptr
     lda line_addr+1
     sta bas_ptr+1
+    phz
     ldq bas_ptr    ; Adopt whatever bas_ptr's high bytes are
     clc
     adcq expr_a  ; Q = filename address
-    stq [current_file]  ; Z ignored
+    stq expr_a
+    plz
+    lda expr_a
+    sta [next_segment_byte_addr],z
+    inz
+    lda expr_a+1
+    sta [next_segment_byte_addr],z
+    inz
+    lda expr_a+2
+    sta [next_segment_byte_addr],z
+    inz
+    lda expr_a+3
+    sta [next_segment_byte_addr],z
+    inz
 
-    ldz #6
-    lda current_segment
-    sta [current_file],z
+    pla  ; length
+    sta [next_segment_byte_addr],z
     inz
-    lda current_segment+1
-    sta [current_file],z
+    pla  ; flags
+    sta [next_segment_byte_addr],z
+    pha
     inz
-    lda current_segment+2
-    sta [current_file],z
-    inz
-    lda current_segment+3
-    sta [current_file],z
+
+    ; Advance next_segment_byte_addr and current_segment to this location.
+    tza
+    clc
+    adc next_segment_byte_addr
+    sta next_segment_byte_addr
+    lda #0
+    adc next_segment_byte_addr+1
+    sta next_segment_byte_addr+1
+    lda #0
+    adc next_segment_byte_addr+2
+    sta next_segment_byte_addr+2
+    lda #0
+    adc next_segment_byte_addr+3
+    sta next_segment_byte_addr+3
+    ldq next_segment_byte_addr
+    stq current_segment
+
+    ; Write new null terminator
+    ldz #7
+    lda #0
+-   sta [next_segment_byte_addr],z
+    dez
+    bpl -
 
     ; Runnable sets PC; other modes un-set PC
-    pla
+    pla  ; flags
     cmp #F_FILE_RUNNABLE
     bne +
     ldx #<bootstrap_ml_start
@@ -5145,9 +5180,6 @@ assemble_dir_to:
     and #!F_ASM_PC_DEFINED
     sta asm_flags
 ++
-
-    jsr next_file_entry
-    jsr make_current_file_zero
     lbra statement_ok_exit
 
 
@@ -5372,7 +5404,7 @@ assemble_source:
 
 err_message_tbl:
 !word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
-!word e16
+!word e16,e17
 
 err_messages:
 err_syntax = 1
@@ -5407,6 +5439,8 @@ err_division_by_zero = 15
 e15: !pet "division by zero",0
 err_unsupported_cpu_mode = 16
 e16: !pet "unsupported cpu mode",0
+err_segment_without_a_file = 17
+e17: !pet "segment without a file, missing !to", 0
 
 warn_message_tbl:
 !word w01

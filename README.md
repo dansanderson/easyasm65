@@ -7,10 +7,11 @@ Features:
 * Supports a subset of the [Acme cross-assembler](https://sourceforge.net/projects/acme-crossass/) syntax and features.
 * Maintains a minimal memory footprint when running your program or during editing, so you can use the full power of your computer.
 * Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
+* Maintains your display settings: screen mode, upper/lowercase, colors.
 * Assembles to memory for testing, or to disk files for distribution.
 * Can produce a single-file bootstrap loader as part of your program.
 * Can store multiple memory segments on disk compactly in a single file, with bootstrap code that positions segments automatically.
-* Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. You can restore source code manually after an abnormal exit.
+* Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code after an abnormal exit.
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
@@ -21,12 +22,9 @@ This is EasyAsm version 0.1.
 **All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
 Release 0.1:
-* This is a pre-release version. There may still be catastrophic bugs and incorrect assembly. Only assembling to memory is currently supported.
+* Initial release.
 
 1.0 roadmap:
-* `!to "...", cbm` and `plain`; gaps between segments filled on disk
-* `!to "...", runnable`; segments relocated by bootstrap, no gaps on disk
-* Multi-file output, multiple `!to` allowed
 * Relative labels (`+`, `++`, `-`, `--`)
 * `!binary`
 * `!source`
@@ -38,7 +36,7 @@ Far future:
 * Zones and real locals
 * Macros
 * Conditional assembly, conditional expressions
-* A nice built-in editor
+* A nice text editor
 
 ## An important note
 
@@ -268,7 +266,7 @@ Of course, EasyAsm has to live somewhere. This is what EasyAsm needs:
 * EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8700000-$87FFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
 * EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you invoke EasyAsm. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running. Overwriting this memory may inhibit EasyAsm's ability to return to the `OK` prompt on `rts`.
 
-As a safety precaution, EasyAsm will not assemble to addresses $1E00-$1EFF when assembling to memory. This restriction does not apply when assembling to disk.
+EasyAsm will refuse to assemble to addresses $1E00-$1EFF when assembling to memory, or when assembling a "runnable" program to disk (because the bootstrap routine may use it). This restriction does not apply when assembling to disk in "cbm" or "plain" mode.
 
 EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
@@ -752,6 +750,12 @@ EasyAsm supports the following assembler directives.
 
 Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address), `plain` (PRG without address), or `runnable` (bootstrap routine).
 
+`cbm` and `plain` must be followed by assignment of the program counter before the first instruction, e.g. `* = $1600`. `runnable` sets a default starting program counter, which can optionally be reassigned.
+
+A source file can provide more than one `!to` directive to create multiple files. Each file will contain the segments defined up to the next `!to` directive, or to the end of the source file otherwise. Note that none of the segments in the program are allowed to overlap, even when being saved to separate files, so that the program can also be assembled to memory.
+
+Assembling to disk will report an error if any instructions or data appear before the first `!to` directive. This is not an error when assembling to memory.
+
 EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
 ### `!byte` or `!8`, `!word` or `!16`, `!32`
@@ -840,13 +844,10 @@ EasyAsm has the following limitations compared to the Acme assembler.
 * No macros
 * No conditional or looping assembly
 * No symbol list output
-* No fractional number values
-* No fractional division operator
-* No Boolean values
-* No conditional expressions
-* No value lists (used as arguments to macros)
+* No fractional number values or fractional division operator
+* No Boolean values or conditional expressions
 * No zones (but "cheap" local symbols are supported)
-* No CPUs other than the 45GS02
+* No CPUs other than the 45GS02 (`!cpu m65`)
 * No assembler directives (pseudo-ops) or directive aliases other than those listed
 * No mathematical functions or operators other than those listed
 * No `0x` and `0b` syntax for hex and binary literals (use `$...` and `%...`)

@@ -52,38 +52,6 @@ test_assemble_line_12: !pet 1,2,3,4,"label1 label2",0
 test_assemble_line_13: !byte 0,0,0,0,0
 
 
-!macro test_file_table .tnum, .count {
-    +test_start .tnum
-
-    jsr init_file_table
-    ldy #.count
--   cpy #0
-    beq +
-    ldz #0
-    lda #1
-    sta [current_file],z ; make entry non-zero
-    phy
-    jsr next_file_entry
-    jsr make_current_file_zero
-    ply
-    dey
-    bra -
-+
-    jsr first_file_entry
-    ldx #0
--   jsr file_entry_is_null
-    beq +
-    inx
-    phx
-    jsr next_file_entry
-    plx
-    bra -
-+   cpx #.count
-    +assert_eq test_msg_wrong_result
-
-    +test_end
-}
-
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
@@ -105,12 +73,6 @@ run_test_suite_cmd:
     +test_assemble_line $0D, test_assemble_line_13, 1, 0, 0+4
 
     ; TODO: assert segment bytes for successful statements
-
-    +print_chr chr_cr
-    +print_strlit_line "test-file-table"
-    +test_file_table $01, 0
-    +test_file_table $02, 1
-    +test_file_table $03, 3
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
