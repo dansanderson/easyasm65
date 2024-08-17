@@ -19,8 +19,10 @@ TEST_SUITES = \
 	test_suite_4.asm \
 	test_suite_5.asm \
 	test_suite_6.asm \
-	test_suite_7.asm
-NUM_OF_SUITES = 7
+	test_suite_7.asm \
+	test_suite_8.asm \
+	test_suite_9.asm
+NUM_OF_SUITES = 9
 
 %.prg: %.asm
 	${ACME} -DTEST_SUITE=${TEST_SUITE} -f cbm -o $@ -l $@.lst -r $@.rpt $<

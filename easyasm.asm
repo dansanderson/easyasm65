@@ -39,7 +39,6 @@ F_ASM_PC_DEFINED = %00000001
 F_ASM_FORCE_MASK = %00000110
 F_ASM_FORCE8     = %00000010
 F_ASM_FORCE16    = %00000100
-F_ASM_F16IMM     = %00000110
 ; - expect_addressing_expr subtracts address arg from PC for branching
 F_ASM_AREL_MASK  = %00011000
 F_ASM_AREL8      = %00001000
@@ -1369,8 +1368,6 @@ accept_whitespace_and_comment:
 ; Output:
 ;   If found, C=1, Z advanced (line_pos not)
 ;   If not found, C=0, Z = unchanged
-; TODO: should line_pos be the input for consistency, or am I really using Z
-; distinct from line_pos?
 accept_ident:
     bcs +
     ; Must start with letter
@@ -1870,7 +1867,7 @@ tokenize:
     bra @tokenize_loop
 
 +++ ; Mnemonic
-    phz  ; TODO: tokenize routines should put Z back to start?
+    phz
     jsr tokenize_mnemonic
     plz
     bcc +++
@@ -3006,32 +3003,23 @@ expect_literal:
 ; ------------------------------------------------------------
 
 ; Input: expr_result
-;   C=1 if signed, C=0 unsigned
 ; Output:
 ;   C=1 if:
-;      signed:
-;        high word = ffff and low word >= 8000, or
-;        high word = 0000 and low word < 8000
-;      unsigned:
-;        high word = 0000 or ffff
+;     high word = ffff and low word >= 8000, or
+;     high word = 0000 and low word < 8000
 ;   Else, C=0
 is_expr_word:
     lda expr_result+3
     and expr_result+2
     cmp #$ff
     bne +
-    bcc @yes
     lda expr_result+1
     and #$80
     bne @yes
     bra @no
 +   lda expr_result+3
     ora expr_result+2
-    bne @no
-    bcc @yes
-    lda expr_result+1
-    cmp #$80
-    bcc @yes
+    beq @yes
 @no
     clc
     rts
@@ -3040,14 +3028,10 @@ is_expr_word:
     rts
 
 ; Input: expr_result
-;   C=1 if signed, C=0 unsigned
 ; Output:
 ;   C=1 if:
-;     signed:
-;       high word+byte = ffffff and LSB >= 80, or
-;       high word+byte = 000000 and LSB < 80
-;     unsigned:
-;       high word+byte = ffffff or 000000
+;     high word+byte = ffffff and LSB >= 80, or
+;     high word+byte = 000000
 ;   Else, C=0
 is_expr_byte:
     lda expr_result+3
@@ -3055,7 +3039,6 @@ is_expr_byte:
     and expr_result+1
     cmp #$ff
     bne +
-    bcc @yes
     lda expr_result
     and #$80
     bne @yes
@@ -3063,11 +3046,7 @@ is_expr_byte:
 +   lda expr_result+3
     ora expr_result+2
     ora expr_result+1
-    bne @no
-    bcc @yes
-    lda expr_result
-    cmp #$80
-    bcc @yes
+    beq @yes
 @no
     clc
     rts
@@ -4115,28 +4094,8 @@ expect_addressing_expr:
     bcs @try_modes_with_leading_expr
     jsr expect_expr
     lbcs @addr_error
-    lda asm_flags
-    and #F_ASM_F16IMM
-    beq +
-    +expect_addresing_expr_rts MODE_IMMEDIATE_WORD
-+   ; Value must be in byte range, signed or unsigned
-    lda expr_result+1
-    ora expr_result+2
-    ora expr_result+3
-    beq +  ; Positive 0 - 255
-    lda expr_result+1
-    and expr_result+2
-    and expr_result+3
-    cmp #$ff
-    bne ++
-    lda expr_result+0
-    cmp #$80
-    bcs ++
-    ; Negative -128 - +127
-+   +expect_addresing_expr_rts MODE_IMMEDIATE
-++  lda #err_value_out_of_range
-    sta err_code
-    lbra @addr_error
+    ; Caller will coerce type to MODE_IMMEDIATE_WORD as needed.
+    +expect_addresing_expr_rts MODE_IMMEDIATE
 
 @try_modes_with_leading_expr
     ; Check if the current PC is on the "forced16" list.
@@ -4445,46 +4404,6 @@ assemble_instruction:
     adc instr_mode_rec_addr+1
     sta instr_mode_rec_addr+1  ; instr_mode_rec_addr = address of mode record for mnemonic
 
-    ; Force 16-bit if instruction only accepts 16-bit arguments
-    ; (Note that FORCE16 will not force Immediate Word mode, so LDZ is fine.)
-    ;
-    ; TODO: This is not implemented correctly. If there is no FOO ZP, FOO Addr
-    ; should coerce FOO $fc to FOO $00fc, even if FOO has other byte-sized
-    ; operand modes. This is only doing it if FOO *only* has word-sized
-    ; operand modes.
-    ldy #0
-    lda (instr_mode_rec_addr),y
-    and #<MODES_WORD_OPERAND
-    bne +
-    ldy #1
-    lda (instr_mode_rec_addr),y
-    and #>MODES_WORD_OPERAND
-    beq +++  ; does not have word operand modes
-+   ldy #0
-    lda (instr_mode_rec_addr),y
-    and #<MODES_BYTE_OPERAND
-    bne +++  ; also has byte operand modes, no force
-    ldy #1
-    lda (instr_mode_rec_addr),y
-    and #>MODES_BYTE_OPERAND
-    bne +++
-    ; Only has word operand modes. Coerce operands to 16-bit.
-    ; (Overrides "+1", which is inappropriate in this case anyway.)
-    lda asm_flags
-    and #!F_ASM_FORCE_MASK
-    ora #F_ASM_FORCE16
-    sta asm_flags
-+++
-
-    ; Force 16-bit immediate just for PHW
-    lda instr_mnemonic_id
-    cmp #mnemonic_phw
-    bne +++
-    lda asm_flags
-    ora #F_ASM_F16IMM
-    sta asm_flags
-+++
-
     ; Set AREL8/AREL16 for branch/long branch instructions
     lda instr_mnemonic_id
     jsr is_branch_mnemonic
@@ -4515,6 +4434,41 @@ assemble_instruction:
     lbcs statement_err_exit
     stx instr_addr_mode
     sty instr_addr_mode+1
+
+    ; Coerce 8-bit to 16-bit:
+    ; - If ZP,Y, and instruction supports Addr,Y but not ZP,Y
+    ; - If Imm-8, and instruction supports Imm-16 but not Imm-8
+    ; As far as I can tell there are no other coercion cases.
+    ; (ZP,Y is in the high byte, Addr,Y is in the low byte)
+    lda instr_addr_mode+1
+    cmp #>MODE_BASE_PAGE_Y
+    bne +
+    ldy #1
+    lda (instr_mode_rec_addr),y
+    and #>MODE_BASE_PAGE_Y
+    bne ++  ; ZP,Y supported
+    dey
+    lda (instr_mode_rec_addr),y
+    and #<MODE_ABSOLUTE_Y
+    beq ++  ; Addr,Y not supported
+    lda #<MODE_ABSOLUTE_Y
+    sta instr_addr_mode
+    lda #0
+    sta instr_addr_mode+1
+    bra ++
+    ; (Imm and Imm-8 are both in the high byte)
++   cmp #>MODE_IMMEDIATE
+    bne ++
+    ldy #1
+    lda (instr_mode_rec_addr),y
+    and #>MODE_IMMEDIATE
+    bne ++  ; Imm-8 supported
+    lda (instr_mode_rec_addr),y
+    and #>MODE_IMMEDIATE_WORD
+    beq ++  ; Imm-16 not supported
+    lda #>MODE_IMMEDIATE_WORD
+    sta instr_addr_mode+1
+++
 
     ; Match addressing mode to opcode; error if not supported
     ldy #0
@@ -5452,6 +5406,7 @@ w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
 ; Mnemonics token list
 mnemonics:
 !pet "adc",0   ; $01
+mnemonic_adc = $01
 !pet "adcq",0  ; $02
 mnemonic_adcq = $02
 !pet "and",0   ; $03
@@ -5544,6 +5499,7 @@ mnemonic_lbcc = $43
 !pet "lbvs",0  ; $4B
 mnemonic_lbvs = $4B
 !pet "lda",0   ; $4C
+mnemonic_lda = $4C
 !pet "ldq",0   ; $4D
 mnemonic_ldq = $4D
 !pet "ldx",0   ; $4E
@@ -5623,6 +5579,7 @@ mnemonic_stq = $81
 !pet "tya",0   ; $90
 !pet "tys",0   ; $91
 !pet "tza",0   ; $92
+mnemonic_tza = $92
 !byte 0
 tokid_after_mnemonics = $93
 
@@ -6322,6 +6279,10 @@ bootstrap_segment_installer_end:
         !source "test_suite_6.asm"
     } else if TEST_SUITE = 7 {
         !source "test_suite_7.asm"
+    } else if TEST_SUITE = 8 {
+        !source "test_suite_8.asm"
+    } else if TEST_SUITE = 9 {
+        !source "test_suite_9.asm"
     } else {
         !error "Invalid TEST_SUITE; check Makefile"
     }
