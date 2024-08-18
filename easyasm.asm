@@ -550,6 +550,232 @@ assemble_to_memory_cmd:
 ; Assemble to Disk command
 ; ------------------------------------------------------------
 
+; Inputs: X = tok_pos A, Y = tok_pos B
+;   tokbuf at those positions = 32-bit segment addresses
+; Output: C=0: A < B; C=1: A >= B
+; Uses expr_b, program_counter
+compare_segments_for_sort:
+    lda tokbuf,x
+    sta expr_b
+    lda tokbuf+1,x
+    sta expr_b+1
+    lda tokbuf+2,x
+    sta expr_b+2
+    lda tokbuf+3,x
+    sta expr_b+3
+    ldz #0
+    lda [expr_b],z
+    sta program_counter
+    inz
+    lda [expr_b],z
+    sta program_counter+1
+
+    lda tokbuf,y
+    sta expr_b
+    lda tokbuf+1,y
+    sta expr_b+1
+    lda tokbuf+2,y
+    sta expr_b+2
+    lda tokbuf+3,y
+    sta expr_b+3
+    ldz #1
+    lda program_counter+1
+    cmp [expr_b],z
+    bne +
+    dez
+    lda program_counter
+    cmp [expr_b],z
++
+    rts
+
+; Inputs: X = tok_pos A, Y = tok_pos B
+;   tokbuf at those positions = 32-bit segment addresses
+; Outputs: entries swapped in tokbuf
+; Uses expr_b
+swap_segments_for_sort:
+    jsr compare_segments_for_sort
+    bcs +
+    rts
++
+    lda tokbuf,x
+    sta expr_b
+    lda tokbuf+1,x
+    sta expr_b+1
+    lda tokbuf+2,x
+    sta expr_b+2
+    lda tokbuf+3,x
+    sta expr_b+3
+
+    lda tokbuf,y
+    sta tokbuf,x
+    lda tokbuf+1,y
+    sta tokbuf+1,x
+    lda tokbuf+2,y
+    sta tokbuf+2,x
+    lda tokbuf+3,y
+    sta tokbuf+3,x
+
+    lda expr_b
+    sta tokbuf,y
+    lda expr_b+1
+    sta tokbuf+1,y
+    lda expr_b+2
+    sta tokbuf+2,y
+    lda expr_b+3
+    sta tokbuf+3,y
+
+    rts
+
+; Inputs: Y=tokbuf pos, line_pos=strbuf pos
+; Outputs: strbuf added 4 bytes; line_pos advanced; Y=new tokbuf pos
+add_segment_entry_to_strbuf_for_merge:
+    ldx line_pos
+    ldz #4
+-   lda tokbuf,y
+    sta strbuf,x
+    iny
+    inx
+    dez
+    bne -
+    stx line_pos
+    rts
+
+; Inputs: A=start A, X=end A+4=start B, Y=end B+4
+; Outputs: merges sorted entry ranges in tokbuf
+; Uses expr_a, expr_b, strbuf, line_pos
+merge_segments_for_sort:
+    pha  ; hoo boy, this is for the very end
+
+    sta expr_a    ; expr_a[0] = A list pos
+    stx expr_a+1  ; expr_a[1] = B list pos
+    stx expr_a+2  ; expr_a[2] = A list end+4
+    sty expr_a+3  ; expr_a[3] = B list end+4
+    lda #0
+    sta line_pos  ; line_pos = strbuf pos
+
+    ; Assumes each list has at least one element.
+@merge_loop
+    ldx expr_a
+    ldy expr_a+1
+    jsr compare_segments_for_sort
+    bcs +
+    ; Consume A
+    ldy expr_a
+    jsr add_segment_entry_to_strbuf_for_merge
+    cpy expr_a+2
+    beq @rest_of_b
+    sty expr_a
+    bra @merge_loop
++   ; Consume B
+    ldy expr_a+1
+    jsr add_segment_entry_to_strbuf_for_merge
+    cpy expr_a+3
+    beq @rest_of_a
+    sty expr_a+1
+    bra @merge_loop
+
+@rest_of_a
+    ; Consume rest of A
+    ldy expr_a
+-   jsr add_segment_entry_to_strbuf_for_merge
+    cpy expr_a+2
+    bne -
+    bra @copy_strbuf_to_tokbuf
+@rest_of_b
+    ; Consume rest of B
+    ldy expr_a+1
+-   jsr add_segment_entry_to_strbuf_for_merge
+    cpy expr_a+3
+    bne -
+@copy_strbuf_to_tokbuf
+    lda line_pos
+    taz
+    ldx #0
+    pla
+    tay
+-   lda strbuf,x
+    sta tokbuf,y
+    inx
+    iny
+    dez
+    bne -
+    rts
+
+; Inputs: X = start tok_pos, Y = end tok_pos+1
+;   tokbuf in that range = list of 32-bit segment addresses
+; Outputs: tokbuf sorted; tok_pos reset to tokbuf length
+; Called recursively.
+; Uses expr_a[0:1], expr_b internally, protected across recursive calls.
+sort_segment_list:
+    stx expr_a
+    sty expr_a+1
+    tya
+    sec
+    sbc expr_a
+    cmp #8
+    bcs +
+    ; < 2 items
+    rts
++   bne ++
+    ; = 2 items
+    ; (Special-casing 2 entries makes midpoint calculation easier later.)
+    lda expr_a
+    tax
+    inc
+    inc
+    inc
+    inc
+    tay
+    jsr swap_segments_for_sort
+    rts
+
+++  ; > 2 items
+    asr
+    asr  ; A = # of items
+    asr  ; A = floor(# of items / 2)
+    asl
+    asl  ; A = tokbuf offset from X to midpoint entry
+    adc expr_a  ; A = start + midpoint offset
+
+    ; sort_segment_list(expr_a[0], A)
+    tay
+    pha
+    lda expr_a
+    pha
+    lda expr_a+1
+    pha
+    ldx expr_a
+    jsr sort_segment_list
+    pla
+    sta expr_a+1
+    pla
+    sta expr_a
+    pla
+
+    ; sort_segment_list(A, expr_a[1])
+    tax
+    pha
+    lda expr_a
+    pha
+    lda expr_a+1
+    pha
+    tay
+    jsr sort_segment_list
+    pla
+    sta expr_a+1
+    pla
+    sta expr_a
+    pla
+
+    ; merge [expr_a[0],A) and [A, expr_a[1])
+    ; (Clobbers expr_a, but that's ok)
+    tax
+    lda expr_a
+    ldy expr_a+1
+    jsr merge_segments_for_sort
+    rts
+
+
 ; Inputs: current_file; current_segment = first segment; assembled segments
 ; Outputs:
 ;   current_segment advanced to next file marker or null terminator
@@ -590,7 +816,10 @@ generate_segment_list_for_file:
     lbcc @loop
 @end
 
-    ; TODO: sort tokbuf by segment PC
+    ; Sort tokbuf by segment PC
+    ldx #0
+    ldy tok_pos
+    jsr sort_segment_list
 
     clc
     rts

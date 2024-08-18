@@ -95,6 +95,131 @@ tee_line_3: !pet "60 div 5 div 4",0
 tee_line_4: !pet "$f0f0f0f0 xor $ccaaccaa"
 
 
+!macro copy_seglist_for_test .start, .end {
+    ldx #.end-.start
+    dex
+-   lda .start,x
+    sta tokbuf,x
+    dex
+    bpl -
+}
+
+; Z=1 list is on tokbuf, Z=0 list is not on tokbuf
+!macro compare_seglist_for_test .estart, .eend {
+    ldx #.eend-.estart
+    dex
+-   lda .estart,x
+    cmp tokbuf,x
+    bne +
+    dex
+    bpl -
+    lda #0
++
+}
+
+!macro test_compare_segments_for_sort .tnum, .start, .end, .apos, .bpos, .ec {
+    +test_start .tnum
+    +copy_seglist_for_test .start, .end
+    ldx #.apos
+    ldy #.bpos
+    jsr compare_segments_for_sort
+    !if .ec {
+        +assert_cs test_msg_ecs
+    } else {
+        +assert_cc test_msg_ecc
+    }
+    +test_end
+}
+
+!macro test_swap_segments_for_sort .tnum, .start, .end, .apos, .bpos, .estart, .eend {
+    +test_start .tnum
+    +copy_seglist_for_test .start, .end
+    ldx #.apos
+    ldy #.bpos
+    jsr swap_segments_for_sort
+    +compare_seglist_for_test .estart, .eend
+    beq +
+    +debug_print "... fail: seglist not on tokbuf"
+    brk
++
+    +test_end
+}
+
+!macro test_add_segment_entry_to_strbuf_for_merge .tnum, .start, .end, .pos {
+    +test_start .tnum
+    lda #0
+    sta line_pos
+    +copy_seglist_for_test .start, .end
+    ldy #.pos
+    jsr add_segment_entry_to_strbuf_for_merge
+    ldq strbuf
+    cpq tokbuf+.pos
+    beq +
+    +debug_print "... fail: wrong value"
+    brk
++
+    +test_end
+}
+
+!macro test_merge_segments_for_sort .tnum, .start, .end, .startpos, .midpos, .endpos, .estart, .eend {
+    +test_start .tnum
+    +copy_seglist_for_test .start, .end
+    lda #.startpos
+    ldx #.midpos
+    ldy #.endpos
+    jsr merge_segments_for_sort
+    +compare_seglist_for_test .estart, .eend
+    beq +
+    +debug_print "... fail: seglist not on tokbuf"
+    brk
++
+    +test_end
+}
+
+!macro test_sort_segment_list .tnum, .start, .end, .estart, .eend {
+    +test_start .tnum
+
+    lda #$ff
+    ldx #0
+-   sta tokbuf,x
+    sta strbuf,x
+    inx
+    bne -
+
+    +copy_seglist_for_test .start, .end
+    ldx #0
+    ldy #.end-.start
+    jsr sort_segment_list
+    +compare_seglist_for_test .estart, .eend
+    beq +
+    +debug_print "... fail: seglist not on tokbuf"
+    brk
++
+    +test_end
+}
+
+test_pcs: !word $0010, $0020, $0030, $0040, $0050, $0060
+test_pcs5 = test_pcs + $50000
+test_seglist_sorted: !32 test_pcs5, test_pcs5+2, test_pcs5+4, test_pcs5+6, test_pcs5+8, test_pcs5+10
+test_seglist_sorted_end:
+test_seglist_one_swap: !32 test_pcs5, test_pcs5+6, test_pcs5+4, test_pcs5+2, test_pcs5+8, test_pcs5+10
+test_seglist_one_swap_end:
+test_seglist_merge: !32 test_pcs5, test_pcs5+4, test_pcs5+10, test_pcs5+2, test_pcs5+6, test_pcs5+8
+test_seglist_merge_end:
+test_seglist_reversed: !32 test_pcs5+10, test_pcs5+8, test_pcs5+6, test_pcs5+4, test_pcs5+2, test_pcs5
+test_seglist_reversed_end:
+test_seglist_mixed_6: !32 test_pcs5+6, test_pcs5+2, test_pcs5+8, test_pcs5+10, test_pcs5, test_pcs5+4
+test_seglist_mixed_6_end:
+test_seglist_mixed_2: !32 test_pcs5+6, test_pcs5+2
+test_seglist_mixed_2_end:
+test_seglist_mixed_2_result: !32 test_pcs5+2, test_pcs5+6
+test_seglist_mixed_2_result_end:
+test_seglist_mixed_3: !32 test_pcs5+6, test_pcs5+2, test_pcs5+8
+test_seglist_mixed_3_end:
+test_seglist_mixed_3_result: !32 test_pcs5+2, test_pcs5+6, test_pcs5+8
+test_seglist_mixed_3_result_end:
+
+
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
@@ -133,6 +258,31 @@ run_test_suite_cmd:
     +test_expect_expr $2B, "remainder b", tee_tb_39, tee_tb_40, tee_line_1, 0, 14, 6 % 7, 0
     +test_expect_expr $2C, "remainder c", tee_tb_40, tee_tb_41, tee_line_1, 0, 14, 7 % 7, 0
     +test_expect_expr $2D, "remainder d", tee_tb_41, tee_tb_end, tee_line_1, 0, 14, 8 % 7, 0
+
+    ; -----------------------------------
+
+    +print_chr chr_cr
+    +print_strlit_line "segment sorting"
+
+    +test_compare_segments_for_sort $01, test_seglist_sorted, test_seglist_sorted_end, 0, 4, 0
+    +test_compare_segments_for_sort $02, test_seglist_sorted, test_seglist_sorted_end, 4, 16, 0
+    +test_compare_segments_for_sort $03, test_seglist_sorted, test_seglist_sorted_end, 8, 0, 1
+    +test_compare_segments_for_sort $04, test_seglist_sorted, test_seglist_sorted_end, 20, 20, 1
+
+    +test_swap_segments_for_sort $05, test_seglist_one_swap, test_seglist_one_swap_end, 4, 12, test_seglist_sorted, test_seglist_sorted_end
+
+    +test_add_segment_entry_to_strbuf_for_merge $06, test_seglist_sorted, test_seglist_sorted_end, 8
+
+    +test_merge_segments_for_sort $07, test_seglist_merge, test_seglist_merge_end, 0, 12, 24, test_seglist_sorted, test_seglist_sorted_end
+
+    +test_sort_segment_list $08, test_seglist_sorted, test_seglist_sorted_end, test_seglist_sorted, test_seglist_sorted_end
+    +test_sort_segment_list $09, test_seglist_one_swap, test_seglist_one_swap_end, test_seglist_sorted, test_seglist_sorted_end
+    +test_sort_segment_list $0A, test_seglist_merge, test_seglist_merge_end, test_seglist_sorted, test_seglist_sorted_end
+    +test_sort_segment_list $0B, test_seglist_reversed, test_seglist_reversed_end, test_seglist_sorted, test_seglist_sorted_end
+    +test_sort_segment_list $0C, test_seglist_mixed_6, test_seglist_mixed_6_end, test_seglist_sorted, test_seglist_sorted_end
+
+    +test_sort_segment_list $0D, test_seglist_mixed_2, test_seglist_mixed_2_end, test_seglist_mixed_2_result, test_seglist_mixed_2_result_end
+    +test_sort_segment_list $0E, test_seglist_mixed_3, test_seglist_mixed_3_end, test_seglist_mixed_3_result, test_seglist_mixed_3_result_end
 
     ; -----------------------------------
 
