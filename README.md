@@ -28,9 +28,10 @@ Release 0.1:
 * Relative labels (`+`, `++`, `-`, `--`)
 * `!binary`
 * `!source`
+* Runnable with multiple segments or non-default starting address
 
-Far future:
-* Use EasyAsm code in bank 5 if it's already there, for Freezer compatibility
+Future:
+* Improved Freezer support (optional EasyAsm in bank 5)
 * List symbol definitions
 * List assembled bytes alongside source code
 * Zones and real locals

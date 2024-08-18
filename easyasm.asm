@@ -130,6 +130,13 @@ max_end_of_program = tokbuf
 ; KERNAL routines
 bsout = $ffd2
 primm = $ff7d
+open = $ffc0
+close = $ffc3
+ckout = $ffc9
+setbnk = $ff6b
+setlfs = $ffba
+setnam = $ffbd
+clrch = $ffcc
 
 ; MEGA65 registers
 dmaimm   = $d707
@@ -861,34 +868,243 @@ print_current_filetype:
     rts
 
 
-; Input: current_file; tokbuf, tok_pos with sorted segments
-write_cbm_file:
-    ; Write first segment's PC to file.
-    ; TODO
-    +debug_print "[cbm]"
-    ; Continue to write_plain_file...
-
-; Input: current_file; tokbuf, tok_pos with sorted segments
-write_plain_file:
-    ; TODO
-    ;    For each segment:
-    ;       Print segment msg.
-    ;       Write segment data.
-    ;       If not last segment, write zero fill.
-    +debug_print "[plain]"
-    clc
+; Input: current_segment -> segment header
+; Output:
+;   program_counter = segment PC
+;   expr_a = size
+get_header_for_current_segment:
+    ldz #0
+    lda [current_segment],z
+    sta program_counter
+    inz
+    lda [current_segment],z
+    sta program_counter+1  ; program_counter = segment PC
+    inz
+    lda [current_segment],z
+    sta expr_a
+    inz
+    lda [current_segment],z
+    sta expr_a+1
+    inz
+    lda #0
+    sta expr_a+2
+    sta expr_a+3  ; expr_a = size
     rts
 
-; Input: current_file; tokbuf, tok_pos with sorted segments
-write_runnable_file:
-    ; TODO
-    ;    Write BASIC preamble.
-    ;    If list is one entry at $2014, emit segment data. Print msg.
-    ;    Otherwise, write segment installer, then for each segment:
-    ;       Print segment msg.
-    ;       Emit segment with header.
-    +debug_print "[runnable]"
+; Inputs:
+;   program_counter = PC of last file
+;   expr_b = size of last file
+;   current_segment -> current segment header
+; Outputs:
+;   expr_a = size of zero fill
+calculate_zero_fill:
+    ; this PC - prev PC - expr_b = size of zero fill
+    ldz #0
+    lda [current_segment],z
+    sec
+    sbc program_counter
+    sta expr_a
+    inz
+    lda [current_segment],z
+    sbc program_counter+1
+    sta expr_a+1
+    lda #0
+    sta expr_a+2
+    sta expr_a+3  ; expr_a = this PC - prev PC
+    ldq expr_a
+    sec
+    sbcq expr_b
+    stq expr_a    ; expr_a = size of zero fill
+    rts
+
+; Input: expr_a = number of zeroes to write
+;   File open, ckout set to #2
+write_zero_fill:
+    ldq expr_a
+-   beq @after_zero_fill
+    lda #0
+    jsr bsout
+    deq expr_a
+    bra -
+@after_zero_fill
+    rts
+
+; Inputs:
+;   current_segment -> start of data (beyond seg header)
+;   expr_a = size of segment
+;   File open, ckout set to #2
+write_segment_data:
+    ldq expr_a
+-   beq @after_segment_write
+    ldz #0
+    lda [current_segment],z
+    jsr bsout
+    inq current_segment
+    deq expr_a
+    lbra -
+@after_segment_write
+    rts
+
+; Inputs: program_counter = PC, expr_a = size
+print_segment_msg:
+    ; Print segment msg
+    ldx #1
+    jsr ckout
+    +kprimm_start
+    !pet "  $",0
+    +kprimm_end
+    lda program_counter+1
+    jsr print_hex8
+    lda program_counter
+    jsr print_hex8
+    +kprimm_start
+    !pet ", ",0
+    +kprimm_end
+    ldq expr_a
+    jsr print_dec32
+    +kprimm_start
+    !pet " bytes",13,0
+    +kprimm_end
+    ldx #2
+    jsr ckout
+
+; Input: current_file; tokbuf, tok_pos=end with sorted segments
+;   File open, ckout set to #2
+write_cbm_file:
+    ; Write first segment's PC to file.
+    ldz #0
+    lda [tokbuf],z
+    +kcall bsout
+    inz
+    lda [tokbuf],z
+    +kcall bsout
+    ; Continue to write_plain_file...
+
+; Input: current_file; tokbuf, tok_pos=end with sorted segments
+;   File open, ckout set to #2
+;   Assumes at least one segment per file (tested in create_files_for_segments)
+write_plain_file:
+    ldy #0  ; tokbuf pos
+
+@segment_loop
+    cpy tok_pos
+    lbeq @end_segment_loop
+    ldq tokbuf,y
+    stq current_segment
+    phy
+
+    cpy #0
+    beq @after_zero_fill
+    ; Not first segment, fill with zeroes
+    jsr calculate_zero_fill
+    jsr write_zero_fill
+@after_zero_fill
+
+    jsr get_header_for_current_segment
+    lda #0
+    tax
+    tay
+    taz
+    lda #4  ; Q = 4
     clc
+    adcq current_segment
+    stq current_segment  ; current_segment -> data
+
+    jsr print_segment_msg
+
+    ; Write segment data
+    ; Start addr = current_segment, size = expr_a
+    ldq expr_a
+    stq expr_b  ; Remember length for fill operation later
+    jsr write_segment_data
+
+    ply
+    iny
+    iny
+    iny
+    iny
+    lbra @segment_loop
+
+@end_segment_loop
+    rts
+
+; Input: current_file; tokbuf, tok_pos=end with sorted segments
+;   File open, ckout set to #2
+write_runnable_file:
+    ; Write BASIC preamble.
+    ldz #bootstrap_basic_preamble_end-bootstrap_basic_preamble
+    ldx #0
+-   lda bootstrap_basic_preamble,x
+    jsr bsout
+    inx
+    dez
+    bne -
+
+    jsr get_header_for_current_segment
+
+    ; If list is one entry at bootstrap_ml_start, emit segment data, end.
+    ldy tok_pos
+    cmp #4
+    bne @runnable_with_installer
+    lda program_counter
+    cmp #<bootstrap_ml_start
+    bne @runnable_with_installer
+    lda program_counter+1
+    cmp #>bootstrap_ml_start
+    bne @runnable_with_installer
+
+    jsr print_segment_msg
+
+    lda #0
+    tax
+    tay
+    taz
+    lda #4  ; Q = 4
+    clc
+    adcq current_segment
+    stq current_segment  ; current_segment -> data
+    jsr write_segment_data
+    rts
+
+@runnable_with_installer
+    ; Write segment installer.
+    ldz #bootstrap_segment_installer_end-bootstrap_segment_installer
+    ldx #0
+-   lda bootstrap_segment_installer,x
+    jsr bsout
+    inx
+    dez
+    bne -
+
+    ldy #0  ; tokbuf pos
+@segment_loop
+    cpy tok_pos
+    lbeq @end_segment_loop
+    ldq tokbuf,y
+    stq current_segment
+    phy
+
+    jsr print_segment_msg
+
+    jsr get_header_for_current_segment
+    lda #0
+    tax
+    tay
+    taz
+    lda #4
+    clc
+    adcq expr_a
+    stq expr_a   ; Extend segment length by header size.
+    jsr write_segment_data
+
+    ply
+    iny
+    iny
+    iny
+    iny
+    lbra @segment_loop
+
+@end_segment_loop
     rts
 
 
@@ -959,7 +1175,47 @@ create_files_for_segments:
 +
 
     ; Open file.
-    ; TODO
+    ; - Screen: logical address 1
+    lda #1
+    ldx #3    ; screen
+    ldy #$ff  ; no secondary address
+    jsr setlfs
+    jsr open
+    bcc +
+    +debug_print "[can't open screen on la=1 ??]"
+    rts
++
+
+    ; - File: logical address 2
+    ldz #4
+    ldq [current_file]  ; Q = address of filename
+    tza
+    ora #%10000000
+    tax  ; X = filename address bits 24-47, bit 7 set for 28-bit address mode
+    tya
+    taz  ; Z = filename address bits 16-23
+    lda #0
+    tay  ; A/Y = 0, memory address unused (not using SAVE)
+    jsr setbnk
+    ldz #4
+    ldq [current_file]  ; Q = address of filename
+    taz  ; (address low -> Z)
+    txa
+    tay  ; Y = filename address high
+    tza
+    tax  ; X = filename address low
+    ldz #8
+    lda [current_file],z  ; A = filename length
+    jsr setnam
+    lda #2    ; logical address 2
+    ldx #1    ; default device
+    ldy #$ff  ; no secondary address
+    jsr setlfs
+    jsr open
+    bcs @disk_error
+
+    ldx #2
+    jsr ckout
 
     ; tokbuf contains sorted segment record addresses.
     ; tok_pos = 4 * number of segments (next tokbuf pos).
@@ -977,15 +1233,28 @@ create_files_for_segments:
 +   jsr write_runnable_file
 ++
     ; Close file.
-    ; TODO
-
-    ; Report errors during write.
-    ; TODO
+    lda #2
+    clc
+    jsr close
+    bcs @disk_error
+    lda #1
+    clc
+    jsr close
+    bcc +
+    +debug_print "[can't close screen channel ??]"
++   jsr clrch
 
     jsr is_end_segment_traversal
     lbcc @file_loop
     rts
 
+@disk_error
+    ; A = error code
++debug_print "[disk error A=]"
+brk
+    lda #err_disk_error
+    sta err_code
+    rts
 
 assemble_to_disk_cmd:
     +kprimm_start
@@ -5587,7 +5856,7 @@ assemble_source:
 
 err_message_tbl:
 !word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
-!word e16,e17
+!word e16,e17,e18
 
 err_messages:
 err_syntax = 1
@@ -5624,6 +5893,8 @@ err_unsupported_cpu_mode = 16
 e16: !pet "unsupported cpu mode",0
 err_segment_without_a_file = 17
 e17: !pet "segment without a file, missing !to", 0
+err_disk_error = 18
+e18: !pet "disk error",0
 
 warn_message_tbl:
 !word w01
@@ -6479,11 +6750,15 @@ bootstrap_ml_start = source_start + 1 + bootstrap_basic_preamble_end - bootstrap
 bootstrap_segment_installer:
 !pseudopc bootstrap_ml_start {
     ; TODO: Install segments; jmp to start of first segment
+    +debug_print "non-default runnable not yet supported"
+    rts
 
     bootstrap_segment_data = *
 }
 bootstrap_segment_installer_end:
-
+!if bootstrap_segment_installer_end-bootstrap_segment_installer > 255 {
+    !error "Bootstrap segment installer >256 bytes, need better copy routine"
+}
 
 ; ---------------------------------------------------------
 ; Tests
