@@ -37,6 +37,7 @@ Future:
 * Zones and real locals
 * Macros
 * Conditional assembly, conditional expressions
+* Output "plain" files (without the PRG starting address)
 * A nice text editor
 
 ## An important note
@@ -267,7 +268,7 @@ Of course, EasyAsm has to live somewhere. This is what EasyAsm needs:
 * EasyAsm reserves the memory ranges **$1E00-$1EFF** (256 bytes of bank 0) and **$8700000-$87FFFFF** (1 megabyte of Attic RAM). If your program overwrites any of this memory, you will need to reload EasyAsm, and any stashed source code data may not be recoverable.
 * EasyAsm reserves the right to overwrite **$50000-$5FFFF** (all 64KB of bank 5) when you invoke EasyAsm. Your program can use this memory while it is running, but the state of this memory may change when EasyAsm is running. Overwriting this memory may inhibit EasyAsm's ability to return to the `OK` prompt on `rts`.
 
-EasyAsm will refuse to assemble to addresses $1E00-$1EFF when assembling to memory, or when assembling a "runnable" program to disk (because the bootstrap routine may use it). This restriction does not apply when assembling to disk in "cbm" or "plain" mode.
+EasyAsm will refuse to assemble to addresses $1E00-$1EFF when assembling to memory, or when assembling a "runnable" program to disk (because the bootstrap routine may use it). This restriction does not apply when assembling to disk in "cbm" mode.
 
 EasyAsm uses program memory ($2001-$F6FF) in three ways:
 
@@ -751,15 +752,15 @@ EasyAsm supports the following assembler directives.
 !to "...", <mode>
 ```
 
-Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address), `plain` (PRG without address), or `runnable` (bootstrap routine).
+Sets the output file and mode when assembling to disk. `<mode>` can be `cbm` (PRG with address) or `runnable` (bootstrap routine).
 
-`cbm` and `plain` must be followed by assignment of the program counter before the first instruction, e.g. `* = $1600`. `runnable` sets a default starting program counter, which can optionally be reassigned.
+A `cbm` file is a simple PRG file. It must be followed by assignment of the program counter before the first instruction, e.g. `* = $1600`. A `cbm` file can contain one or more segments. EasyAsm will render the file with gaps of zeroes between the segments, so they are positioned correctly when the file is loaded at the lowest segment starting address. Segments can be described in any order, but must not overlap in memory.
+
+A `runnable` file is a PRG file that can be loaded with `DLOAD` and invoked with `RUN`. The program counter cannot be changed, and the file must contain only one segment. EasyAsm locates the program at the beginning of BASIC program memory, and prepends a BASIC bootstrap routine.
 
 A source file can provide more than one `!to` directive to create multiple files. Each file will contain the segments defined up to the next `!to` directive, or to the end of the source file otherwise. Note that none of the segments in the program are allowed to overlap, even when being saved to separate files, so that the program can also be assembled to memory.
 
 Assembling to disk will report an error if any instructions or data appear before the first `!to` directive. This is not an error when assembling to memory.
-
-A single file cannot exceed 64 KB in size.
 
 EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
@@ -846,6 +847,7 @@ EasyAsm tries to provide a subset of the features of the Acme assembler, using c
 EasyAsm has the following limitations compared to the Acme assembler.
 
 * "Edit mode" in-memory source size limit of 44 KB
+* No "plain" file type (without the PRG starting address)
 * No macros
 * No conditional or looping assembly
 * No symbol list output

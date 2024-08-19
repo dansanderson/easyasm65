@@ -894,7 +894,6 @@ get_header_for_current_segment:
     inz
     lda [current_segment],z
     sta expr_a+1
-    inz
     lda #0
     sta expr_a+2
     sta expr_a+3  ; expr_a = size
@@ -962,8 +961,7 @@ append_zero_fill:
     sta dmalo_e
 
     ldq expr_a
-    ldy #0
-    ldz #0
+    clc
     adcq attic_ptr
     stq attic_ptr
     rts
@@ -979,7 +977,7 @@ append_to_save_file_source: !byte $00, $00, $00
 append_to_save_file_dest: !byte $00, $00, $00
 !byte $00, $00, $00
 
-; Inputs: expr_a = start addr (32-bit); expr_b = length (16-bit)
+; Inputs: expr_result = start addr (32-bit); expr_a = length (16-bit)
 ;   attic_ptr = dest
 ; Outputs: attic_ptr advanced
 append_to_save_file:
@@ -1029,9 +1027,8 @@ append_to_save_file:
     lda #<append_to_save_file_dma
     sta dmalo_e
 
-    ldq expr_b
-    ldy #0
-    ldz #0
+    ldq expr_a
+    clc
     adcq attic_ptr
     stq attic_ptr
     rts
@@ -1059,9 +1056,19 @@ print_segment_msg:
 ; Writes formatted file to attic_savefile_start
 ; Input: current_file; tokbuf, tok_pos=end with sorted segments
 write_file_to_attic:
-    lda #<attic_savefile_start
+    ; Stash current_segment so we can reuse some routines.
+    ldq current_segment
+    stq bas_ptr
+
+    ; Set Attic memory start position to align with PC
+    ; (required for SAVE later to get the PC correct)
+    ldq tokbuf
+    stq current_segment
+    jsr get_header_for_current_segment
+    lda program_counter
     sta attic_ptr
-    lda #>attic_savefile_start
+    inz
+    lda program_counter+1
     sta attic_ptr+1
     lda #^attic_savefile_start
     sta attic_ptr+2
@@ -1071,33 +1078,8 @@ write_file_to_attic:
     ldz #9
     lda [current_file],z
     and #F_FILE_MASK
-    cmp #F_FILE_PLAIN
-    beq +
-    ; Write first segment's PC.
-    ldy #0
-    ldq tokbuf,y
-    stq current_segment
-    ldz #0
-    lda [current_segment],z
-    sta [attic_ptr],z
-    inz
-    lda [current_segment],z
-    sta [attic_ptr],z
-    lda #0
-    tax
-    tay
-    taz
-    lda #2
-    clc
-    adcq attic_ptr
-    stq attic_ptr
-+
-
-    ldz #9
-    lda [current_file],z
-    and #F_FILE_MASK
     cmp #F_FILE_RUNNABLE
-    beq +
+    bne +
     ; Write runnable bootstrap.
     lda #<bootstrap_basic_preamble
     ldx #>bootstrap_basic_preamble
@@ -1116,23 +1098,32 @@ write_file_to_attic:
 @segment_loop
     cpy tok_pos
     lbeq @end_segment_loop
-    ldq tokbuf,y
-    stq current_segment
-
     phy  ; Stash segment list position
+
+    ; current_segment = this segment's address (from segment list)
+    lda tokbuf,y
+    sta current_segment
+    lda tokbuf+1,y
+    sta current_segment+1
+    lda tokbuf+2,y
+    sta current_segment+2
+    lda tokbuf+3,y
+    sta current_segment+3
 
     cpy #0
     beq +
     ; Not first segment, fill with zeroes
+    ; Expects program_counter and expr_b=size from previous loop
     jsr calculate_zero_fill
     jsr append_zero_fill
 +
 
     jsr get_header_for_current_segment
+    ; program_counter = PC, expr_a = size
+    ldq expr_a
+    stq expr_b  ; Remember size for zero fill later
+
     jsr print_segment_msg
-    ; Write segment data
-    ; expr_result = start = current_segment + 4
-    ; expr_a = size (from get_header_for_current_segment)
     lda #0
     tax
     tay
@@ -1141,6 +1132,7 @@ write_file_to_attic:
     clc
     adcq current_segment
     stq expr_result
+    ; expr_result = start = current_segment + 4
     jsr append_to_save_file
 
     ply  ; Advance segment list position
@@ -1151,46 +1143,9 @@ write_file_to_attic:
     lbra @segment_loop
 
 @end_segment_loop
-    rts
-
-
-; Reads the command channel
-; Outputs: strbuf, C=1: there's something on strbuf worth printing
-check_disk_status:
-    lda #15
-    ldx #1    ; default disk
-    ldy #15   ; command channel
-    +kcall setlfs
-    +kcall open
-    bcc +
-    rts
-+   ldx #15
-    +kcall chkin
-
-    ldx #0
--   +kcall basin
-    sta strbuf,x
-    inx
-    beq +
-    +kcall readss
-    beq -
-+
-    lda #15
-    sec  ; don't close other files
-    +kcall close
-
-    lda #0
-    sta strbuf,x  ; null terminator
-    cpx #0
-    beq +  ; nothing read from command channel
-    lda strbuf
-    cmp #'0'
-    beq +
-    cmp #'1'
-    beq +    ; Error codes 00-19 are ok
-    sec
-    rts
-+   clc  ; disk status 0
+    ; Restore outer file loop's current_segment
+    ldq bas_ptr
+    stq current_segment
     rts
 
 
@@ -1250,6 +1205,8 @@ create_files_for_segments:
     +kcall bsout
 
     ; Generate segment list for file on tokbuf, sorted by PC.
+    ; This advances current_segment to the next file marker,
+    ; for the end of the file loop to test.
     jsr generate_segment_list_for_file
     bcc +
     lda #err_out_of_memory
@@ -1331,27 +1288,28 @@ create_files_for_segments:
     ldx #1    ; default device
     ldy #2    ; disks want a secondary address
     +kcall setlfs
-    lda #<attic_savefile_start
-    sta $fe
-    lda #>attic_savefile_start
-    sta $ff
+    ; Fetch the starting PC for SAVE
+    ldy #0
+    ldq tokbuf,y
+    stq expr_b
+    ldz #0
+    lda [expr_b],z
+    sta $00fe
+    inz
+    lda [expr_b],z
+    sta $00ff
     ; X/Y = 16-bit end address + 1
-    ; This works because attic_savefile_start begins on a bank boundary,
-    ; and the file size is limited to 64 KB.
     ldx attic_ptr
     ldy attic_ptr+1
     jsr save_program
     bcs @kernal_disk_error
 
-    jsr check_disk_status
-; TODO
-;    bcc +
-    ldx #<strbuf
-    ldy #>strbuf
-    jsr print_cstr  ; TODO: make disk error prettier?
-; TODO: set err_code? abort file loop after closing files?
-;+
+    ; There might be a drive error at this point. Reading it would require
+    ; more dispatch code to open the command channel, so I'm going to leave it
+    ; for now and let the user type the @ command to test disk status.
 
+    ; (current_segment advanced to next file marker or end by
+    ; generate_segment_list_for_file earlier.)
     jsr is_end_segment_traversal
     lbcc @file_loop
     rts
@@ -1407,7 +1365,7 @@ assemble_to_disk_cmd:
     bne @assemble_to_disk_error_no_pos
 
     +kprimm_start
-    !pet 13,"# assemble to disk complete",13,0
+    !pet 13,13,"# assemble to disk complete",13,0
     +kprimm_end
     rts
 
@@ -1417,7 +1375,7 @@ assemble_to_disk_cmd:
 @assemble_to_disk_error
     jsr print_error
     +kprimm_start
-    !pet 13,"# assemble to disk aborted due to error",13,13,0
+    !pet 13,13,"# assemble to disk aborted due to error",13,13,0
     +kprimm_end
     rts
 
@@ -5648,8 +5606,13 @@ assemble_dir_to:
     ldy #>kw_plain
     jsr expect_keyword
     bcs +
-    lda #F_FILE_PLAIN
-    bra @to_parsed
+    ; "plain" file type is not supported yet because I'm using KERNAL SAVE for
+    ; now, which doesn't support it. Keeping the parsing just in case I change
+    lda #err_unimplemented
+    sta err_code
+    lbra statement_err_exit
+    ;lda #F_FILE_PLAIN
+    ;bra @to_parsed
 +   ldx #<kw_runnable
     ldy #>kw_runnable
     jsr expect_keyword
