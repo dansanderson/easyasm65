@@ -280,6 +280,7 @@ init:
     jsr init_symbol_table
     jsr init_segment_table
     jsr init_forced16
+    jsr init_rellabel_table
 
     rts
 

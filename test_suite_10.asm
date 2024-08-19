@@ -92,9 +92,47 @@ tee_line_2: !pet "8 div 2",0
 tee_line_3: !pet "60 div 5 div 4",0
 
 
+!macro start_test_rellabel {
+    jsr init_rellabel_table
+}
+
+!macro add_rellabel_for_test .plusminus, .length, .pc {
+    !if .plusminus = 1 {
+        sec
+    } else {
+        clc
+    }
+    lda #.length
+    ldx #<.pc
+    ldy #>.pc
+    jsr add_rellabel
+    +assert_cc test_msg_ecc
+}
+
+!macro test_add_rellabel .tnum, .ebytes_start, .ebytes_end {
+    +test_start .tnum
+
+    jsr start_rellabel_table
+    ldx #.ebytes_end-.ebytes_start-1
+-   txa
+    taz
+    lda [attic_ptr],z
+    cmp .ebytes_start,x
+    +assert_eq test_msg_wrong_result
+    dex
+    bpl -
+
+    +test_end
+}
+
+test_add_rellabel_1: !byte $00, $00, $00, $00, $00, $00
+test_add_rellabel_2: !byte $00, $00, $00, $83, $00, $16, $00, $00, $00
+test_add_rellabel_3: !byte $00, $00, $00, $83, $00, $16, $02, $04, $16, $81, $08, $16, $00, $00, $00
+test_add_rellabel_end:
+
+
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
-
 
     +print_chr chr_cr
     +print_strlit_line "test-expr"
@@ -119,6 +157,22 @@ run_test_suite_cmd:
     ; 64-bit, so we can't ask Acme to calculate -12 <<< 3.)
     +test_expect_expr $21, "lsr negative", tee_tb_29, tee_tb_30, tee_line_3, 0, 14, $1ffffffe, 0
     +test_expect_expr $22, "multiple asl", tee_tb_30, tee_tb_end, tee_line_3, 0, 22, 1 << 2 << 3, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "test rellabels"
+
+    +start_test_rellabel
+    +test_add_rellabel $01, test_add_rellabel_1, test_add_rellabel_2
+
+    +start_test_rellabel
+    +add_rellabel_for_test 1, 3, $1600
+    +test_add_rellabel $02, test_add_rellabel_2, test_add_rellabel_3
+
+    +start_test_rellabel
+    +add_rellabel_for_test 1, 3, $1600
+    +add_rellabel_for_test 0, 2, $1604
+    +add_rellabel_for_test 1, 1, $1608
+    +test_add_rellabel $03, test_add_rellabel_3, test_add_rellabel_end
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"
