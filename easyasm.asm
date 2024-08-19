@@ -1060,16 +1060,10 @@ write_file_to_attic:
     ldq current_segment
     stq bas_ptr
 
-    ; Set Attic memory start position to align with PC
-    ; (required for SAVE later to get the PC correct)
     ldq tokbuf
     stq current_segment
     jsr get_header_for_current_segment
-    lda program_counter
-    sta attic_ptr
-    inz
-    lda program_counter+1
-    sta attic_ptr+1
+
     lda #^attic_savefile_start
     sta attic_ptr+2
     lda #<(attic_savefile_start >> 24)
@@ -1079,8 +1073,25 @@ write_file_to_attic:
     lda [current_file],z
     and #F_FILE_MASK
     cmp #F_FILE_RUNNABLE
-    bne +
-    ; Write runnable bootstrap.
+    beq @start_runnable
+
+    ; Set Attic memory start position to align with PC
+    ; (required for SAVE later to get the PC correct)
+    lda program_counter
+    sta attic_ptr
+    inz
+    lda program_counter+1
+    sta attic_ptr+1
+    bra @start_segment_loop
+
+@start_runnable
+    ; Set Attic memory start position to source_start + 1.
+    lda #<(source_start+1)
+    sta attic_ptr
+    lda #>(source_start+1)
+    sta attic_ptr+1
+
+    ; Write the runnable bootstrap.
     lda #<bootstrap_basic_preamble
     ldx #>bootstrap_basic_preamble
     ldy #$05
@@ -1092,7 +1103,8 @@ write_file_to_attic:
     ldz #$00
     stq expr_a
     jsr append_to_save_file
-+
+
+@start_segment_loop
 
     ldy #0  ; token list position
 @segment_loop
@@ -1224,11 +1236,15 @@ create_files_for_segments:
     bne ++
     lda tok_pos
     cmp #4
-    beq ++
-    lda tokbuf
+    bne +
+    ldq tokbuf
+    stq expr_a
+    ldz #0
+    lda [expr_a],z
     cmp #<bootstrap_ml_start
     bne +
-    lda tokbuf+1
+    inz
+    lda [expr_a],z
     cmp #>bootstrap_ml_start
     beq ++
 +   lda #err_runnable_wrong_segments
@@ -1272,7 +1288,7 @@ create_files_for_segments:
     dey
     bne -
 
-    ; Save the file
+    ; Set up the file
     lda #($80 | <(attic_savefile_start >> 24)); file MB
     ldy #^attic_savefile_start
     ldx #5  ; strbuf bank
@@ -1288,7 +1304,14 @@ create_files_for_segments:
     ldx #1    ; default device
     ldy #2    ; disks want a secondary address
     +kcall setlfs
-    ; Fetch the starting PC for SAVE
+
+    ; Determine the starting address for SAVE
+    ldz #9
+    lda [current_file],z
+    and #F_FILE_MASK
+    cmp #F_FILE_RUNNABLE
+    beq +
+    ; cbm starts at first PC
     ldy #0
     ldq tokbuf,y
     stq expr_b
@@ -1298,8 +1321,15 @@ create_files_for_segments:
     inz
     lda [expr_b],z
     sta $00ff
+    bra ++
++   ; Runnable starts at source_start+1
+    lda #<(source_start+1)
+    sta $00fe
+    lda #>(source_start+1)
+    sta $00ff
+
     ; X/Y = 16-bit end address + 1
-    ldx attic_ptr
+++  ldx attic_ptr
     ldy attic_ptr+1
     jsr save_program
     bcs @kernal_disk_error
@@ -1309,7 +1339,8 @@ create_files_for_segments:
     ; for now and let the user type the @ command to test disk status.
 
     ; (current_segment advanced to next file marker or end by
-    ; generate_segment_list_for_file earlier.)
+    ; generate_segment_list_for_file earlier. Preserved by
+    ; write_file_to_attic.)
     jsr is_end_segment_traversal
     lbcc @file_loop
     rts
@@ -5944,7 +5975,7 @@ assemble_source:
 
 err_message_tbl:
 !word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
-!word e16,e17,e18,e19
+!word e16,e17,e18,e19,e20
 
 err_messages:
 err_syntax = 1
@@ -5980,13 +6011,13 @@ e15: !pet "division by zero",0
 err_unsupported_cpu_mode = 16
 e16: !pet "unsupported cpu mode",0
 err_segment_without_a_file = 17
-e17: !pet "segment without a file, missing !to", 0
+e17: !pet "segment without a file, missing !to",0
 err_disk_error = 18
 e18: !pet "kernal disk error",0
 err_device_not_present = 19
-e19: !pet "disk device not present; to set device, use: set def #"
+e19: !pet "disk device not present; to set device, use: set def #",0
 err_runnable_wrong_segments = 20
-e20: !pet "runnable file only supports one segment at default pc"
+e20: !pet "runnable file only supports one segment at default pc",0
 
 warn_message_tbl:
 !word w01
