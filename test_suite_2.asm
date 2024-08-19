@@ -369,6 +369,53 @@ test_tokenize_pseudoop_5: !pet "!toz  ",0
 test_tokenize_pseudoop_6: !pet "#!to#  ",0
 test_tokenize_pseudoop_7: !pet "to  ",0
 
+!macro test_tokenize_pluses_and_minuses .tnum, .str, .pos, .ec, .etoken, .epos, .elen {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    lda #0
+    sta tok_pos
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_pluses_and_minuses
+!if .ec {
+    +assert_cs test_msg_ecs
+    ldx #0
+    lda tokbuf,x
+    cmp #.etoken
+    +assert_eq test_msg_wrong_result
+    inx
+    lda tokbuf,x
+    cmp #.epos
+    +assert_eq test_msg_wrong_value
+    inx
+    lda tokbuf,x
+    cmp #.elen
+    +assert_eq test_msg_wrong_value
+} else {
+    +assert_cc test_msg_ecc
+    lda line_pos
+    cmp #.pos
+    +assert_eq test_msg_wrong_result
+}
+
+    +test_end
+}
+
+test_tokenize_pluses_and_minuses_1: !pet "+ +++",0
+test_tokenize_pluses_and_minuses_2: !pet "- ---",0
+test_tokenize_pluses_and_minuses_3: !pet "+++ +++",0
+test_tokenize_pluses_and_minuses_4: !pet "--- ---",0
+test_tokenize_pluses_and_minuses_5: !pet "-+- +-+",0
+
+
 !macro test_tokenize_other .tnum, .str, .pos, .ec, .etoken, .epos {
     +test_start .tnum
 
@@ -536,6 +583,15 @@ run_test_suite_cmd:
     +test_tokenize_pseudoop $05, test_tokenize_pseudoop_5, 0, 0, 0, 0
     +test_tokenize_pseudoop $06, test_tokenize_pseudoop_6, 1, 1, po_to, 4
     +test_tokenize_pseudoop $07, test_tokenize_pseudoop_7, 0, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-pluses-and-minuses"
+    ; .tnum, .str, .pos, .ec, .etoken, .epos, .elen
+    +test_tokenize_pluses_and_minuses $01, test_tokenize_pluses_and_minuses_1, 0, 1, tk_pluses, 0, 1
+    +test_tokenize_pluses_and_minuses $02, test_tokenize_pluses_and_minuses_2, 0, 1, tk_minuses, 0, 1
+    +test_tokenize_pluses_and_minuses $03, test_tokenize_pluses_and_minuses_3, 0, 1, tk_pluses, 0, 3
+    +test_tokenize_pluses_and_minuses $04, test_tokenize_pluses_and_minuses_4, 0, 1, tk_minuses, 0, 3
+    +test_tokenize_pluses_and_minuses $05, test_tokenize_pluses_and_minuses_5, 0, 1, tk_minuses, 0, 1
 
     +print_chr chr_cr
     +print_strlit_line "tokenize-other"
