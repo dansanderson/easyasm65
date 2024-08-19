@@ -119,36 +119,26 @@ test_expect_oppop_end:
     jsr expect_literal
 
 !if .ec {
-    bcs +
-    brk
-+   ldx tok_pos
-    beq +
-    brk
-+
+    +assert_cs test_msg_ecs
+    ldx tok_pos
+    +assert_eq test_msg_wrong_tokpos
 } else {
-    bcc +
-    brk
-+   lda expr_result
+    +assert_cc test_msg_ecc
+    lda expr_result
     cmp #<.eresult
-    beq +
-    brk
-+   lda expr_result+1
+    +assert_eq test_msg_wrong_result
+    lda expr_result+1
     cmp #>.eresult
-    beq +
-    brk
-+   lda expr_result+2
+    +assert_eq test_msg_wrong_result
+    lda expr_result+2
     cmp #^.eresult
-    beq +
-    brk
-+   lda expr_result+3
+    +assert_eq test_msg_wrong_result
+    lda expr_result+3
     cmp #<(.eresult >>> 24)
-    beq +
-    brk
-+   lda expr_flags
+    +assert_eq test_msg_wrong_result
+    lda expr_flags
     cmp #.eflags
-    beq +
-    brk
-+
+    +assert_eq test_msg_wrong_flags
 }
 
     +test_end
@@ -158,6 +148,95 @@ test_expect_literal_1: !byte 0, $ff
 test_expect_literal_2: !byte tk_number_literal, 6, $dd, $cc, $bb, $aa, 0, $ff
 test_expect_literal_3: !byte tk_number_literal_leading_zero, 6, $dd, $cc, $bb, $aa, 0, $ff
 test_expect_literal_end:
+
+
+!macro test_expect_pms .tnum, .tokbuf, .tokbufend, .ec, .etok, .elen {
+    +test_start .tnum
+
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+    jsr expect_pluses_or_minuses
+
+!if .ec {
+    +assert_cs test_msg_ecs
+    ldx tok_pos
+    +assert_eq test_msg_wrong_tokpos
+} else {
+    +assert_cc test_msg_ecc
+    cmp #.etok
+    +assert_eq test_msg_wrong_result
+    cpy #.elen
+    +assert_eq test_msg_wrong_value
+}
+
+    +test_end
+}
+
+!macro test_expect_p_or_m .tnum, .tokbuf, .tokbufend, .ec, .etok {
+    +test_start .tnum
+
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+    jsr expect_single_plus_or_minus
+
+!if .ec {
+    +assert_cs test_msg_ecs
+    ldx tok_pos
+    +assert_eq test_msg_wrong_tokpos
+} else {
+    +assert_cc test_msg_ecc
+    cmp #.etok
+    +assert_eq test_msg_wrong_result
+}
+
+    +test_end
+}
+
+!macro test_expect_m .tnum, .tokbuf, .tokbufend, .ec {
+    +test_start .tnum
+
+    ldx #.tokbufend-.tokbuf
+    dex
+-   lda .tokbuf,x
+    sta tokbuf,x
+    dex
+    bpl -
+
+    ldx #0
+    stx tok_pos
+    jsr expect_single_minus
+
+!if .ec {
+    +assert_cs test_msg_ecs
+    ldx tok_pos
+    +assert_eq test_msg_wrong_tokpos
+} else {
+    +assert_cc test_msg_ecc
+}
+
+    +test_end
+}
+
+test_expect_pms_1: !byte 0, $ff
+test_expect_pms_2: !byte tk_pluses, 0, 1, 0, $ff
+test_expect_pms_3: !byte tk_minuses, 0, 1, 0, $ff
+test_expect_pms_4: !byte tk_pluses, 0, 3, 0, $ff
+test_expect_pms_5: !byte tk_minuses, 0, 3, 0, $ff
+test_expect_pms_end
 
 
 !macro start_test_expect_expr .pass {
@@ -239,15 +318,6 @@ tee_tb_3: !byte tk_number_literal_leading_zero, 0, $dd, $cc, $bb, $0a, 0, $ff
 tee_tb_4: !byte tk_label_or_reg, 0, 5, 0, $ff
 tee_tb_5: !byte tk_lparen, 0, tk_label_or_reg, 0, 5, tk_rparen, 6, 0, $ff
 tee_tb_6: !byte tk_lbracket, 0, tk_label_or_reg, 0, 5, tk_rbracket, 6, 0, $ff
-tee_tb_7: !byte tk_complement, 0, tk_number_literal, 2, $dd, $cc, $bb, $aa, 0, $ff
-tee_tb_8: !byte tk_complement, 0, tk_lparen, 2, tk_number_literal, 4, $dd, $cc, $bb, $aa, tk_rparen, 8, 0, $ff
-tee_tb_9: !byte tk_complement, 0, tk_complement, 1, tk_lparen, 2, tk_number_literal, 3, $dd, $cc, $bb, $aa, tk_rparen, 10, 0, $ff
-tee_tb_10: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $03, $00, $00, $00, 0, $ff
-tee_tb_11: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $01, $00, $00, $00, tk_power, 3, tk_number_literal, 4, $03, $00, $00, $00, 0, $ff
-tee_tb_12: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $00, $00, $00, $00, 0, $ff
-tee_tb_13: !byte tk_lparen, 0, tk_number_literal, 1, $02, $00, $00, $00, tk_power, 2, tk_number_literal, 3, $01, $00, $00, $00, tk_rparen, 4, tk_power, 5, tk_number_literal, 6, $03, $00, $00, $00, 0, $ff
-tee_tb_14: !byte tk_number_literal, 0, $02, $00, $00, $00, tk_power, 1, tk_number_literal, 2, $fd, $ff, $ff, $ff, 0, $ff
-tee_tb_15: !byte tk_minus, 0, tk_number_literal, 0, $02, $00, $00, $00, 0, $ff
 tee_tb_end:
 tee_line_1: !pet "label",0
 tee_line_2: !pet "8 div 2",0
@@ -314,24 +384,17 @@ test_tokenize_pseudoop_7: !pet "to  ",0
     stx line_pos
     jsr tokenize_other
 !if .ec {
-    bcs +
-    brk
-+   cpx #.etoken
-    beq +
-    brk
-+   lda line_pos
+    +assert_cs test_msg_ecs
+    cpx #.etoken
+    +assert_eq test_msg_wrong_result
+    lda line_pos
     cmp #.epos
-    beq +
-    brk
-+
+    +assert_eq test_msg_wrong_value
 } else {
-    bcc +
-    brk
-+   lda line_pos
+    +assert_cc test_msg_ecc
+    lda line_pos
     cmp #.pos
-    beq +
-    brk
-+
+    +assert_eq test_msg_wrong_result
 }
 
     +test_end
@@ -404,6 +467,21 @@ run_test_suite_cmd:
     +test_expect_literal $02, test_expect_literal_2, test_expect_literal_3, 0, 6, $aabbccdd, 0
     +test_expect_literal $03, test_expect_literal_3, test_expect_literal_end, 0, 6, $aabbccdd, F_EXPR_FORCE16
 
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-pluses-or-minuses"
+    +test_expect_pms $01, test_expect_pms_1, test_expect_pms_2, 1, 0, 0
+    +test_expect_pms $02, test_expect_pms_2, test_expect_pms_3, 0, tk_pluses, 1
+    +test_expect_pms $03, test_expect_pms_3, test_expect_pms_4, 0, tk_minuses, 1
+    +test_expect_p_or_m $04, test_expect_pms_2, test_expect_pms_3, 0, tk_pluses
+    +test_expect_p_or_m $05, test_expect_pms_3, test_expect_pms_4, 0, tk_minuses
+    +test_expect_p_or_m $06, test_expect_pms_4, test_expect_pms_5, 1, 0
+    +test_expect_p_or_m $07, test_expect_pms_5, test_expect_pms_end, 1, 0
+    +test_expect_m $08, test_expect_pms_1, test_expect_pms_2, 1
+    +test_expect_m $09, test_expect_pms_2, test_expect_pms_3, 1
+    +test_expect_m $0A, test_expect_pms_3, test_expect_pms_4, 0
+    +test_expect_m $0B, test_expect_pms_4, test_expect_pms_5, 1
+    +test_expect_m $0C, test_expect_pms_5, test_expect_pms_end, 1
+
     ; -----------------------------------
 
     +print_chr chr_cr
@@ -431,7 +509,7 @@ run_test_suite_cmd:
 
     +start_test_expect_expr 0
     +set_symbol_for_test tee_line_1, 5, 98765
-    +test_expect_expr $08, "label def brackets", tee_tb_6, tee_tb_7, tee_line_1, 0, 7, 98765, F_EXPR_BRACKET_SQUARE
+    +test_expect_expr $08, "label def brackets", tee_tb_6, tee_tb_end, tee_line_1, 0, 7, 98765, F_EXPR_BRACKET_SQUARE
 
     +start_test_expect_expr $ff
     +test_expect_expr $09, "label undef last pass", tee_tb_4, tee_tb_5, tee_line_1, 1, 0, 0, F_EXPR_UNDEFINED
@@ -446,16 +524,6 @@ run_test_suite_cmd:
     +set_symbol_for_test tee_line_1, 5, 98765
     +test_expect_expr $0A, "label def last pass", tee_tb_4, tee_tb_5, tee_line_1, 0, 3, 98765, 0
 
-    +start_test_expect_expr 0
-    +test_expect_expr $0B, "inversion", tee_tb_7, tee_tb_8, tee_line_1, 0, 8, !$aabbccdd, 0
-    +test_expect_expr $0C, "inversion paren", tee_tb_8, tee_tb_9, tee_line_1, 0, 12, !$aabbccdd, 0
-    +test_expect_expr $0D, "double inversion paren", tee_tb_9, tee_tb_10, tee_line_1, 0, 14, !!$aabbccdd, 0
-    +test_expect_expr $0E, "one exponent", tee_tb_10, tee_tb_11, tee_line_1, 0, 14, 2^3, 0
-    +test_expect_expr $0F, "two exponents", tee_tb_11, tee_tb_12, tee_line_1, 0, 22, 2^1^3, 0
-    +test_expect_expr $10, "exponent of zero", tee_tb_12, tee_tb_13, tee_line_1, 0, 14, 2^0, 0
-    +test_expect_expr $11, "grouping to a power", tee_tb_13, tee_tb_14, tee_line_1, 0, 26, (2^1)^3, 0
-    +test_expect_expr $12, "negative exponent", tee_tb_14, tee_tb_15, tee_line_1, 1, 14, 0, 0
-    +test_expect_expr $13, "negate", tee_tb_15, tee_tb_end, tee_line_1, 0, 8, -2, 0
 
     ; Continued in test_suite_10
 

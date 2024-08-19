@@ -79,7 +79,7 @@ test_tokenize_13e:
     !byte tk_label_or_reg, 4, 5
     !byte tk_equal, 10
     !byte tk_multiply, 12
-    !byte tk_plus, 13
+    !byte tk_pluses, 13, 1
     !byte tk_number_literal, 14
     !32 4
     !byte 0, $ff

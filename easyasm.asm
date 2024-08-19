@@ -2343,6 +2343,68 @@ tokenize_pseudoop:
     rts
 
 
+; Tokenize pluses and minuses.
+; Input: strbuf = lowercase line, line_pos at first char
+; Output:
+;   If found, C=1, tokbuf written, tok_pos and line_pos advanced
+;      (tk_pluses, pos, len) or (tk_minuses, pos, len)
+;   If not found, C=0, tok_pos and line_pos unchanged
+;
+; Note: This matches plus/minus operators as well as relative labels. The
+; parser needs to handle this.
+tokenize_pluses_and_minuses:
+    ldx line_pos
+    lda strbuf,x
+    cmp #'+'
+    bne @maybe_minus
+    ldy #0  ; length
+-   iny
+    inx
+    beq +
+    lda strbuf,x
+    cmp #'+'
+    beq -
++
+    lda #tk_pluses
+    bra @found
+
+@maybe_minus
+    cmp #'-'
+    beq +
+    ; Neither + nor -
+    clc
+    rts
++
+    ldy #0  ; length
+-   iny
+    inx
+    beq +
+    lda strbuf,x
+    cmp #'-'
+    beq -
++
+    lda #tk_minuses
+
+@found
+    ; A=tok type, Y=len, line_pos=pos
+    ldx tok_pos
+    sta tokbuf,x
+    inx
+    lda line_pos
+    sta tokbuf,x
+    inx
+    tya
+    sta tokbuf,x
+    inx
+    clc
+    adc line_pos
+    sta line_pos  ; line_pos += length
+    txa
+    sta tok_pos   ; tok_pos += 3
+    sec
+    rts
+
+
 ; Tokenize punctuation tokens.
 ; Input: strbuf = lowercase line, line_pos at first char
 ; Output:
@@ -2507,7 +2569,11 @@ tokenize:
     plz
     bcs @push_tok_pos_then_continue
 
-    ; TODO: tokenize relative labels
+    ; Tokenize relative labels, and +/- operators
+    phz
+    jsr tokenize_pluses_and_minuses
+    plz
+    lbcs @tokenize_loop
 
     ; Punctuation token
     phz
@@ -3678,6 +3744,72 @@ expect_token:
 
 ; Input: tokbuf, tok_pos
 ; Output:
+;   C=0 ok, tok_pos advanced; A=tk_pluses or tk_minuses, Y=length
+;   C=1 not found, tok_pos preserved
+expect_pluses_or_minuses:
+    ldx tok_pos
+    lda tokbuf,x
+    cmp #tk_pluses
+    beq @succeed
+    cmp #tk_minuses
+    beq @succeed
+    sec
+    rts
+@succeed
+    taz
+    inx
+    inx
+    lda tokbuf,x
+    inx
+    tay
+    tza
+    stx tok_pos
+    clc
+    rts
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced; A=tk_pluses or tk_minuses
+;   C=1 not found, tok_pos preserved
+expect_single_plus_or_minus:
+    ldx tok_pos
+    phx
+    jsr expect_pluses_or_minuses
+    cpy #1
+    beq @succeed
+    plx
+    stx tok_pos
+    sec
+    rts
+@succeed
+    plx
+    clc
+    rts
+
+; Input: tokbuf, tok_pos
+; Output:
+;   C=0 ok, tok_pos advanced
+;   C=1 not found, tok_pos preserved
+expect_single_minus:
+    ldx tok_pos
+    phx
+    jsr expect_single_plus_or_minus
+    bcs @fail
+    cmp #tk_minuses
+    beq @succeed
+@fail
+    plx
+    stx tok_pos
+    sec
+    rts
+@succeed
+    plx
+    clc
+    rts
+
+
+; Input: tokbuf, tok_pos
+; Output:
 ;   C=0 ok, tok_pos advanced; X=line_pos, Y=length
 ;   C=1 not found, tok_pos preserved
 expect_label:
@@ -4171,8 +4303,7 @@ expect_power:
 
 ; negate    ::= (-)? power
 expect_negate:
-    lda #tk_minus
-    jsr expect_token
+    jsr expect_single_minus
     bcc +
     jsr expect_power  ; Passthru
     lbra @end
@@ -4293,21 +4424,16 @@ expect_term:
     lbcs @end
 
 @term_loop
-    lda #tk_plus
-    jsr expect_token
-    bcc +
-    lda #tk_minus
-    jsr expect_token
+    jsr expect_single_plus_or_minus
     lbcs @ok
-
 +   pha
     +push32 expr_result
     jsr expect_factor
     +pull32 expr_b
     pla
     lbcs @end  ; Operator but no term, fail
-    ; A=tk_plus or tk_minus
-    cmp #tk_plus
+    ; A=tk_pluses or tk_minuses
+    cmp #tk_pluses
     bne +
     ; expr_result = expr_b + expr_result
     ldq expr_b
@@ -6492,6 +6618,7 @@ last_po = po_cpu + 1
 
 ; Other tokens table
 ; These tokens are lexed up to their length, in order, with no delimiters.
+; Note: + and - are tokenized separately.
 other_tokens:
 tk_complement = last_po + 0
 !pet "!",0
@@ -6499,47 +6626,43 @@ tk_megabyte = last_po + 1
 !pet "^^",0
 tk_power = last_po + 2
 !pet "^",0
-tk_minus = last_po + 3
-!pet "-",0
-tk_multiply = last_po + 4
+tk_multiply = last_po + 3
 !pet "*",0
-tk_remainder = last_po + 5
+tk_remainder = last_po + 4
 !pet "%",0
-tk_plus = last_po + 6
-!pet "+",0
-tk_lsr = last_po + 7
+tk_lsr = last_po + 5
 !pet ">>>",0
-tk_asr = last_po + 8
+tk_asr = last_po + 6
 !pet ">>",0
-tk_asl = last_po + 9
+tk_asl = last_po + 7
 !pet "<<",0
-tk_lt = last_po + 10
+tk_lt = last_po + 8
 !pet "<",0
-tk_gt = last_po + 11
+tk_gt = last_po + 9
 !pet ">",0
-tk_ampersand = last_po + 12
+tk_ampersand = last_po + 10
 !pet "&",0
-tk_pipe = last_po + 13
+tk_pipe = last_po + 11
 !pet 220,0  ; Typed by Mega + period or Mega + minus
-tk_comma = last_po + 14
+tk_comma = last_po + 12
 !pet ",",0
-tk_hash = last_po + 15
+tk_hash = last_po + 13
 !pet "#",0
-tk_colon = last_po + 16
+tk_colon = last_po + 14
 !pet ":",0
-tk_equal = last_po + 17
+tk_equal = last_po + 15
 !pet "=",0
-tk_lparen = last_po + 18
+tk_lparen = last_po + 16
 !pet "(",0
-tk_rparen = last_po + 19
+tk_rparen = last_po + 17
 !pet ")",0
-tk_lbracket = last_po + 20
+tk_lbracket = last_po + 18
 !pet "[",0
-tk_rbracket = last_po + 21
+tk_rbracket = last_po + 19
 !pet "]",0
-tk_fraction = last_po + 22  ; (Not supported, but special error message)
+tk_fraction = last_po + 20  ; (Not supported, but special error message)
 !pet "/",0
-tk_pipe2 = last_po + 23
+tk_pipe2 = last_po + 21
 !pet "|",0  ; The other PETSCII "pipe" character, just in case.
 !byte 0
 last_tk = tk_pipe2 + 1
@@ -6549,6 +6672,8 @@ tk_number_literal = last_tk + 0
 tk_number_literal_leading_zero = last_tk + 1
 tk_string_literal = last_tk + 2
 tk_label_or_reg = last_tk + 3
+tk_pluses = last_tk + 4
+tk_minuses = last_tk + 5
 
 ; Keywords
 ; Tokenized as tk_label_or_reg. Case insensitive.
@@ -7144,6 +7269,8 @@ bootstrap_ml_start = source_start + 1 + bootstrap_basic_preamble_end - bootstrap
         !source "test_suite_9.asm"
     } else if TEST_SUITE = 10 {
         !source "test_suite_10.asm"
+    } else if TEST_SUITE = 11 {
+        !source "test_suite_11.asm"
     } else {
         !error "Invalid TEST_SUITE; check Makefile"
     }
