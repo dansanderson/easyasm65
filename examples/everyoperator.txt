@@ -1,5 +1,6 @@
-; !cpu m65
-; !to "everyopcode.prg",cbm
+!cpu m65
+!to "everyoperator",cbm
+
 *=$1600
 
 !warn "!$aabbccdd = ", !$aabbccdd

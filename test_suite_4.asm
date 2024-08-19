@@ -170,11 +170,96 @@ test_assemble_label_line_2: !pet "@cheapo = label2",0
 
 tee_line_1: !pet "label",0
 
+!macro test_expect_addressing_expr .tnum, .str, .ec, .emode, .eresult, .eflags, .etokpos, .eerror, .eerror_pos {
+    +test_start .tnum
+
+    ; TODO: add tests for forced16 and forced8 modes
+    jsr init_forced16
+    lda asm_flags
+    and #!(F_ASM_FORCE_MASK | F_ASM_AREL_MASK)
+    sta asm_flags
+
+    ; Fake assembly location in bank 5
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+    lda #<(.str - 4)
+    sta line_addr
+    lda #>(.str - 4)
+    sta line_addr+1
+    jsr tokenize
+    lda err_code
+    beq +
+    +print_fail_line test_msg_tokenize
+    brk
++
+    ldz #3
+    stz tok_pos
+    jsr expect_addressing_expr
+!if .ec {
+    +assert_cs test_msg_ecs
+    +assert_mem_eq_byte err_code, .eerror, test_msg_wrong_err_code
+    +assert_mem_eq_byte line_pos, .eerror_pos, test_msg_wrong_err_pos
+} else {
+    +assert_cc test_msg_ecc
+    cpx #<.emode
+    +assert_eq test_msg_wrong_mode
+    cpy #>.emode
+    +assert_eq test_msg_wrong_mode
+    +assert_mem_eq_32 expr_result, .eresult, test_msg_wrong_result
+    +assert_mem_eq_byte expr_flags, .eflags, test_msg_wrong_flags
+    +assert_mem_eq_byte tok_pos, .etokpos, test_msg_wrong_tokpos
+}
+    +test_end
+}
+
+; Syntax errors
+test_expect_addressing_expr_21: !pet "lda # : inx",0
+test_expect_addressing_expr_22: !pet "lda $fe,w",0
+test_expect_addressing_expr_23: !pet "lda $fffe,w",0
+test_expect_addressing_expr_24: !pet "lda ($fe),w",0
+test_expect_addressing_expr_25: !pet "lda [$fe],w",0
+test_expect_addressing_expr_26: !pet "lda lda",0
+test_expect_addressing_expr_27: !pet "lda (lda,x)",0
+test_expect_addressing_expr_28: !pet "lda ($fe x)",0
+test_expect_addressing_expr_29: !pet "lda ($fe,y)",0
+test_expect_addressing_expr_30: !pet "lda ($fe,x",0
+test_expect_addressing_expr_31: !pet "lda (4,sp",0
+test_expect_addressing_expr_32: !pet "lda (4,sp)",0
+test_expect_addressing_expr_33: !pet "lda (4,sp),",0
+test_expect_addressing_expr_34: !pet "lda (4,sp),x",0
+test_expect_addressing_expr_35: !pet "inx iny",0
+; Other errors
+test_expect_addressing_expr_36: !pet "lda [$fffe],z",0  ; err_value_out_of_range
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
 
     ; -----------------------------------
+
+    +print_chr chr_cr
+    +print_strlit_line "test-expect-addressing-expr"
+
+    +test_expect_addressing_expr $15, test_expect_addressing_expr_21, 1, 0, 0, 0, 0, err_syntax, 6+4
+    ; TODO: this test isn't tokenizing correctly? can't repro in real life
+    ; +test_expect_addressing_expr $16, test_expect_addressing_expr_22, 1, 0, 0, 0, 0, err_syntax, 8+4
+    +test_expect_addressing_expr $17, test_expect_addressing_expr_23, 1, 0, 0, 0, 0, err_syntax, 10+4
+    +test_expect_addressing_expr $18, test_expect_addressing_expr_24, 1, 0, 0, 0, 0, err_syntax, 10+4
+    +test_expect_addressing_expr $19, test_expect_addressing_expr_25, 1, 0, 0, 0, 0, err_syntax, 10+4
+    +test_expect_addressing_expr $1a, test_expect_addressing_expr_26, 1, 0, 0, 0, 0, err_syntax, 4+4
+    +test_expect_addressing_expr $1b, test_expect_addressing_expr_27, 1, 0, 0, 0, 0, err_syntax, 5+4
+    +test_expect_addressing_expr $1c, test_expect_addressing_expr_28, 1, 0, 0, 0, 0, err_syntax, 9+4
+    +test_expect_addressing_expr $1d, test_expect_addressing_expr_29, 1, 0, 0, 0, 0, err_syntax, 9+4
+    +test_expect_addressing_expr $1e, test_expect_addressing_expr_30, 1, 0, 0, 0, 0, err_syntax, $ff ; end of line
+    +test_expect_addressing_expr $1f, test_expect_addressing_expr_31, 1, 0, 0, 0, 0, err_syntax, $ff
+    +test_expect_addressing_expr $20, test_expect_addressing_expr_32, 1, 0, 0, 0, 0, err_syntax, $ff
+    +test_expect_addressing_expr $21, test_expect_addressing_expr_33, 1, 0, 0, 0, 0, err_syntax, $ff
+    +test_expect_addressing_expr $22, test_expect_addressing_expr_34, 1, 0, 0, 0, 0, err_syntax, 11+4
+    +test_expect_addressing_expr $23, test_expect_addressing_expr_35, 1, 0, 0, 0, 0, err_syntax, 4+4
+    +test_expect_addressing_expr $24, test_expect_addressing_expr_36, 1, 0, 0, 0, 0, err_value_out_of_range, 5+4
+
 
     +print_chr chr_cr
     +print_strlit_line "test-assemble-pc"

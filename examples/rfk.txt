@@ -1,5 +1,5 @@
-; !cpu m65
-; !to "rfk-asm.prg", cbm
+!cpu m65
+!to "rfk", cbm
 
 scrnmode = $d031
 scrnptr = $d060

@@ -63,24 +63,6 @@ test_expect_addressing_expr_17: !pet "lda [$fe],z",0
 test_expect_addressing_expr_18: !pet "lda [$fe]",0
 test_expect_addressing_expr_19: !pet "lda (4,sp),y",0
 test_expect_addressing_expr_20: !pet "lda (4,sP),Y",0
-; Syntax errors
-test_expect_addressing_expr_21: !pet "lda # : inx",0
-test_expect_addressing_expr_22: !pet "lda $fe,w",0
-test_expect_addressing_expr_23: !pet "lda $fffe,w",0
-test_expect_addressing_expr_24: !pet "lda ($fe),w",0
-test_expect_addressing_expr_25: !pet "lda [$fe],w",0
-test_expect_addressing_expr_26: !pet "lda lda",0
-test_expect_addressing_expr_27: !pet "lda (lda,x)",0
-test_expect_addressing_expr_28: !pet "lda ($fe x)",0
-test_expect_addressing_expr_29: !pet "lda ($fe,y)",0
-test_expect_addressing_expr_30: !pet "lda ($fe,x",0
-test_expect_addressing_expr_31: !pet "lda (4,sp",0
-test_expect_addressing_expr_32: !pet "lda (4,sp)",0
-test_expect_addressing_expr_33: !pet "lda (4,sp),",0
-test_expect_addressing_expr_34: !pet "lda (4,sp),x",0
-test_expect_addressing_expr_35: !pet "inx iny",0
-; Other errors
-test_expect_addressing_expr_36: !pet "lda [$fffe],z",0  ; err_value_out_of_range
 
 
 run_test_suite_cmd:
@@ -110,23 +92,6 @@ run_test_suite_cmd:
     +test_expect_addressing_expr $12, test_expect_addressing_expr_18, 0, MODE_32BIT_IND, $fe, F_EXPR_BRACKET_SQUARE, 13, 0, 0
     +test_expect_addressing_expr $13, test_expect_addressing_expr_19, 0, MODE_STACK_REL, 4, 0, 23, 0, 0
     +test_expect_addressing_expr $14, test_expect_addressing_expr_20, 0, MODE_STACK_REL, 4, 0, 23, 0, 0
-    +test_expect_addressing_expr $15, test_expect_addressing_expr_21, 1, 0, 0, 0, 0, err_syntax, 6+4
-    ; TODO: this test isn't tokenizing correctly? can't repro in real life
-    ; +test_expect_addressing_expr $16, test_expect_addressing_expr_22, 1, 0, 0, 0, 0, err_syntax, 8+4
-    +test_expect_addressing_expr $17, test_expect_addressing_expr_23, 1, 0, 0, 0, 0, err_syntax, 10+4
-    +test_expect_addressing_expr $18, test_expect_addressing_expr_24, 1, 0, 0, 0, 0, err_syntax, 10+4
-    +test_expect_addressing_expr $19, test_expect_addressing_expr_25, 1, 0, 0, 0, 0, err_syntax, 10+4
-    +test_expect_addressing_expr $1a, test_expect_addressing_expr_26, 1, 0, 0, 0, 0, err_syntax, 4+4
-    +test_expect_addressing_expr $1b, test_expect_addressing_expr_27, 1, 0, 0, 0, 0, err_syntax, 5+4
-    +test_expect_addressing_expr $1c, test_expect_addressing_expr_28, 1, 0, 0, 0, 0, err_syntax, 9+4
-    +test_expect_addressing_expr $1d, test_expect_addressing_expr_29, 1, 0, 0, 0, 0, err_syntax, 9+4
-    +test_expect_addressing_expr $1e, test_expect_addressing_expr_30, 1, 0, 0, 0, 0, err_syntax, $ff ; end of line
-    +test_expect_addressing_expr $1f, test_expect_addressing_expr_31, 1, 0, 0, 0, 0, err_syntax, $ff
-    +test_expect_addressing_expr $20, test_expect_addressing_expr_32, 1, 0, 0, 0, 0, err_syntax, $ff
-    +test_expect_addressing_expr $21, test_expect_addressing_expr_33, 1, 0, 0, 0, 0, err_syntax, $ff
-    +test_expect_addressing_expr $22, test_expect_addressing_expr_34, 1, 0, 0, 0, 0, err_syntax, 11+4
-    +test_expect_addressing_expr $23, test_expect_addressing_expr_35, 1, 0, 0, 0, 0, err_syntax, 4+4
-    +test_expect_addressing_expr $24, test_expect_addressing_expr_36, 1, 0, 0, 0, 0, err_value_out_of_range, 5+4
 
     +print_chr chr_cr
     +print_strlit_line "-- all tests passed --"

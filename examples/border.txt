@@ -1,7 +1,6 @@
 ; the canonical commodore "hello world:" change the border color
 
-; !to "border", runnable
-* = $1600
+!to "border", runnable
 
 border = $d020
 

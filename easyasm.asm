@@ -28,7 +28,7 @@ save_program = $1e1a
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 63
+* = $100 - 66
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -64,6 +64,7 @@ instr_supported_modes *=*+2
 
 symtbl_next_name *=*+3
 last_pc_defined_global_label *=*+2
+rellabels_next *=*+3
 
 current_file    *=*+4
 F_FILE_MASK     = %00000011
@@ -112,7 +113,9 @@ attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
 attic_segments_end  = attic_segments + $b000
 attic_forced16s     = attic_segments + $b000       ; 2.6700-2.7D00 (5.5 KB)
 attic_forced16s_end = attic_forced16s + $1600
-; (Small gap here if you want it.)
+attic_rellabels     = attic_forced16s + $1600      ; 2.7D00-2.8D00 (4 KB)
+attic_rellabels_end = attic_rellabels + $1000
+; (Gap: 2.8D00-3.0000 = $7300 = 28.75 KB)
 ; Save file cannot cross a bank boundary, limit 64 KB
 attic_savefile_start = attic_easyasm_stash + $30000 ; 3.0000-4.0000 (64 KB)
 attic_savefile_max_end = attic_savefile_start + $10000
@@ -3419,6 +3422,220 @@ add_forced16:
     inz
     sta [attic_ptr],z
 +   rts
+
+
+; ------------------------------------------------------------
+; Relative label table
+; ------------------------------------------------------------
+; Terminator (on both ends): (00, 00, 00)
+; Record: (tok_type[7] : len[0:6], pc16)
+;   tok_type: 0=plus 1=minus
+
+start_rellabel_table:
+    lda #<attic_rellabels
+    sta attic_ptr
+    lda #>attic_rellabels
+    sta attic_ptr+1
+    lda #^attic_rellabels
+    sta attic_ptr+2
+    lda #$08
+    sta attic_ptr+3
+    rts
+
+; Z flag=1 yes, Z flag=0 no
+rellabel_on_terminator:
+    ldz #0
+    lda [attic_ptr],z
+    inz
+    ora [attic_ptr],z
+    inz
+    ora [attic_ptr],z
+    cmp #0
+    rts
+
+next_rellabel:
+    inq attic_ptr
+    inq attic_ptr
+    inq attic_ptr
+    rts
+
+prev_rellabel:
+    deq attic_ptr
+    deq attic_ptr
+    deq attic_ptr
+    rts
+
+init_rellabel_table:
+    jsr start_rellabel_table
+    ldz #5
+    lda #0
+-   sta [attic_ptr],z
+    dez
+    bpl -
+
+    lda #<(attic_rellabels+3)
+    sta rellabels_next
+    lda #>(attic_rellabels+3)
+    sta rellabels_next+1
+    lda #^(attic_rellabels+3)
+    sta rellabels_next+2
+    rts
+
+; Inputs:
+;    C=0 plus, C=1 minus
+;    A=len; X/Y=PC
+;    rellabels_next=address of ending terminator
+; Outputs:
+;    C=1 out of memory
+; Uses attic_ptr
+add_rellabel:
+    bcc +
+    ora #$80
++   pha
+
+    ; attic_ptr = rellabels_next
+    lda rellabels_next
+    sta attic_ptr
+    lda rellabels_next+1
+    sta attic_ptr+1
+    lda rellabels_next+2
+    sta attic_ptr+2
+    lda #$08
+    sta attic_ptr+3
+
+    ; Write the new entry
+    ldz #0
+    pla
+    sta [attic_ptr],z
+    inz
+    txa
+    sta [attic_ptr],z
+    inz
+    tya
+    sta [attic_ptr],z
+
+    ; Write new list terminator
+    inz
+    lda #0
+    sta [attic_ptr],z
+    inz
+    lda #0
+    sta [attic_ptr],z
+    inz
+    lda #0
+    sta [attic_ptr],z
+
+    ; Increment rellabels_next and attic_ptr
+    lda rellabels_next
+    clc
+    adc #3
+    sta rellabels_next
+    sta attic_ptr
+    lda rellabels_next+1
+    adc #0
+    sta rellabels_next+1
+    sta attic_ptr+1
+    lda rellabels_next+2
+    adc #0
+    sta rellabels_next+2
+    sta attic_ptr+2
+
+    ; Test for out of memory
+    lda #<attic_rellabels_end
+    ldx #>attic_rellabels_end
+    ldy #^attic_rellabels_end
+    ldz #$08
+    cpq attic_ptr
+    bcs +
+    sec  ; out of memory
+    rts
++   clc
+    rts
+
+; Inputs:
+;    C=0 plus, C=1 minus
+;    A=len; X/Y=current PC
+; Outputs:
+;    C=0 not found
+;    C=1 found; X/Y=label definition
+; Uses expr_a, attic_ptr
+eval_rellabel:
+    bcc +
+    ora #$80
++   sta expr_a+2
+    stx expr_a
+    sty expr_a+1
+    jsr start_rellabel_table
+    jsr next_rellabel
+
+    ; Scan forward to PC <= entry_pc, or to end of table
+-   jsr rellabel_on_terminator
+    beq +++
+    ldz #2
+    lda expr_a+1
+    cmp [attic_ptr],z
+    beq +   ; PC_high = entry_pc_high
+    bcc ++  ; PC_high < entry_pc_high
+    bra +++ ; PC_high > entry_pc_high
++   dez
+    lda expr_a
+    cmp [attic_ptr],z
+    bcs +++  ; PC >= entry_pc
+++  ; Continue scan
+    jsr next_rellabel
+    bra -
++++
+
+    jsr rellabel_on_terminator
+    bne +
+    bit expr_a+2
+    bmi +
+    ; Already at end of table, no plus tokens.
+    clc
+    rts
++
+
+    ; Scan in label direction to dir+len, or to end/beginning of table
+    ldz #0
+-   jsr rellabel_on_terminator
+    bne +
+    ; Not found
+    clc
+    rts
++   lda [attic_ptr],z
+    cmp expr_a+2
+    bne ++
+
+    ; Edge case: if current PC = this entry's PC and direction is positive,
+    ; reject this option. (Accept: - bra -; Reject: + bra +)
+    ldz #1
+    lda [attic_ptr],z
+    cmp expr_a
+    bne +
+    inz
+    lda [attic_ptr],z
+    cmp expr_a+1
+    bne +
+    bit expr_a+2
+    bpl ++
+
++   ; Found
+    ldz #1
+    lda [attic_ptr],z
+    tax
+    inz
+    lda [attic_ptr],z
+    tay
+    sec
+    rts
+
+    ; Next
+++  bit expr_a+2
+    bmi +
+    jsr next_rellabel
+    bra -
++   jsr prev_rellabel
+    bra -
 
 
 ; ------------------------------------------------------------
@@ -6922,7 +7139,7 @@ run_test_suite_cmd: rts
 
 ; ---------------------------------------------------------
 
-; !warn "EasyAsm remaining code space: ", max_end_of_program - *
+!warn "EasyAsm remaining code space: ", max_end_of_program - *
 !if * >= max_end_of_program {
     !error "EasyAsm code is too large, * = ", *
 }

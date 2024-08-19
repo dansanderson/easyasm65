@@ -253,6 +253,126 @@ tee_line_1: !pet "label",0
 tee_line_2: !pet "8 div 2",0
 tee_line_3: !pet "60 div 5 div 4",0
 
+!macro test_tokenize_pseudoop .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_pseudoop
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_tokenize_pseudoop_1: !pet "!to  ",0
+test_tokenize_pseudoop_2: !pet "!byte  ",0
+test_tokenize_pseudoop_3: !pet "!warn  ",0
+test_tokenize_pseudoop_4: !pet "!zzz  ",0
+test_tokenize_pseudoop_5: !pet "!toz  ",0
+test_tokenize_pseudoop_6: !pet "#!to#  ",0
+test_tokenize_pseudoop_7: !pet "to  ",0
+
+!macro test_tokenize_other .tnum, .str, .pos, .ec, .etoken, .epos {
+    +test_start .tnum
+
+    ; Copy .str to strbuf
+    ldx #0
+-   lda .str,x
+    sta strbuf,x
+    beq +
+    inx
+    bra -
++
+    ldx #.pos
+    stx line_pos
+    jsr tokenize_other
+!if .ec {
+    bcs +
+    brk
++   cpx #.etoken
+    beq +
+    brk
++   lda line_pos
+    cmp #.epos
+    beq +
+    brk
++
+} else {
+    bcc +
+    brk
++   lda line_pos
+    cmp #.pos
+    beq +
+    brk
++
+}
+
+    +test_end
+}
+
+test_tokenize_other_1: !pet "!ident", 0
+test_tokenize_other_2: !pet "^ident", 0
+test_tokenize_other_3: !pet ">>>ident", 0
+test_tokenize_other_4: !pet ">> >ident", 0
+test_tokenize_other_5: !pet "],z", 0
+test_tokenize_other_6: !pet "ident", 0
+
+!macro test_load_line_to_strbuf .tnum, .str, .estr {
+    +test_start .tnum
+
+    ; Fake assembly location in bank 5
+    lda #5
+    sta bas_ptr+2
+    lda #0
+    sta bas_ptr+3
+    lda #<(.str - 4)
+    sta line_addr
+    lda #>(.str - 4)
+    sta line_addr+1
+    jsr load_line_to_strbuf
+
+    ldx #4-1
+-   inx
+    lda .estr-4,x
+    beq +
+    cmp strbuf,x
+    beq -
+    brk
++
+
+    +test_end
+}
+
+test_load_line_to_strbuf_1:  !pet "AbC",0
+test_load_line_to_strbuf_1e: !pet "abc",0
+
 
 run_test_suite_cmd:
     +print_strlit_line "-- test suite --"
@@ -338,6 +458,31 @@ run_test_suite_cmd:
     +test_expect_expr $13, "negate", tee_tb_15, tee_tb_end, tee_line_1, 0, 8, -2, 0
 
     ; Continued in test_suite_10
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-pseudoop"
+    +test_tokenize_pseudoop $01, test_tokenize_pseudoop_1, 0, 1, po_to, 3
+    +test_tokenize_pseudoop $02, test_tokenize_pseudoop_2, 0, 1, po_byte, 5
+    +test_tokenize_pseudoop $03, test_tokenize_pseudoop_3, 0, 1, po_warn, 5
+    +test_tokenize_pseudoop $04, test_tokenize_pseudoop_4, 0, 0, 0, 0
+    +test_tokenize_pseudoop $05, test_tokenize_pseudoop_5, 0, 0, 0, 0
+    +test_tokenize_pseudoop $06, test_tokenize_pseudoop_6, 1, 1, po_to, 4
+    +test_tokenize_pseudoop $07, test_tokenize_pseudoop_7, 0, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-other"
+    +test_tokenize_other $01, test_tokenize_other_1, 0, 1, tk_complement, 1
+    +test_tokenize_other $02, test_tokenize_other_2, 0, 1, tk_power, 1
+    +test_tokenize_other $03, test_tokenize_other_3, 0, 1, tk_lsr, 3
+    +test_tokenize_other $04, test_tokenize_other_4, 0, 1, tk_asr, 2
+    +test_tokenize_other $05, test_tokenize_other_5, 0, 1, tk_rbracket, 1
+    +test_tokenize_other $06, test_tokenize_other_6, 0, 0, 0, 0
+
+    +print_chr chr_cr
+    +print_strlit_line "tokenize-load-line-to-strbuf"
+    +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
+    +test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
+
 
     ; -----------------------------------
 

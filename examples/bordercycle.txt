@@ -1,7 +1,6 @@
 ; change the border color continuously
 
-; !to "border", runnable
-* = $1600
+!to "border", runnable
 
 border = $d020
 
