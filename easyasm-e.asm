@@ -26,6 +26,8 @@
 ; check easyasm.asm first.)
 EXPECTED_END_OF_DISPATCH = $1e9f
 
+save = $ffd8
+
 * = $1e00
 
     ; $1E00: Launch menu.
@@ -45,6 +47,21 @@ execute_user_program:
     jsr sys_to_easyasm
     rts
 user_address: !byte $00, $00
+    ; $1E1A: Save user's program.
+    ; SETBNK, SETNAM, SETLFS already called
+    ; $00fe-00ff: start address (16-bit), in data bank
+    ; X/Y: end address (16-bit), in data bank
+    phx
+    phy
+    jsr easyasm_to_sys
+    ply
+    plx
+    lda #$fe
+    jsr save
+    pha
+    jsr sys_to_easyasm
+    pla
+    rts
 
 install:
     ; Copy EasyAsm from $8700000 to $52000

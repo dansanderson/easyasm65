@@ -302,32 +302,34 @@ EasyAsm also supports C-style `//` line comments, similar to Acme.
 Instruction names (opcode mnemonics) are canonical for the 45GS02.
 
 ```
-adc   bbs1  bvs   eor   lbvs  pla   rts   stz
-adcq  bbs2  clc   eorq  lda   plp   sbc   tab
-and   bbs3  cld   inc   ldq   plx   sbcq  tax
-andq  bbs4  cle   inq   ldx   ply   sec   tay
-asl   bbs5  cli   inw   ldy   plz   sed   taz
-aslq  bbs6  clv   inx   ldz   rmb0  see   tba
-asr   bbs7  cmp   iny   lsr   rmb1  sei   trb
-asrq  bcc   cmpq  inz   lsrq  rmb2  smb0  tsb
-asw   bcs   cpq   jmp   map   rmb3  smb1  tsx
-aug   beq   cpx   jsr   neg   rmb4  smb2  tsy
-bbr0  bit   cpy   lbcc  nop   rmb5  smb3  txa
-bbr1  bitq  cpz   lbcs  ora   rmb6  smb4  txs
-bbr2  bmi   dec   lbeq  orq   rmb7  smb5  tya
-bbr3  bne   deq   lbmi  pha   rol   smb6  tys
-bbr4  bpl   dew   lbne  php   rolq  smb7  tza
-bbr5  bra   dex   lbpl  phw   ror   sta
-bbr6  brk   dey   lbra  phx   rorq  stq
-bbr7  bsr   dez   lbsr  phy   row   stx
-bbs0  bvc   eom   lbvc  phz   rti   sty
+adc   bbs1  bvs   eor   lbvs  pla   rtn   sty
+adcq  bbs2  clc   eorq  lda   plp   rts   stz
+and   bbs3  cld   inc   ldq   plx   sbc   tab
+andq  bbs4  cle   inq   ldx   ply   sbcq  tax
+asl   bbs5  cli   inw   ldy   plz   sec   tay
+aslq  bbs6  clv   inx   ldz   rmb0  sed   taz
+asr   bbs7  cmp   iny   lsr   rmb1  see   tba
+asrq  bcc   cmpq  inz   lsrq  rmb2  sei   trb
+asw   bcs   cpq   jmp   map   rmb3  smb0  tsb
+aug   beq   cpx   jsr   neg   rmb4  smb1  tsx
+bbr0  bit   cpy   lbcc  nop   rmb5  smb2  tsy
+bbr1  bitq  cpz   lbcs  ora   rmb6  smb3  txa
+bbr2  bmi   dec   lbeq  orq   rmb7  smb4  txs
+bbr3  bne   deq   lbmi  pha   rol   smb5  tya
+bbr4  bpl   dew   lbne  php   rolq  smb6  tys
+bbr5  bra   dex   lbpl  phw   ror   smb7  tza
+bbr6  brk   dey   lbra  phx   rorq  sta
+bbr7  bsr   dez   lbsr  phy   row   stq
+bbs0  bvc   eom   lbvc  phz   rti   stx
 ```
 
 EasyAsm supports explicit 16-bit branch instructions, using Acme syntax: `lbcc`, `lbcs`, `lbeq`, `lbmi`, `lbne`, `lbpl`, `lbra`, `lbsr`, `lbvc`, `lbvs` Neither EasyAsm nor Acme support automatic promotion of 8-bit branch instructions to 16-bit. The assembler will report an error if an 8-bit branch is too short.
 
-EasyAsm supports both `cpq` (Acme) and `cmpq` (Monitor, MEGA65 manual) as spellings of that instruction.
+EasyAsm supports both `cpq` (Acme) and `cmpq` (Monitor, MEGA65 manual) as spellings of that instruction. It also supports both `rtn #...` (Acme) and `rts #...` as synonyms, just for that addressing mode.
 
 Instructions that operate on the accumulator or quad register as an alternative to a memory location are sometimes spelled with an `A` or `Q` in the place of an argument. Omit these for EasyAsm, as you would for Acme or the Monitor. For example, to logical-shift right the accumulator, use `lsr`, not `lsr a`.
+
+Acme [erroneously](https://sourceforge.net/p/acme-crossass/tickets/22/) accepts `ldq (zp)` and `ldq [zp]`, but not `ldq (zp),z` and `ldq [zp],z`. The latter are actually more correct, because these instructions do honor the Z index, even though they also overwrite the Z register. For compatibility with Acme, EasyAsm supports both syntaxes. I recommend using the `ldq (zp),z` syntax for readability.
 
 The following are examples of syntax for the addressing modes. See the [MEGA65 Compendium](https://files.mega65.org/?id=d668168c-1fef-4560-a530-77e9e237536d) for a complete description of which instructions support each addressing mode.
 
@@ -757,6 +759,8 @@ A source file can provide more than one `!to` directive to create multiple files
 
 Assembling to disk will report an error if any instructions or data appear before the first `!to` directive. This is not an error when assembling to memory.
 
+A single file cannot exceed 64 KB in size.
+
 EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
 
 ### `!byte` or `!8`, `!word` or `!16`, `!32`
@@ -865,6 +869,7 @@ Here is a quick summary of features available in EasyAsm that are not available 
 * `!to "...", runnable`
 * Assemble to multiple files from one source file, with multiple `!to` directives
 * The "megabyte" (`^^`) selector operator
+* Instruction synonyms: `cmpq` for `cpq`, `rts #...` for `rtn #...`
 
 
 ## Building EasyAsm

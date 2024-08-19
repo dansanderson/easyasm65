@@ -23,6 +23,7 @@
 kernal_base_page = $00
 easyasm_base_page = $1e
 execute_user_program = $1e08
+save_program = $1e1a
 
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
@@ -111,6 +112,10 @@ attic_segments      = attic_symbol_names + $6000   ; 1.B700-2.6700 (44 KB)
 attic_segments_end  = attic_segments + $b000
 attic_forced16s     = attic_segments + $b000       ; 2.6700-2.7D00 (5.5 KB)
 attic_forced16s_end = attic_forced16s + $1600
+; (Small gap here if you want it.)
+; Save file cannot cross a bank boundary, limit 64 KB
+attic_savefile_start = attic_easyasm_stash + $30000 ; 3.0000-4.0000 (64 KB)
+attic_savefile_max_end = attic_savefile_start + $10000
 
 ; - Symbol table entries are 8 bytes: (name_ptr_24, flags_8, value_32)
 SYMTBL_ENTRY_SIZE = 8
@@ -128,15 +133,19 @@ strbuf = $7f00        ; bank 5
 max_end_of_program = tokbuf
 
 ; KERNAL routines
+basin = $ffcf
 bsout = $ffd2
-primm = $ff7d
-open = $ffc0
-close = $ffc3
+chkin = $ffc6
 ckout = $ffc9
+close = $ffc3
+close_all = $ff50
+clrch = $ffcc
+open = $ffc0
+primm = $ff7d
+readss = $ffb7
 setbnk = $ff6b
 setlfs = $ffba
 setnam = $ffbd
-clrch = $ffcc
 
 ; MEGA65 registers
 dmaimm   = $d707
@@ -917,39 +926,119 @@ calculate_zero_fill:
     stq expr_a    ; expr_a = size of zero fill
     rts
 
+append_zero_fill_dma:
+!byte $81, <(attic_savefile_start >> 20)
+!byte $0b, $00
+!byte $03
+append_zero_fill_length: !byte $00, $00
+!byte $00, $00, $00
+append_zero_fill_dest: !byte $00, $00, $00
+!byte $00, $00, $00
+
 ; Input: expr_a = number of zeroes to write
-;   File open, ckout set to #2
-write_zero_fill:
+;   attic_ptr = dest
+; Outputs: attic_ptr advanced
+append_zero_fill:
+    lda attic_ptr
+    sta append_zero_fill_dest
+    lda attic_ptr+1
+    sta append_zero_fill_dest+1
+    lda attic_ptr+2
+    and #$0f
+    sta append_zero_fill_dest+2
+
+    lda expr_a
+    sta append_zero_fill_length
+    lda expr_a+1
+    sta append_zero_fill_length+1
+
+    lda #$00
+    sta dmamb
+    lda #$05
+    sta dmaba
+    lda #>append_zero_fill_dma
+    sta dmahi
+    lda #<append_zero_fill_dma
+    sta dmalo_e
+
     ldq expr_a
--   beq @after_zero_fill
-    lda #0
-    jsr bsout
-    deq expr_a
-    bra -
-@after_zero_fill
+    ldy #0
+    ldz #0
+    adcq attic_ptr
+    stq attic_ptr
     rts
 
-; Inputs:
-;   current_segment -> start of data (beyond seg header)
-;   expr_a = size of segment
-;   File open, ckout set to #2
-write_segment_data:
-    ldq expr_a
--   beq @after_segment_write
+append_to_save_file_dma:
+!byte $80
+append_to_save_file_source_mb: !byte $00
+!byte $81, <(attic_savefile_start >> 20)
+!byte $0b, $00
+!byte $00
+append_to_save_file_length: !byte $00, $00
+append_to_save_file_source: !byte $00, $00, $00
+append_to_save_file_dest: !byte $00, $00, $00
+!byte $00, $00, $00
+
+; Inputs: expr_a = start addr (32-bit); expr_b = length (16-bit)
+;   attic_ptr = dest
+; Outputs: attic_ptr advanced
+append_to_save_file:
+    ; Start address: $0abcdefg
+    ; append_to_save_file_source_mb = $ab
+    ; append_to_save_file_source = $fg $de $0c
+    lda expr_result+3
+    asl
+    asl
+    asl
+    asl
+    sta expr_result+3  ; (corrupt expr_result+3)
+    lda expr_result+2
+    lsr
+    lsr
+    lsr
+    lsr
+    ora expr_result+3
+    sta append_to_save_file_source_mb
+    lda expr_result+2
+    and #$0f
+    sta append_to_save_file_source+2
+    lda expr_result+1
+    sta append_to_save_file_source+1
+    lda expr_result
+    sta append_to_save_file_source
+
+    lda expr_a
+    sta append_to_save_file_length
+    lda expr_a+1
+    sta append_to_save_file_length+1
+
+    lda attic_ptr
+    sta append_to_save_file_dest
+    lda attic_ptr+1
+    sta append_to_save_file_dest+1
+    lda attic_ptr+2
+    and #$0f
+    sta append_to_save_file_dest+2
+
+    lda #$00
+    sta dmamb
+    lda #$05
+    sta dmaba
+    lda #>append_to_save_file_dma
+    sta dmahi
+    lda #<append_to_save_file_dma
+    sta dmalo_e
+
+    ldq expr_b
+    ldy #0
     ldz #0
-    lda [current_segment],z
-    jsr bsout
-    inq current_segment
-    deq expr_a
-    lbra -
-@after_segment_write
+    adcq attic_ptr
+    stq attic_ptr
     rts
 
 ; Inputs: program_counter = PC, expr_a = size
 print_segment_msg:
     ; Print segment msg
-    ldx #1
-    jsr ckout
     +kprimm_start
     !pet "  $",0
     +kprimm_end
@@ -965,96 +1054,85 @@ print_segment_msg:
     +kprimm_start
     !pet " bytes",13,0
     +kprimm_end
-    ldx #2
-    jsr ckout
+    rts
 
+; Writes formatted file to attic_savefile_start
 ; Input: current_file; tokbuf, tok_pos=end with sorted segments
-;   File open, ckout set to #2
-write_cbm_file:
-    ; Write first segment's PC to file.
+write_file_to_attic:
+    lda #<attic_savefile_start
+    sta attic_ptr
+    lda #>attic_savefile_start
+    sta attic_ptr+1
+    lda #^attic_savefile_start
+    sta attic_ptr+2
+    lda #<(attic_savefile_start >> 24)
+    sta attic_ptr+3
+
+    ldz #9
+    lda [current_file],z
+    and #F_FILE_MASK
+    cmp #F_FILE_PLAIN
+    beq +
+    ; Write first segment's PC.
+    ldy #0
+    ldq tokbuf,y
+    stq current_segment
     ldz #0
-    lda [tokbuf],z
-    +kcall bsout
+    lda [current_segment],z
+    sta [attic_ptr],z
     inz
-    lda [tokbuf],z
-    +kcall bsout
-    ; Continue to write_plain_file...
+    lda [current_segment],z
+    sta [attic_ptr],z
+    lda #0
+    tax
+    tay
+    taz
+    lda #2
+    clc
+    adcq attic_ptr
+    stq attic_ptr
++
 
-; Input: current_file; tokbuf, tok_pos=end with sorted segments
-;   File open, ckout set to #2
-;   Assumes at least one segment per file (tested in create_files_for_segments)
-write_plain_file:
-    ldy #0  ; tokbuf pos
+    ldz #9
+    lda [current_file],z
+    and #F_FILE_MASK
+    cmp #F_FILE_RUNNABLE
+    beq +
+    ; Write runnable bootstrap.
+    lda #<bootstrap_basic_preamble
+    ldx #>bootstrap_basic_preamble
+    ldy #$05
+    ldz #$00
+    stq expr_result
+    lda #<(bootstrap_basic_preamble_end-bootstrap_basic_preamble)
+    ldx #>(bootstrap_basic_preamble_end-bootstrap_basic_preamble)
+    ldy #$00
+    ldz #$00
+    stq expr_a
+    jsr append_to_save_file
++
 
+    ldy #0  ; token list position
 @segment_loop
     cpy tok_pos
     lbeq @end_segment_loop
     ldq tokbuf,y
     stq current_segment
-    phy
+
+    phy  ; Stash segment list position
 
     cpy #0
-    beq @after_zero_fill
+    beq +
     ; Not first segment, fill with zeroes
     jsr calculate_zero_fill
-    jsr write_zero_fill
-@after_zero_fill
+    jsr append_zero_fill
++
 
     jsr get_header_for_current_segment
-    lda #0
-    tax
-    tay
-    taz
-    lda #4  ; Q = 4
-    clc
-    adcq current_segment
-    stq current_segment  ; current_segment -> data
-
     jsr print_segment_msg
-
     ; Write segment data
-    ; Start addr = current_segment, size = expr_a
-    ldq expr_a
-    stq expr_b  ; Remember length for fill operation later
-    jsr write_segment_data
-
-    ply
-    iny
-    iny
-    iny
-    iny
-    lbra @segment_loop
-
-@end_segment_loop
-    rts
-
-; Input: current_file; tokbuf, tok_pos=end with sorted segments
-;   File open, ckout set to #2
-write_runnable_file:
-    ; Write BASIC preamble.
-    ldz #bootstrap_basic_preamble_end-bootstrap_basic_preamble
-    ldx #0
--   lda bootstrap_basic_preamble,x
-    jsr bsout
-    inx
-    dez
-    bne -
-
-    jsr get_header_for_current_segment
-
-    ; If list is one entry at bootstrap_ml_start, emit segment data, end.
-    ldy tok_pos
-    cmp #4
-    bne @runnable_with_installer
-    lda program_counter
-    cmp #<bootstrap_ml_start
-    bne @runnable_with_installer
-    lda program_counter+1
-    cmp #>bootstrap_ml_start
-    bne @runnable_with_installer
-
-    jsr print_segment_msg
-
+    ; expr_result = start = current_segment + 4
+    ; expr_a = size (from get_header_for_current_segment)
     lda #0
     tax
     tay
@@ -1062,42 +1140,10 @@ write_runnable_file:
     lda #4  ; Q = 4
     clc
     adcq current_segment
-    stq current_segment  ; current_segment -> data
-    jsr write_segment_data
-    rts
+    stq expr_result
+    jsr append_to_save_file
 
-@runnable_with_installer
-    ; Write segment installer.
-    ldz #bootstrap_segment_installer_end-bootstrap_segment_installer
-    ldx #0
--   lda bootstrap_segment_installer,x
-    jsr bsout
-    inx
-    dez
-    bne -
-
-    ldy #0  ; tokbuf pos
-@segment_loop
-    cpy tok_pos
-    lbeq @end_segment_loop
-    ldq tokbuf,y
-    stq current_segment
-    phy
-
-    jsr print_segment_msg
-
-    jsr get_header_for_current_segment
-    lda #0
-    tax
-    tay
-    taz
-    lda #4
-    clc
-    adcq expr_a
-    stq expr_a   ; Extend segment length by header size.
-    jsr write_segment_data
-
-    ply
+    ply  ; Advance segment list position
     iny
     iny
     iny
@@ -1105,6 +1151,46 @@ write_runnable_file:
     lbra @segment_loop
 
 @end_segment_loop
+    rts
+
+
+; Reads the command channel
+; Outputs: strbuf, C=1: there's something on strbuf worth printing
+check_disk_status:
+    lda #15
+    ldx #1    ; default disk
+    ldy #15   ; command channel
+    +kcall setlfs
+    +kcall open
+    bcc +
+    rts
++   ldx #15
+    +kcall chkin
+
+    ldx #0
+-   +kcall basin
+    sta strbuf,x
+    inx
+    beq +
+    +kcall readss
+    beq -
++
+    lda #15
+    sec  ; don't close other files
+    +kcall close
+
+    lda #0
+    sta strbuf,x  ; null terminator
+    cpx #0
+    beq +  ; nothing read from command channel
+    lda strbuf
+    cmp #'0'
+    beq +
+    cmp #'1'
+    beq +    ; Error codes 00-19 are ok
+    sec
+    rts
++   clc  ; disk status 0
     rts
 
 
@@ -1173,88 +1259,127 @@ create_files_for_segments:
     sta line_addr+1
     rts
 +
-
-    ; Open file.
-    ; - Screen: logical address 1
-    lda #1
-    ldx #3    ; screen
-    ldy #$ff  ; no secondary address
-    jsr setlfs
-    jsr open
-    bcc +
-    +debug_print "[can't open screen on la=1 ??]"
-    rts
-+
-
-    ; - File: logical address 2
-    ldz #4
-    ldq [current_file]  ; Q = address of filename
-    tza
-    ora #%10000000
-    tax  ; X = filename address bits 24-47, bit 7 set for 28-bit address mode
-    tya
-    taz  ; Z = filename address bits 16-23
-    lda #0
-    tay  ; A/Y = 0, memory address unused (not using SAVE)
-    jsr setbnk
-    ldz #4
-    ldq [current_file]  ; Q = address of filename
-    taz  ; (address low -> Z)
-    txa
-    tay  ; Y = filename address high
-    tza
-    tax  ; X = filename address low
-    ldz #8
-    lda [current_file],z  ; A = filename length
-    jsr setnam
-    lda #2    ; logical address 2
-    ldx #1    ; default device
-    ldy #$ff  ; no secondary address
-    jsr setlfs
-    jsr open
-    bcs @disk_error
-
-    ldx #2
-    jsr ckout
-
-    ; tokbuf contains sorted segment record addresses.
-    ; tok_pos = 4 * number of segments (next tokbuf pos).
+    ; Confirm runnable type only has one segment at bootstrap location
     ldz #9
     lda [current_file],z
     and #F_FILE_MASK
-    cmp #F_FILE_CBM
+    cmp #F_FILE_RUNNABLE
+    bne ++
+    lda tok_pos
+    cmp #4
+    beq ++
+    lda tokbuf
+    cmp #<bootstrap_ml_start
     bne +
-    jsr write_cbm_file
-    bra ++
-+   cmp #F_FILE_PLAIN
-    bne +
-    jsr write_plain_file
-    bra ++
-+   jsr write_runnable_file
+    lda tokbuf+1
+    cmp #>bootstrap_ml_start
+    beq ++
++   lda #err_runnable_wrong_segments
+    sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
+    rts
 ++
-    ; Close file.
-    lda #2
-    clc
-    jsr close
-    bcs @disk_error
-    lda #1
-    clc
-    jsr close
-    bcc +
-    +debug_print "[can't close screen channel ??]"
-+   jsr clrch
+
+    jsr write_file_to_attic
+    lda attic_ptr+2
+    cmp #^attic_savefile_start
+    beq +
+    ; Total file size exceeds 64 KB, abort with error
+    lda #err_out_of_memory
+    sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
+    rts
++
+
+    ; Copy "@:" and filename to strbuf, use it for filename
+    lda #'@'
+    sta strbuf
+    lda #':'
+    sta strbuf+1
+    ldz #4
+    ldq [current_file]  ; Q = address of filename
+    stq expr_a
+    ldz #8
+    lda [current_file],z  ; A = filename length
+    tay     ; Y = length
+    ldx #2  ; strbuf pos
+    ldz #0  ; data pos
+-   lda [expr_a],z
+    sta strbuf,x
+    inx
+    inz
+    dey
+    bne -
+
+    ; Save the file
+    lda #($80 | <(attic_savefile_start >> 24)); file MB
+    ldy #^attic_savefile_start
+    ldx #5  ; strbuf bank
+    +kcall setbnk
+    ldx #<strbuf
+    ldy #>strbuf
+    ldz #8
+    lda [current_file],z  ; A = filename length
+    inc
+    inc  ; For "@:" prefix
+    +kcall setnam
+    lda #2    ; logical address 2
+    ldx #1    ; default device
+    ldy #2    ; disks want a secondary address
+    +kcall setlfs
+    lda #<attic_savefile_start
+    sta $fe
+    lda #>attic_savefile_start
+    sta $ff
+    ; X/Y = 16-bit end address + 1
+    ; This works because attic_savefile_start begins on a bank boundary,
+    ; and the file size is limited to 64 KB.
+    ldx attic_ptr
+    ldy attic_ptr+1
+    jsr save_program
+    bcs @kernal_disk_error
+
+    jsr check_disk_status
+; TODO
+;    bcc +
+    ldx #<strbuf
+    ldy #>strbuf
+    jsr print_cstr  ; TODO: make disk error prettier?
+; TODO: set err_code? abort file loop after closing files?
+;+
 
     jsr is_end_segment_traversal
     lbcc @file_loop
     rts
 
-@disk_error
+@kernal_disk_error
     ; A = error code
-+debug_print "[disk error A=]"
-brk
+    pha
+    +kcall clrch
+    pla
+    dec
+    asl
+    tax
+    lda kernal_error_messages+1,x
+    tay
+    lda kernal_error_messages,x
+    tax
+    jsr print_cstr
+    lda #','
+    +kcall bsout
+    lda #' '
+    +kcall bsout
     lda #err_disk_error
     sta err_code
+    lda #$00
+    sta line_addr
+    sta line_addr+1
     rts
+
 
 assemble_to_disk_cmd:
     +kprimm_start
@@ -5856,7 +5981,7 @@ assemble_source:
 
 err_message_tbl:
 !word e01,e02,e03,e04,e05,e06,e07,e08,e09,e10,e11,e12,e13,e14,e15
-!word e16,e17,e18
+!word e16,e17,e18,e19
 
 err_messages:
 err_syntax = 1
@@ -5894,13 +6019,29 @@ e16: !pet "unsupported cpu mode",0
 err_segment_without_a_file = 17
 e17: !pet "segment without a file, missing !to", 0
 err_disk_error = 18
-e18: !pet "disk error",0
+e18: !pet "kernal disk error",0
+err_device_not_present = 19
+e19: !pet "disk device not present; to set device, use: set def #"
+err_runnable_wrong_segments = 20
+e20: !pet "runnable file only supports one segment at default pc"
 
 warn_message_tbl:
 !word w01
 warn_messages:
 warn_ldz_range = 1
 w01: !pet "ldz with address $00-$FF behaves as $0000-$00FF (ldz+2 to silence)"
+
+kernal_error_messages:
+!word ke01,ke02,ke03,ke04,ke05,ke06,ke07,ke08,ke09
+ke01: !pet "too many files are open",0
+ke02: !pet "file already open",0
+ke03: !pet "file not open",0
+ke04: !pet "file not found",0
+ke05: !pet "device not present",0
+ke06: !pet "not input file",0
+ke07: !pet "not output file",0
+ke08: !pet "missing filename",0
+ke09: !pet "illegal device number",0
 
 ; ---------------------------------------------------------
 ; Mnemonics token list
@@ -6747,18 +6888,6 @@ bootstrap_basic_preamble_end:
 ; (Acme needs this below the preamble so it is defined in the first pass.)
 bootstrap_ml_start = source_start + 1 + bootstrap_basic_preamble_end - bootstrap_basic_preamble
 
-bootstrap_segment_installer:
-!pseudopc bootstrap_ml_start {
-    ; TODO: Install segments; jmp to start of first segment
-    +debug_print "non-default runnable not yet supported"
-    rts
-
-    bootstrap_segment_data = *
-}
-bootstrap_segment_installer_end:
-!if bootstrap_segment_installer_end-bootstrap_segment_installer > 255 {
-    !error "Bootstrap segment installer >256 bytes, need better copy routine"
-}
 
 ; ---------------------------------------------------------
 ; Tests
@@ -6794,7 +6923,7 @@ bootstrap_segment_installer_end:
     }
 } else {
     !warn "No TEST_SUITE requested"
-    run_test_suite_cmd: rts
+run_test_suite_cmd: rts
 }
 
 ; ---------------------------------------------------------
