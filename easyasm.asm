@@ -3563,64 +3563,78 @@ add_rellabel:
 eval_rellabel:
     bcc +
     ora #$80
-+   sta expr_a+2
-    stx expr_a
-    sty expr_a+1
++   sta expr_a
+    stx expr_a+1
+    sty expr_a+2
     jsr start_rellabel_table
     jsr next_rellabel
 
-    ; Scan forward to PC <= entry_pc, or to end of table
--   jsr rellabel_on_terminator
+    ; Entry table ordered by PC ascending.
+    ; Scan forward to target_PC <= entry_pc, or to end of table
+@pc_scan_loop
+    jsr rellabel_on_terminator
     beq +++
     ldz #2
+    lda expr_a+2
+    cmp [attic_ptr],z
+    beq +   ; target_PC_high = entry_pc_high
+    bcc +++ ; target_PC_high < entry_pc_high
+    bra ++  ; target_PC_high > entry_pc_high
++   dez
     lda expr_a+1
     cmp [attic_ptr],z
-    beq +   ; PC_high = entry_pc_high
-    bcc ++  ; PC_high < entry_pc_high
-    bra +++ ; PC_high > entry_pc_high
-+   dez
-    lda expr_a
-    cmp [attic_ptr],z
-    bcs +++  ; PC >= entry_pc
+    beq +++  ; target_PC = entry_pc
+    bcc +++  ; target_PC < entry_pc
 ++  ; Continue scan
     jsr next_rellabel
-    bra -
+    bra @pc_scan_loop
 +++
 
-    jsr rellabel_on_terminator
+    ; If current PC = this entry's PC and direction is positive,
+    ; go ahead one. (Accept: - bra -; Reject: + bra +)
+    ldz #1
+    lda [attic_ptr],z
+    cmp expr_a+1
     bne +
-    bit expr_a+2
+    inz
+    lda [attic_ptr],z
+    cmp expr_a+2
+    bne +
+    bit expr_a
     bmi +
-    ; Already at end of table, no plus tokens.
-    clc
-    rts
+    jsr next_rellabel
 +
 
+    ; If current PC < this entry's PC or on end terminator and direction is
+    ; minus, go back one.
+    bit expr_a
+    bpl ++
+    jsr rellabel_on_terminator
+    beq +
+    lda expr_a+2
+    ldz #2
+    cmp [attic_ptr],z
+    bcc +
+    lda expr_a+1
+    ldz #1
+    cmp [attic_ptr],z
+    bcs ++
++   jsr prev_rellabel
+++
+
     ; Scan in label direction to dir+len, or to end/beginning of table
-    ldz #0
--   jsr rellabel_on_terminator
+@label_scan_loop
+    jsr rellabel_on_terminator
     bne +
     ; Not found
     clc
     rts
-+   lda [attic_ptr],z
-    cmp expr_a+2
-    bne ++
 
-    ; Edge case: if current PC = this entry's PC and direction is positive,
-    ; reject this option. (Accept: - bra -; Reject: + bra +)
-    ldz #1
++   ldz #0
     lda [attic_ptr],z
     cmp expr_a
     bne +
-    inz
-    lda [attic_ptr],z
-    cmp expr_a+1
-    bne +
-    bit expr_a+2
-    bpl ++
-
-+   ; Found
+    ; Found
     ldz #1
     lda [attic_ptr],z
     tax
@@ -3631,12 +3645,12 @@ eval_rellabel:
     rts
 
     ; Next
-++  bit expr_a+2
++   bit expr_a
     bmi +
     jsr next_rellabel
-    bra -
+    bra @label_scan_loop
 +   jsr prev_rellabel
-    bra -
+    bra @label_scan_loop
 
 
 ; ------------------------------------------------------------
