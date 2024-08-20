@@ -4121,26 +4121,20 @@ expect_primary:
     ; A=len; X/Y=current PC
     cmp #tk_pluses
     beq +
-    clc
+    sec
     bra ++
-+   sec
++   clc
 ++
     tya
     ldx program_counter
     ldy program_counter+1
     jsr eval_rellabel
-    bcs +
-    lda expr_flags
-    ora #F_EXPR_UNDEFINED
-    sta expr_flags
-    lbra @succeed
+    lbcc @undefined_label
 +   stx expr_result
     sty expr_result+1
     lda #0
     sta expr_result+2
     sta expr_result+3
-    lda expr_flags
-    and #!F_EXPR_UNDEFINED
     sta expr_flags
     lbra @succeed
 
@@ -4149,7 +4143,7 @@ expect_primary:
     lbcs +++
     jsr find_or_add_label
     jsr get_symbol_value
-    bcs ++
+    bcs @undefined_label
     stq expr_result
     ldz #3
     lda #0
@@ -4161,6 +4155,7 @@ expect_primary:
     sta expr_flags
 +   bra @succeed
 
+@undefined_label
 ++  lda #F_EXPR_UNDEFINED
     sta expr_flags
     bit pass           ; undefined label is an error in final pass
@@ -4339,9 +4334,16 @@ expect_negate:
     lbra @end
 
 +   jsr expect_power
-    ; TODO: if not a power, eval as single minus rellabel
-    lbcs @end
+    bcc +
+    ; Not a negate expression. Interpret single-minus as relative label.
+    lda tok_pos
+    sec
+    sbc #3
+    sta tok_pos
+    jsr expect_power
+    lbra @end
 
++
     ; Negate expr_result (XOR $FFFFFFFF + 1)
     clc
     lda expr_result
@@ -4988,7 +4990,7 @@ assemble_label:
     ; Only add to rellabel table during first pass.
     ; (If we go multi-pass, this needs to be reconsidered.)
     bit pass
-    bmi +++
+    bpl +++
 
     ; A=tk_pluses or tk_minuses, Y=length
     sta expr_a
@@ -4997,7 +4999,8 @@ assemble_label:
     ; PC undefined is an error
     jsr get_pc
     bcc +
-    lda label_pos
+    ldx tok_pos
+    lda tokbuf-2,x
     sta line_pos
     lda #err_pc_undef
     sta err_code
@@ -5006,9 +5009,9 @@ assemble_label:
     lda expr_a
     cmp #tk_pluses
     bne +
-    sec      ; C=1: minus
+    clc      ; C=0: plus
     bra ++
-+   clc      ; C=0: plus
++   sec      ; C=1: minus
 ++  lda expr_a+1  ; A = len
     ; X/Y = PC (from get_pc)
     jsr add_rellabel
