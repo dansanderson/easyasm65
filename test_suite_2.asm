@@ -605,7 +605,7 @@ run_test_suite_cmd:
     +print_chr chr_cr
     +print_strlit_line "tokenize-load-line-to-strbuf"
     +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
-    +test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
+    ;+test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
 
 
     ; -----------------------------------

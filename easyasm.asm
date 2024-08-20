@@ -4114,6 +4114,36 @@ expect_primary:
     sta expr_flags
 +   lbra @succeed
 
+    ; Relative label
++++ jsr expect_pluses_or_minuses
+    lbcs +++
+    ; C=0 plus, C=1 minus
+    ; A=len; X/Y=current PC
+    cmp #tk_pluses
+    beq +
+    clc
+    bra ++
++   sec
+++
+    tya
+    ldx program_counter
+    ldy program_counter+1
+    jsr eval_rellabel
+    bcs +
+    lda expr_flags
+    ora #F_EXPR_UNDEFINED
+    sta expr_flags
+    lbra @succeed
++   stx expr_result
+    sty expr_result+1
+    lda #0
+    sta expr_result+2
+    sta expr_result+3
+    lda expr_flags
+    and #!F_EXPR_UNDEFINED
+    sta expr_flags
+    lbra @succeed
+
     ; <label>
 +++ jsr expect_label
     lbcs +++
@@ -4309,6 +4339,7 @@ expect_negate:
     lbra @end
 
 +   jsr expect_power
+    ; TODO: if not a power, eval as single minus rellabel
     lbcs @end
 
     ; Negate expr_result (XOR $FFFFFFFF + 1)
@@ -4762,8 +4793,6 @@ find_or_add_label:
     phx
     phy
 
-    ; TODO: relative labels
-
     ; Detect cheap local, rewrite name
     jsr determine_label_type
     cpx #lbl_cheaplocal
@@ -4843,7 +4872,8 @@ find_or_add_label:
 ;     err_code>0 fatal error with line_pos set
 assemble_label:
 
-    ; TODO: <rel-label> (no "=")
+    jsr expect_pluses_or_minuses
+    lbcc @relative_label
 
     ; <label> ["=" expr]
     jsr expect_label
@@ -4951,6 +4981,39 @@ assemble_label:
     sta last_pc_defined_global_label+1
 +
 
+    ldz #1  ; Return value
+    lbra statement_ok_exit
+
+@relative_label
+    ; Only add to rellabel table during first pass.
+    ; (If we go multi-pass, this needs to be reconsidered.)
+    bit pass
+    bmi +++
+
+    ; A=tk_pluses or tk_minuses, Y=length
+    sta expr_a
+    sty expr_a+1
+
+    ; PC undefined is an error
+    jsr get_pc
+    bcc +
+    lda label_pos
+    sta line_pos
+    lda #err_pc_undef
+    sta err_code
+    lbra statement_err_exit
++
+    lda expr_a
+    cmp #tk_pluses
+    bne +
+    sec      ; C=1: minus
+    bra ++
++   clc      ; C=0: plus
+++  lda expr_a+1  ; A = len
+    ; X/Y = PC (from get_pc)
+    jsr add_rellabel
+
++++
     ldz #1  ; Return value
     lbra statement_ok_exit
 
