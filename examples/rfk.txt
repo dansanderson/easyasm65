@@ -8,19 +8,19 @@ todtenths = $dc08
 chrout = $ffd2
 getin = $ffe4
 
-addrl = $00
-addrh = $01
-vall = $02
-valh = $03
-quadl = $04
-quadh = $05
-quadb = $06
-quadm = $07
-itemnum = $08
-robotx = $09
-roboty = $0a
-newx = $0b
-newy = $0c
+addrl = $1
+addrh = $2
+vall = $3
+valh = $4
+quadl = $5
+quadh = $6
+quadb = $7
+quadm = $8
+itemnum = $9
+robotx = $a
+roboty = $b
+newx = $c
+newy = $d
 
 basepage = $16
 
@@ -294,18 +294,18 @@ print_long_message:
     pha
     lda #0
     tab
-    sty .load_selfmod+1
-    stz .load_selfmod+2
+    sty @load_selfmod+1
+    stz @load_selfmod+2
     ldx #0
-.load_selfmod
+@load_selfmod
     lda $0000,x
-    beq .end
+    beq @end
     jsr chrout
     inx
-    bne .load_selfmod
-    inc .load_selfmod+2
-    bra .load_selfmod
-.end
+    bne @load_selfmod
+    inc @load_selfmod+2
+    bra @load_selfmod
+@end
     pla
     tab
     rts
@@ -408,7 +408,7 @@ plot_char:
     and #$0f
     sta quadm
     pla
-    bra _do_plot
+    bra do_plot
 
 plot_color:
     ; A: color code, X,Y: coordinates
@@ -423,7 +423,7 @@ plot_color:
     sta quadb
     pla
 
-_do_plot:
+do_plot:
     ; A: value, X,Y: coordinates, quadl-quadm: base address
     pha
     phx
