@@ -5402,6 +5402,61 @@ is_long_branch_mnemonic:
 ++  rts
 
 
+; Inputs: instr_addr_mode, instr_mode_rec_addr
+; Outputs: Upgrades an 8-bit mode to a 16-bit mode if the instruction supports
+;   the latter but not the former; updates instr_addr_mode
+coerce_8_to_16:
+    ldx #0
+@mode_loop
+    ; Terminate loop if not found
+    lda mode16_coercion,x
+    ora mode16_coercion+1,x
+    lbeq @end
+
+    ; Identified mode is current before-coerce type?
+    lda mode16_coercion,x
+    cmp instr_addr_mode
+    bne @next
+    lda mode16_coercion+1,x
+    cmp instr_addr_mode+1
+    bne @next
+
+    ; Identified instruction does not support before-coerce type?
+    ldy #0
+    lda (instr_mode_rec_addr),y
+    and mode16_coercion,x
+    bne @next
+    iny
+    lda (instr_mode_rec_addr),y
+    and mode16_coercion+1,x
+    bne @next
+
+    ; Identified instruction supports after-coerce type?
+    ldy #0
+    lda (instr_mode_rec_addr),y
+    and mode16_coercion+2,x
+    bne @coerce
+    iny
+    lda (instr_mode_rec_addr),y
+    and mode16_coercion+3,x
+    bne @coerce
+
+@next
+    inx
+    inx
+    inx
+    inx
+    bra @mode_loop
+
+@coerce
+    lda mode16_coercion+2,x
+    sta instr_addr_mode
+    lda mode16_coercion+3,x
+    sta instr_addr_mode+1
+
+@end
+    rts
+
 ; Input: tokbuf, tok_pos
 ; Output:
 ;   C=0 ok, tok_pos advanced, instruction bytes assembled to segment
@@ -5471,40 +5526,7 @@ assemble_instruction:
     stx instr_addr_mode
     sty instr_addr_mode+1
 
-    ; Coerce 8-bit to 16-bit:
-    ; - If ZP,Y, and instruction supports Addr,Y but not ZP,Y
-    ; - If Imm-8, and instruction supports Imm-16 but not Imm-8
-    ; As far as I can tell there are no other coercion cases.
-    ; (ZP,Y is in the high byte, Addr,Y is in the low byte)
-    lda instr_addr_mode+1
-    cmp #>MODE_BASE_PAGE_Y
-    bne +
-    ldy #1
-    lda (instr_mode_rec_addr),y
-    and #>MODE_BASE_PAGE_Y
-    bne ++  ; ZP,Y supported
-    dey
-    lda (instr_mode_rec_addr),y
-    and #<MODE_ABSOLUTE_Y
-    beq ++  ; Addr,Y not supported
-    lda #<MODE_ABSOLUTE_Y
-    sta instr_addr_mode
-    lda #0
-    sta instr_addr_mode+1
-    bra ++
-    ; (Imm and Imm-8 are both in the high byte)
-+   cmp #>MODE_IMMEDIATE
-    bne ++
-    ldy #1
-    lda (instr_mode_rec_addr),y
-    and #>MODE_IMMEDIATE
-    bne ++  ; Imm-8 supported
-    lda (instr_mode_rec_addr),y
-    and #>MODE_IMMEDIATE_WORD
-    beq ++  ; Imm-16 not supported
-    lda #>MODE_IMMEDIATE_WORD
-    sta instr_addr_mode+1
-++
+    jsr coerce_8_to_16
 
     ; Match addressing mode to opcode; error if not supported
     ldy #0
@@ -6809,6 +6831,16 @@ MODE_BASE_PAGE_IND_Y = %0000000000001000
 MODE_BASE_PAGE_IND_Z = %0000000000000100
 MODE_32BIT_IND       = %0000000000000010
 MODE_STACK_REL       = %0000000000000001
+
+; If addr mode identified as 8-bit, but instruction only supports the 16-bit
+; equivalent, coerce the mode to 16-bit. From A to B:
+mode16_coercion:
+!word MODE_IMMEDIATE, MODE_IMMEDIATE_WORD
+!word MODE_BASE_PAGE, MODE_ABSOLUTE
+!word MODE_BASE_PAGE_X, MODE_ABSOLUTE_X
+!word MODE_BASE_PAGE_Y, MODE_ABSOLUTE_Y
+!word 0,0
+
 addressing_modes:
 !word 0,0 ; dummy entry "0" (tok IDs start at 1)
 !word %0101101110011110  ; adc

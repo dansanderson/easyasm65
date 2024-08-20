@@ -1,16 +1,11 @@
-
 !cpu m65
-!to "everyopcode",cbm
+!to "everyopcode",runnable
+; !to "everyopcode",cbm
 
-*=$2001
-
-!8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
-!pet "$"
-!byte '0' + ((bootstrap_ml_start >> 12) & $0f)
-!byte '0' + ((bootstrap_ml_start >> 8) & $0f)
-!byte '0' + ((bootstrap_ml_start >> 4) & $0f)
-!byte '0' + (bootstrap_ml_start & $0f)
-!8 $00,$00,$00
+; *=$2001
+; !8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
+; !pet "$2014"
+; !8 $00,$00,$00
 
 primm = $ff7d
 
