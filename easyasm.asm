@@ -28,7 +28,7 @@ save_program = $1e1a
 ; BP map (B = $1E)
 ; 00 - ?? : EasyAsm dispatch; see easyasm-e.prg
 
-* = $100 - 66
+* = $100 - 74
 
 pass            *=*+1  ; $FF=final pass
 program_counter *=*+2
@@ -47,6 +47,7 @@ F_ASM_AREL16     = %00010000
 F_ASM_BITBRANCH  = %00100000
 ; - assembly generated at least one warning
 F_ASM_WARN       = %01000000
+F_ASM_SRC_TO_BUF = %10000000
 
 current_segment *=*+4
 next_segment_pc *=*+2
@@ -65,6 +66,9 @@ instr_supported_modes *=*+2
 symtbl_next_name *=*+3
 last_pc_defined_global_label *=*+2
 rellabels_next *=*+3
+
+viewer_line_next *=*+4
+viewer_buffer_next *=*+4
 
 current_file    *=*+4
 F_FILE_MASK     = %00000011
@@ -119,6 +123,10 @@ attic_rellabels_end = attic_rellabels + $1000
 ; Save file cannot cross a bank boundary, limit 64 KB
 attic_savefile_start = attic_easyasm_stash + $30000 ; 3.0000-4.0000 (64 KB)
 attic_savefile_max_end = attic_savefile_start + $10000
+attic_viewer_lines = attic_savefile_max_end
+attic_viewer_lines_end = attic_viewer_lines + $2000 ; 4.0000-4.2000 (8 KB)
+attic_viewer_buffer = attic_viewer_lines_end        ; 4.2000-5.0000 (56 KB)
+attic_viewer_buffer_end = attic_viewer_buffer + $E000
 
 ; - Symbol table entries are 8 bytes: (name_ptr_24, flags_8, value_32)
 SYMTBL_ENTRY_SIZE = 8
@@ -277,10 +285,14 @@ init:
     sta bas_ptr+3
     sta bas_ptr+2
 
+    lda #0
+    sta asm_flags
+
     jsr init_symbol_table
     jsr init_segment_table
     jsr init_forced16
     jsr init_rellabel_table
+    jsr init_viewer
 
     rts
 
@@ -305,8 +317,16 @@ dispatch_jump:
     !word do_menu
     !word assemble_to_memory_cmd
     !word assemble_to_disk_cmd
-    !word restore_source_cmd
+    !word view_annotated_source_cmd
+    !word view_symbol_list_cmd
+    !word dummy_menu_option
+    !word dummy_menu_option
+    !word dummy_menu_option
     !word run_test_suite_cmd
+    !word restore_source_cmd
+
+dummy_menu_option:
+    rts
 
 do_banner:
     +kprimm_start
@@ -335,11 +355,11 @@ do_menu:
     !pet "https://github.com/dansanderson/easyasm65",13,13
     !pet " 1. assemble and test",13
     !pet " 2. assemble to disk",13
-    !pet " 3. restore source",13,0
-    +kprimm_end
-    +kprimm_start
+    !pet " 3. view annotated source",13
+    !pet " 4. view symbol list",13,13
+    !pet " 9. restore source",13
     !pet " run/stop: close menu",13,13
-    !pet " your choice? ",15,166,143,157,0
+    !pet " your choice? ",15,166,143,157,0  ; 198 bytes
     +kprimm_end
 
 -   lda asciikey
@@ -349,9 +369,11 @@ do_menu:
     beq @exit_menu
     cmp #'1'
     bcc -
-    cmp #'3'+1
+    cmp #'9'
+    beq +
+    cmp #'4'+1
     bcs -
-
++
     +kcall bsout
     pha
     lda #chr_cr
@@ -555,12 +577,79 @@ assemble_to_memory_cmd:
     beq +  ; Edge case: no assembled instructions
     ldz #0
     ldq [current_segment]
-    jsr execute_user_program  ; A/X = PC
+; DEBUG
+;    jsr execute_user_program  ; A/X = PC
 +
 
     jsr restore_source
     +kprimm_start
     !pet 13,"# program returned, source restored",13,0
+    +kprimm_end
+
+    rts
+
+
+; ------------------------------------------------------------
+; View Annotated Source command
+; ------------------------------------------------------------
+
+view_annotated_source_cmd:
+    lda asm_flags
+    ora #F_ASM_SRC_TO_BUF
+    sta asm_flags
+
+    +kprimm_start
+    !pet "# generating annotated source...",13,13,0
+    +kprimm_end
+
+    ; Assemble, abort on assembly error.
+    jsr stash_source
+    jsr assemble_source
+    lda err_code
+    beq +
+    jsr print_error
+    +kprimm_start
+    !pet 13,"# assembly encountered an error",13,0
+    +kprimm_end
+    rts
+
++   jsr activate_viewer
+
+    +kprimm_start
+    !pet 13,"# viewer ended",13,0
+    +kprimm_end
+
+    rts
+
+
+; ------------------------------------------------------------
+; View Symbols command
+; ------------------------------------------------------------
+
+write_symbol_list:
+    rts
+
+view_symbol_list_cmd:
+    +kprimm_start
+    !pet "# generating annotated source...",13,13,0
+    +kprimm_end
+
+    ; Assemble, abort on assembly error.
+    jsr stash_source
+    jsr assemble_source
+    lda err_code
+    beq +
+    jsr print_error
+    +kprimm_start
+    !pet 13,"# assembly encountered an error",13,0
+    +kprimm_end
+    rts
++
+    jsr write_symbol_list
+    jsr activate_viewer
+
+    +kprimm_start
+    !pet 13,"# viewer ended",13,0
     +kprimm_end
 
     rts
@@ -1943,6 +2032,125 @@ strbuf_cmp_code_ptr:
 
 
 ; ------------------------------------------------------------
+; Viewer
+; ------------------------------------------------------------
+; attic_viewer_lines: (addr16) = lower 16 of viewer buffer address
+; attic_viewer_buffer: 0-terminated lines
+init_viewer:
+    lda #<attic_viewer_lines
+    sta viewer_line_next
+    lda #>attic_viewer_lines
+    sta viewer_line_next+1
+    lda #^attic_viewer_lines
+    sta viewer_line_next+2
+    lda #<(attic_viewer_lines >>> 24)
+    sta viewer_line_next+3
+
+    ldz #0
+    lda #<attic_viewer_buffer
+    sta viewer_buffer_next
+    sta [viewer_line_next],z
+    inz
+    lda #>attic_viewer_buffer
+    sta viewer_buffer_next+1
+    sta [viewer_line_next],z
+    lda #^attic_viewer_buffer
+    sta viewer_buffer_next+2
+    lda #<(attic_viewer_buffer >>> 24)
+    sta viewer_buffer_next+3
+
+    inw viewer_line_next
+    inw viewer_line_next
+    rts
+
+; Inputs: A=char to print
+; Outputs:
+;   C=0 success
+;   C=1 out of memory
+bufprint_chr:
+    ; (Assumes 0 < high byte <= $ff within buffer.)
+    ldx viewer_buffer_next+1
+    bne +
+    sec
+    rts
++
+    ; Convert carriage returns to null terminators.
+    cmp #chr_cr
+    bne +
+    lda #0
++
+    ldz #0
+    sta [viewer_buffer_next],z
+    inw viewer_buffer_next
+
+    ; Null terminator adds a line record.
+    cmp #0
+    bne +
+    lda viewer_buffer_next
+    sta [viewer_line_next],z
+    inz
+    lda viewer_buffer_next+1
+    sta [viewer_line_next],z
+    inw viewer_line_next
+    inw viewer_line_next
++
+
+    clc
+    rts
+
+; Macro to print a PETSCII string literal to the view buffer
+; Automatically null-terminates, so the argument doesn't have to.
+; String must be < 255 characters
+!macro bufprint_strlit .str {
+    lda #<.data
+    sta code_ptr
+    lda #>.data
+    sta code_ptr+1
+    ldy #0
+-   lda (code_ptr),y
+    phy
+    jsr bufprint_chr
+    ply
+    lda (code_ptr),y
+    bne -
+    bra +
+.data !pet .str,0
++
+}
+
+; Input: A=value whose hex value to write to the buffer
+bufprint_hex8:
+    jsr hex_az
+    pha
+    tza
+    jsr bufprint_chr
+    pla
+    jsr bufprint_chr
+    rts
+
+; Input: bas_ptr = start of text of source line
+bufprint_line:
+    ldz #0
+    ldx #0
+-   lda [bas_ptr],z
+    beq +
+    phx : phz
+    jsr bufprint_chr
+    plz : plx
+    inz
+    inx
+    bra -
++
+    lda #0
+    jsr bufprint_chr
+    rts
+
+
+activate_viewer:
+    rts
+
+
+; ------------------------------------------------------------
 ; Tokenizer
 ; ------------------------------------------------------------
 
@@ -2957,7 +3165,12 @@ init_pass:
     lda #0
     sta program_counter
     sta program_counter+1
+
+    ; Reset all asm_flags except src_to_buf
+    lda asm_flags
+    and #F_ASM_SRC_TO_BUF
     sta asm_flags
+
     rts
 
 
@@ -2995,16 +3208,16 @@ set_pc:
 ;   expr_a = length
 ;   line_addr = source line
 ;   program_counter = PC at beginning of line
-print_assembly_and_source_line:
+bufprint_assembly_and_source_line:
     ; Print $addr as hex
     lda #'$'
-    +kcall bsout
+    jsr bufprint_chr
     lda program_counter+1
-    jsr print_hex8
+    jsr bufprint_hex8
     lda program_counter
-    jsr print_hex8
+    jsr bufprint_hex8
     lda #chr_spc
-    +kcall bsout
+    jsr bufprint_chr
 
     ; Print up to six assembled bytes as hex
     ; If six, also print ".."
@@ -3015,7 +3228,7 @@ print_assembly_and_source_line:
     ldy #6
 +   ldx #0
 -   lda strbuf,x
-    jsr print_hex8
+    jsr bufprint_hex8
     inx
     dey
     bne -
@@ -3023,8 +3236,8 @@ print_assembly_and_source_line:
     cmp #6
     bcc +
     lda #'.'
-    +kcall bsout
-    +kcall bsout
+    jsr bufprint_chr
+    jsr bufprint_chr
     bra ++
 +   lda #6
     sec
@@ -3035,7 +3248,7 @@ print_assembly_and_source_line:
     tax
 -   lda #' '
     phx
-    +kcall bsout
+    jsr bufprint_chr
     plx
     dex
     bpl -
@@ -3052,19 +3265,7 @@ print_assembly_and_source_line:
     inw bas_ptr
     inw bas_ptr
     inw bas_ptr
-    ldz #0
-    ldx #0
--   lda [bas_ptr],z
-    beq +
-    phx : phz
-    +kcall bsout
-    plz : plx
-    inz
-    inx
-    bra -
-+
-    lda #chr_cr
-    +kcall bsout
+    jsr bufprint_line
     rts
 
 
@@ -3100,9 +3301,12 @@ assemble_bytes:
     rts
 +
 
-!if DEBUG {
-    jsr print_assembly_and_source_line
-}
+    ; Write source line to view buffer, if requested.
+    lda asm_flags
+    and #F_ASM_SRC_TO_BUF
+    beq +
+    jsr bufprint_assembly_and_source_line
++
 
     ; If this isn't the final pass, simply increment the PC and don't do
     ; anything else.
@@ -3360,11 +3564,11 @@ is_file_marker_segment_traversal:
 ; Uses expr_a, expr_b, and asm_flags.
 does_a_segment_overlap:
     stq expr_a
-    lda asm_flags  ; Borrow flag bit 7 for "skip entry enable"
+    lda asm_flags  ; Borrow flag for "skip entry enable"
     bcc +
-    ora #%10000000
+    ora #F_ASM_SRC_TO_BUF
     bra ++
-+   and #%01111111
++   and #F_ASM_SRC_TO_BUF
 ++  sta asm_flags
 
     ldq expr_a
@@ -5255,6 +5459,7 @@ expect_addressing_expr:
     jsr find_forced16
     bcc +
     lda asm_flags
+    and #!F_ASM_FORCE_MASK
     ora #F_ASM_FORCE16
     sta asm_flags
 +
@@ -5267,6 +5472,7 @@ expect_addressing_expr:
     and #F_ASM_AREL8
     beq +
     lda asm_flags   ; force16 for long branches
+    and #!F_ASM_AREL_MASK
     ora #F_ASM_FORCE8
     sta asm_flags
     jsr make_operand_rel
@@ -5275,6 +5481,7 @@ expect_addressing_expr:
     and #F_ASM_AREL16
     beq ++
     lda asm_flags   ; force16 for long branches
+    and #!F_ASM_FORCE_MASK
     ora #F_ASM_FORCE16
     sta asm_flags
     jsr make_operand_rel
@@ -5614,12 +5821,14 @@ assemble_instruction:
     jsr is_branch_mnemonic
     bcc +
     lda asm_flags
+    and #!F_ASM_AREL_MASK
     ora #F_ASM_AREL8
     sta asm_flags
     bra ++
 +   jsr is_long_branch_mnemonic
     bcc ++
     lda asm_flags
+    and #!F_ASM_AREL_MASK
     ora #F_ASM_AREL16
     sta asm_flags
 ++

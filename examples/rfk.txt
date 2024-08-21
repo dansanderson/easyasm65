@@ -364,7 +364,7 @@ wait_cursor_key:
     cmp #145 ; up
     beq +
     cmp #157 ; left
-    beq +
+    beq *
     bra -
 +   tax
     pla
@@ -999,7 +999,7 @@ i355: !pet "Ed Witten sits here, pondering string theory.",0
 i356: !pet "Something is written here in the dust.  You read: ",34,"rJbotf ndQkttten",34,".",0
 i357: !pet "We wish you a merry kitten, and a happy New Year!",0
 i358: !pet "Run away!  Run away!",0
-i359: !pet "You can see right through this copy of Brin\'s ",34,"Transparent Society",34,".",0
+i359: !pet "You can see right through this copy of Brin's ",34,"Transparent Society",34,".",0
 i360: !pet "This copy of ",34,"Steal This Book",34," has been stolen from a bookstore.",0
 i361: !pet "It's Roya Naini.",0
 i362: !pet "This kit is the fourteenth in a series of kits named with Roman letters.",0
