@@ -1709,6 +1709,8 @@ print_error:
     lda line_pos
     cmp #$ff
     bne +
+    pla
+    pla
     rts
 
     ; Print line number again.
@@ -3421,7 +3423,7 @@ find_forced16:
 
     ; Report an undefined PC as "not found"
     lda asm_flags
-    ora F_ASM_PC_DEFINED
+    and #F_ASM_PC_DEFINED
     beq @not_found
 
     ldx program_counter
@@ -3474,8 +3476,8 @@ add_forced16:
 +
     ; Don't add an undefined PC
     lda asm_flags
-    ora F_ASM_PC_DEFINED
-    beq +
+    and #F_ASM_PC_DEFINED
+    bne +
 
     ldz #0
     lda program_counter
@@ -6102,11 +6104,26 @@ assemble_dir_to:
     lbra statement_err_exit
 
 @to_parsed
+    pha  ; mode flag
+
+    ; Runnable sets PC; other modes un-set PC
+    cmp #F_FILE_RUNNABLE
+    bne +
+    ldx #<bootstrap_ml_start
+    ldy #>bootstrap_ml_start
+    jsr set_pc
+    bra ++
++   lda asm_flags
+    and #!F_ASM_PC_DEFINED
+    sta asm_flags
+++
+
     bit pass
     bmi +
+    pla
     lbra statement_ok_exit
 +
-    pha  ; mode flag
+
     lda expr_a+1
     pha  ; filename length
 
@@ -6158,7 +6175,6 @@ assemble_dir_to:
     inz
     pla  ; flags
     sta [next_segment_byte_addr],z
-    pha
     inz
 
     ; Advance next_segment_byte_addr and current_segment to this location.
@@ -6185,18 +6201,6 @@ assemble_dir_to:
     dez
     bpl -
 
-    ; Runnable sets PC; other modes un-set PC
-    pla  ; flags
-    cmp #F_FILE_RUNNABLE
-    bne +
-    ldx #<bootstrap_ml_start
-    ldy #>bootstrap_ml_start
-    jsr set_pc
-    bra ++
-+   lda asm_flags
-    and #!F_ASM_PC_DEFINED
-    sta asm_flags
-++
     lbra statement_ok_exit
 
 
