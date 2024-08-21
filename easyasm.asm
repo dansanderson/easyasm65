@@ -2990,6 +2990,84 @@ set_pc:
     rts
 
 
+; Inputs:
+;   strbuf = assembled bytes
+;   expr_a = length
+;   line_addr = source line
+;   program_counter = PC at beginning of line
+print_assembly_and_source_line:
+    ; Print $addr as hex
+    lda #'$'
+    +kcall bsout
+    lda program_counter+1
+    jsr print_hex8
+    lda program_counter
+    jsr print_hex8
+    lda #chr_spc
+    +kcall bsout
+
+    ; Print up to six assembled bytes as hex
+    ; If six, also print ".."
+    ; If < six, fill with spaces
+    ldy expr_a
+    cpy #6
+    bcc +
+    ldy #6
++   ldx #0
+-   lda strbuf,x
+    jsr print_hex8
+    inx
+    dey
+    bne -
+    lda expr_a
+    cmp #6
+    bcc +
+    lda #'.'
+    +kcall bsout
+    +kcall bsout
+    bra ++
++   lda #6
+    sec
+    sbc expr_a
+    bmi ++
+    inc
+    asl
+    tax
+-   lda #' '
+    phx
+    +kcall bsout
+    plx
+    dex
+    bpl -
+++
+
+    ; (Print line number?)
+
+    ; Print the source line
+    lda line_addr
+    sta bas_ptr
+    lda line_addr+1
+    sta bas_ptr+1
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    inw bas_ptr
+    ldz #0
+    ldx #0
+-   lda [bas_ptr],z
+    beq +
+    phx : phz
+    +kcall bsout
+    plz : plx
+    inz
+    inx
+    bra -
++
+    lda #chr_cr
+    +kcall bsout
+    rts
+
+
 ; Assembles bytes to a segment.
 ; Input: Bytes in beginning of strbuf, X=length; init'd segment table
 ; Output:
@@ -3021,6 +3099,11 @@ assemble_bytes:
     sec
     rts
 +
+
+!if DEBUG {
+    jsr print_assembly_and_source_line
+}
+
     ; If this isn't the final pass, simply increment the PC and don't do
     ; anything else.
     bit pass
@@ -3620,6 +3703,19 @@ add_rellabel:
     sec  ; out of memory
     rts
 +   clc
+
+; +debug_print "[add rellabel pc="
+; lda program_counter+1
+; jsr print_hex8
+; lda program_counter
+; jsr print_hex8
+; +debug_print " line-addr="
+; lda line_addr+1
+; jsr print_hex8
+; lda line_addr
+; jsr print_hex8
+; +debug_print "]"
+
     rts
 
 ; Inputs:
@@ -4132,6 +4228,18 @@ expect_primary:
     ldx program_counter
     ldy program_counter+1
     jsr eval_rellabel
+; bcs +
+; +debug_print "[undef rellabel pc="
+; lda program_counter+1
+; jsr print_hex8
+; lda program_counter
+; jsr print_hex8
+; +debug_print " line-addr="
+; lda line_addr+1
+; jsr print_hex8
+; lda line_addr
+; jsr print_hex8
+; +debug_print "]"
     lbcc @undefined_label
 +   stx expr_result
     sty expr_result+1
@@ -6427,10 +6535,14 @@ assemble_source:
     lda #0
 -   sta pass
 
-    ; +debug_print "[pass "
-    ; lda pass
-    ; jsr print_hex8
-    ; +debug_print "]"
+!if DEBUG {
+    +debug_print "[pass "
+    lda pass
+    jsr print_hex8
+    +debug_print "]"
+    lda #chr_cr
+    +kcall bsout
+}
 
     jsr init_pass
     jsr do_assemble_pass

@@ -1,5 +1,12 @@
 !cpu m65
-!to "rfk", cbm
+; !to "rfk", cbm
+!to "rfk", runnable
+
+; * = $2001
+;
+; !8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
+; !pet "$2014"
+; !8 $00,$00,$00
 
 scrnmode = $d031
 scrnptr = $d060
@@ -23,12 +30,6 @@ newx = $c
 newy = $d
 
 basepage = $16
-
-* = $2001
-
-!8 $12,$20,$0a,$00,$fe,$02,$20,$30,$3a,$9e,$20
-!pet "$2014"
-!8 $00,$00,$00
 
 start:
     lda #0                    ; black border and background
