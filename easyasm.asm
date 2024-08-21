@@ -3100,7 +3100,7 @@ assemble_bytes:
     rts
 +
 
-!if DEBUG {
+!ifdef DEBUG {
     jsr print_assembly_and_source_line
 }
 
@@ -6535,7 +6535,7 @@ assemble_source:
     lda #0
 -   sta pass
 
-!if DEBUG {
+!ifdef DEBUG {
     +debug_print "[pass "
     lda pass
     jsr print_hex8
