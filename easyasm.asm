@@ -4754,7 +4754,7 @@ assemble_pc_assign:
 ; Label assignment
 ; ------------------------------------------------------------
 
-; Input: line_addr, label_pos
+; Input: line_addr, X=label_pos
 ; Output:
 ;   X=0 global
 ;   X=1 cheap local
@@ -4769,7 +4769,7 @@ determine_label_type:
     sta bas_ptr
     lda line_addr+1
     sta bas_ptr+1
-    lda label_pos
+    txa  ; label pos
     taz
     lda [bas_ptr],z
     cmp #'@'
@@ -4798,6 +4798,7 @@ find_or_add_label:
     phy
 
     ; Detect cheap local, rewrite name
+    ; (X=label pos)
     jsr determine_label_type
     cpx #lbl_cheaplocal
     bne ++
@@ -4926,6 +4927,7 @@ assemble_label:
 
 @label_with_equal:
     ; Only global-type labels can be assigned with =
+    ldx label_pos
     jsr determine_label_type
     cpx #lbl_global
     beq +
@@ -4976,6 +4978,7 @@ assemble_label:
     jsr set_symbol_value
 
     ; Remember last seen PC-assigned global label
+    ldx label_pos
     jsr determine_label_type
     cpx #lbl_global
     bne +

@@ -639,7 +639,7 @@ nki_table:
 !16 i384,i385,i386,i387,i388,i389,i390,i391
 !16 i392,i393,i394,i395,i396,i397,i398,i399
 !16 i400
-i0: !pet "\"I pity the fool who mistakes me for kitten!\", sez Mr. T.",0
+i0: !pet 34,"I pity the fool who mistakes me for kitten!",34,", sez Mr. T.",0
 i1: !pet "That's just an old tin can.",0
 i2: !pet "It's an altar to the horse god.",0
 i3: !pet "A box of dancing mechanical pencils. They dance! They sing!",0
@@ -656,7 +656,7 @@ i13: !pet "A freshly-baked pumpkin pie.",0
 i14: !pet "A lone, forgotten comma, sits here, sobbing.",0
 i15: !pet "ONE HUNDRED THOUSAND CARPET FIBERS!!!!!",0
 i16: !pet "It's Richard Nixon's nose!",0
-i17: !pet "It's Lucy Ricardo. \"Aaaah, Ricky!\", she says.",0
+i17: !pet "It's Lucy Ricardo. ",34,"Aaaah, Ricky!",34,", she says.",0
 i18: !pet "You stumble upon Bill Gates' stand-up act.",0
 i19: !pet "Just an autographed copy of the Kama Sutra.",0
 i20: !pet "It's the Will Rogers Highway. Who was Will Rogers, anyway?",0
@@ -665,16 +665,16 @@ i22: !pet "Leonard Richardson is here, asking people to lick him.",0
 i23: !pet "It's a stupid mask, fashioned after a beagle.",0
 i24: !pet "Your State Farm Insurance(tm) representative!",0
 i25: !pet "It's the local draft board.",0
-i26: !pet "Seven 1/4\" screws and a piece of plastic.",0
+i26: !pet "Seven 1/4",34," screws and a piece of plastic.",0
 i27: !pet "An 80286 machine.",0
-i28: !pet "One of those stupid \"Homes of the Stars\" maps.",0
-i29: !pet "A signpost saying \"TO KITTEN\". It points in no particular direction.",0
+i28: !pet "One of those stupid ",34,"Homes of the Stars",34," maps.",0
+i29: !pet "A signpost saying ",34,"TO KITTEN",34,". It points in no particular direction.",0
 i30: !pet "A hammock stretched between a tree and a volleyball pole.",0
 i31: !pet "A Texas Instruments of Destruction calculator.",0
 i32: !pet "It's a dark, amphorous blob of matter.",0
 i33: !pet "Just a pincushion.",0
 i34: !pet "It's a mighty zombie talking about some love and prosperity.",0
-i35: !pet "\"Dear robot, you may have already won our 10 MILLION DOLLAR prize...\"",0
+i35: !pet 34,"Dear robot, you may have already won our 10 MILLION DOLLAR prize...",34,0
 i36: !pet "It's just an object.",0
 i37: !pet "A mere collection of pixels.",0
 i38: !pet "A badly dented high-hat cymbal lies on its side here.",0
@@ -687,8 +687,8 @@ i44: !pet "A glorious fan of peacock feathers.",0
 i45: !pet "It's some compromising photos of Babar the Elephant.",0
 i46: !pet "A copy of the Weekly World News. Watch out for the chambered nautilus!",0
 i47: !pet "It's the proverbial wet blanket.",0
-i48: !pet "A \"Get Out of Jail Free\" card.",0
-i49: !pet "An incredibly expensive \"Mad About You\" collector plate.",0
+i48: !pet "A ",34,"Get Out of Jail Free",34," card.",0
+i49: !pet "An incredibly expensive ",34,"Mad About You",34," collector plate.",0
 i50: !pet "Paul Moyer's necktie.",0
 i51: !pet "A haircut and a real job. Now you know where to get one!",0
 i52: !pet "An automated robot-hater. It frowns disapprovingly at you.",0
@@ -704,7 +704,7 @@ i61: !pet "A shameless plug for Crummy: http://www.crummy.com/",0
 i62: !pet "A shameless plug for the UCLA Linux Users Group: http://linux.ucla.edu/",0
 i63: !pet "A can of Spam Lite.",0
 i64: !pet "This is another fine mess you've gotten us into, Stanley.",0
-i65: !pet "It's scenery for \"Waiting for Godot\".",0
+i65: !pet "It's scenery for ",34,"Waiting for Godot",34,".",0
 i66: !pet "This grain elevator towers high above you.",0
 i67: !pet "A Mentos wrapper.",0
 i68: !pet "It's the constellation Pisces.",0
@@ -729,7 +729,7 @@ i86: !pet "This was no boating accident!",0
 i87: !pet "Wait! This isn't the poker chip! You've been tricked! DAMN YOU, MENDEZ!",0
 i88: !pet "A livery stable! Get your livery!",0
 i89: !pet "It's a perpetual immobility machine.",0
-i90: !pet "\"On this spot in 1962, Henry Winkler was sick.\"",0
+i90: !pet 34,"On this spot in 1962, Henry Winkler was sick.",34,0
 i91: !pet "There's nothing here; it's just an optical illusion.",0
 i92: !pet "The World's Biggest Motzah Ball!",0
 i93: !pet "A tribe of cannibals lives here. They eat Malt-O-Meal for breakfast, you know.",0
@@ -742,12 +742,12 @@ i99: !pet "A vase full of artificial flowers is stuck to the floor here.",0
 i100: !pet "A large snake bars your way.",0
 i101: !pet "A pair of saloon-style doors swing slowly back and forth here.",0
 i102: !pet "It's an ordinary bust of Beethoven... but why is it painted green?",0
-i103: !pet "It's TV's lovable wisecracking Crow! \"Bite me!\", he says.",0
+i103: !pet "It's TV's lovable wisecracking Crow! ",34,"Bite me!",34,", he says.",0
 i104: !pet "Hey, look, it's war. What is it good for? Absolutely nothing. Say it again.",0
 i105: !pet "It's the amazing self-referential thing that's not kitten.",0
 i106: !pet "A flamboyant feather boa. Now you can dress up like Carol Channing!",0
-i107: !pet "\"Sure hope we get some rain soon,\" says Farmer Joe.",0
-i108: !pet "\"Topsoil's all gone, ma,\" weeps Lil' Greg.",0
+i107: !pet 34,"Sure hope we get some rain soon,",34," says Farmer Joe.",0
+i108: !pet 34,"Topsoil's all gone, ma,",34," weeps Lil' Greg.",0
 i109: !pet "This is a large brown bear. Oddly enough, it's currently peeing in the woods.",0
 i110: !pet "A team of arctic explorers is camped here.",0
 i111: !pet "This object here appears to be Louis Farrakhan's bow tie.",0
@@ -765,7 +765,7 @@ i122: !pet "This object is like an analogy.",0
 i123: !pet "It's a symbol. You see in it a model for all symbols everywhere.",0
 i124: !pet "The object pushes back at you.",0
 i125: !pet "A traffic signal. It appears to have been recently vandalized.",0
-i126: !pet "\"There is no kitten!\" cackles the old crone. You are shocked by her blasphemy.",0
+i126: !pet 34,"There is no kitten!",34," cackles the old crone. You are shocked by her blasphemy.",0
 i127: !pet "This is a Lagrange point. Don't come too close now.",0
 i128: !pet "The dirty old tramp bemoans the loss of his harmonica.",0
 i129: !pet "Look, it's Fanny the Irishman!",0
@@ -783,14 +783,14 @@ i140: !pet "Plenty of nothing.",0
 i141: !pet "Look at that, it's the Crudmobile.",0
 i142: !pet "Just Walter Mattheau and Jack Lemmon.",0
 i143: !pet "Two crepes, two crepes in a box.",0
-i144: !pet "An autographed copy of \"Primary Colors\", by Anonymous.",0
+i144: !pet "An autographed copy of ",34,"Primary Colors",34,", by Anonymous.",0
 i145: !pet "Another rabbit? That's three today!",0
 i146: !pet "It's a segmentation fault. Core dumped, by the way.",0
 i147: !pet "A historical marker showing the actual location of /dev/null.",0
 i148: !pet "Thar's Mobius Dick, the convoluted whale. Arrr!",0
 i149: !pet "It's a charcoal briquette, smoking away.",0
 i150: !pet "A pizza, melting in the sun.",0
-i151: !pet "It's a \"HOME ALONE 2: Lost in New York\" novelty cup.",0
+i151: !pet "It's a ",34,"HOME ALONE 2: Lost in New York",34," novelty cup.",0
 i152: !pet "A stack of 7 inch floppies wobbles precariously.",0
 i153: !pet "It's nothing but a corrupted floppy. Coaster anyone?",0
 i154: !pet "A section of glowing phosphor cells sings a song of radiation to you.",0
@@ -799,11 +799,11 @@ i156: !pet "A toilet bowl occupies this space.",0
 i157: !pet "This peg-leg is stuck in a knothole!",0
 i158: !pet "It's a solitary vacuum tube.",0
 i159: !pet "This corroded robot is clutching a mitten.",0
-i160: !pet "\"Hi, I'm Anson Williams, TV's 'Potsy'.\"",0
+i160: !pet 34,"Hi, I'm Anson Williams, TV's 'Potsy'.",34,0
 i161: !pet "This subwoofer was blown out in 1974.",0
 i162: !pet "Three half-pennies and a wooden nickel.",0
-i163: !pet "It's the missing chapter to \"A Clockwork Orange\".",0
-i164: !pet "It's a burrito stand flyer. \"Taqueria El Ranchito\".",0
+i163: !pet "It's the missing chapter to ",34,"A Clockwork Orange",34,".",0
+i164: !pet "It's a burrito stand flyer. ",34,"Taqueria El Ranchito",34,".",0
 i165: !pet "This smiling family is happy because they eat LARD.",0
 i166: !pet "Roger Avery, persona un famoso de los Estados Unidos.",0
 i167: !pet "Ne'er but a potted plant.",0
@@ -811,50 +811,50 @@ i168: !pet "A parrot, kipping on its back.",0
 i169: !pet "A forgotten telephone switchboard.",0
 i170: !pet "A forgotten telephone switchboard operator.",0
 i171: !pet "It's an automated robot-disdainer. It pretends you're not there.",0
-i172: !pet "It's a portable hole. A sign reads: \"Closed for the winter\".",0
+i172: !pet "It's a portable hole. A sign reads: ",34,"Closed for the winter",34,".",0
 i173: !pet "Just a moldy loaf of bread.",0
 i174: !pet "A little glass tub of Carmex. ($.89) Too bad you have no lips.",0
 i175: !pet "A Swiss-Army knife. All of its appendages are out. (toothpick lost)",0
 i176: !pet "It's a zen simulation, trapped within an ASCII character.",0
-i177: !pet "It's a copy of \"The Rubaiyat of Spike Schudy\".",0
-i178: !pet "It's \"War and Peace\" (unabridged, very small print).",0
+i177: !pet "It's a copy of ",34,"The Rubaiyat of Spike Schudy",34,".",0
+i178: !pet "It's ",34,"War and Peace",34," (unabridged, very small print).",0
 i179: !pet "A willing, ripe tomato bemoans your inability to digest fruit.",0
 i180: !pet "A robot comedian. You feel amused.",0
 i181: !pet "It's KITT, the talking car.",0
 i182: !pet "Here's Pete Peterson. His batteries seem to have long gone dead.",0
-i183: !pet "\"Blup, blup, blup\", says the mud pot.",0
+i183: !pet 34,"Blup, blup, blup",34,", says the mud pot.",0
 i184: !pet "More grist for the mill.",0
 i185: !pet "Grind 'em up, spit 'em out, they're twigs.",0
 i186: !pet "The boom box cranks out an old Ethel Merman tune.",0
-i187: !pet "It's \"Finding kitten\", published by O'Reilly and Associates.",0
+i187: !pet "It's ",34,"Finding kitten",34,", published by O'Reilly and Associates.",0
 i188: !pet "Pumpkin pie spice.",0
 i189: !pet "It's the Bass-Matic '76! Mmm, that's good bass!",0
-i190: !pet "\"Lend us a fiver 'til Thursday\", pleas Andy Capp.",0
+i190: !pet 34,"Lend us a fiver 'til Thursday",34,", pleas Andy Capp.",0
 i191: !pet "It's a tape of '70s rock. All original hits! All original artists!",0
 i192: !pet "You've found the fabled America Online disk graveyard!",0
 i193: !pet "Empty jewelboxes litter the landscape.",0
 i194: !pet "It's the astounding meta-object.",0
-i195: !pet "Ed McMahon stands here, lost in thought. Seeing you, he bellows, \"YES SIR!\"",0
+i195: !pet "Ed McMahon stands here, lost in thought. Seeing you, he bellows, ",34,"YES SIR!",34,0
 i196: !pet "...thingy???",0
 i197: !pet "It's 1000 secrets the government doesn't want you to know!",0
 i198: !pet "The letters O and R.",0
 i199: !pet "A magical... magic thing.",0
 i200: !pet "It's a moment of silence.",0
 i201: !pet "It's Sirhan-Sirhan, looking guilty.",0
-i202: !pet "It's \"Chicken Soup for the Kitten-seeking Soulless Robot.\"",0
+i202: !pet "It's ",34,"Chicken Soup for the Kitten-seeking Soulless Robot.",34,0
 i203: !pet "It is a set of wind-up chatter teeth.",0
 i204: !pet "It is a cloud shaped like an ox.",0
 i205: !pet "You see a snowflake here, melting slowly.",0
 i206: !pet "It's a big block of ice. Something seems to be frozen inside it.",0
 i207: !pet "Vladimir Lenin's casket rests here.",0
-i208: !pet "It's a copy of \"Zen and The Art of Robot Maintenance\".",0
+i208: !pet "It's a copy of ",34,"Zen and The Art of Robot Maintenance",34,".",0
 i209: !pet "This invisible box contains a pantomime horse.",0
-i210: !pet "A mason jar lies here open. It's label reads: \"do not open!\".",0
+i210: !pet "A mason jar lies here open. It's label reads: ",34,"do not open!",34,".",0
 i211: !pet "A train of thought chugs through here.",0
 i212: !pet "This jar of pickles expired in 1957.",0
 i213: !pet "Someone's identity disk lies here.",0
-i214: !pet "\"Yes!\" says the bit.",0
-i215: !pet "\"No!\" says the bit.",0
+i214: !pet 34,"Yes!",34," says the bit.",0
+i215: !pet 34,"No!",34," says the bit.",0
 i216: !pet "A dodecahedron bars your way.",0
 i217: !pet "Mr. Hooper is here, surfing.",0
 i218: !pet "It's a big smoking fish.",0
@@ -867,8 +867,8 @@ i224: !pet "It's a Dvorak keyboard.",0
 i225: !pet "It's a cardboard box full of 8-tracks.",0
 i226: !pet "Just a broken hard drive containg the archives of Nerth Pork.",0
 i227: !pet "A broken metronome sits here, it's needle off to one side.",0
-i228: !pet "A sign reads: \"Go home!\"",0
-i229: !pet "A sign reads: \"No robots allowed!\"",0
+i228: !pet "A sign reads: ",34,"Go home!",34,0
+i229: !pet "A sign reads: ",34,"No robots allowed!",34,0
 i230: !pet "It's the handheld robotfindskitten game, by Tiger.",0
 i231: !pet "This particular monstrosity appears to be ENIAC.",0
 i232: !pet "This is a tasty-looking banana creme pie.",0
@@ -877,17 +877,17 @@ i234: !pet "Just the empty husk of a locust.",0
 i235: !pet "You disturb a murder of crows.",0
 i236: !pet "It's a copy of the robotfindskitten EULA.",0
 i237: !pet "It's Death.",0
-i238: !pet "It's an autographed copy of \"Secondary Colors,\" by Bob Ross.",0
+i238: !pet "It's an autographed copy of ",34,"Secondary Colors,",34," by Bob Ross.",0
 i239: !pet "It is a marzipan dreadnought that appears to have melted and stuck.",0
-i240: !pet "It's a DVD of \"Crouching Monkey, Hidden Kitten\", region encoded for the moon.",0
+i240: !pet "It's a DVD of ",34,"Crouching Monkey, Hidden Kitten",34,", region encoded for the moon.",0
 i241: !pet "It's Kieran Hervold.  Damn dyslexia!",0
 i242: !pet "A non-descript box of crackers.",0
-i243: !pet "\"Move along! Nothing to see here!\"",0
+i243: !pet 34,"Move along! Nothing to see here!",34,0
 i244: !pet "It's the embalmed corpse of Vladimir Lenin.",0
 i245: !pet "A coupon for one free steak-fish at your local family diner.",0
 i246: !pet "A set of keys to a 2001 Rolls Royce. Worthless.",0
-i247: !pet "A gravestone stands here.  \"Izchak Miller, ascended.\"",0
-i248: !pet "Someone has written \"ad aerarium\" on the ground here.",0
+i247: !pet "A gravestone stands here.  ",34,"Izchak Miller, ascended.",34,0
+i248: !pet "Someone has written ",34,"ad aerarium",34," on the ground here.",0
 i249: !pet "A large blue eye floats in midair.",0
 i250: !pet "This appears to be a statue of Perseus.",0
 i251: !pet "There is an opulent throne here.",0
@@ -901,16 +901,16 @@ i258: !pet "A crowd of people, and at the center, a popular misconception.",0
 i259: !pet "It's a lost wallet. It's owner didn't have pets, so you discard it.",0
 i260: !pet "This place is called Antarctica. There is no kitten here.",0
 i261: !pet "It's a mousetrap, baited with soap.",0
-i262: !pet "A book with \"Don't Panic\" in large friendly letters across the cover.",0
+i262: !pet "A book with ",34,"Don't Panic",34," in large friendly letters across the cover.",0
 i263: !pet "A compendium of haiku about metals.",0
 i264: !pet "A discredited cosmology, relic of a bygone era.",0
-i265: !pet "A hollow voice says \"Plugh\".",0
-i266: !pet "A knight who says \"Either I am an insane knave, or you will find kitten.\"",0
+i265: !pet "A hollow voice says ",34,"Plugh",34,".",0
+i266: !pet "A knight who says ",34,"Either I am an insane knave, or you will find kitten.",34,0
 i267: !pet "A neural net -- maybe it's trying to recognize kitten.",0
 i268: !pet "A screwdriver.",0
 i269: !pet "A statue of a girl holding a goose like the one in Gottingen, Germany.",0
-i270: !pet "A tetradrachm dated \"42 B.C.\"",0
-i271: !pet "A voice booms out \"Onward, kitten soldiers...\"",0
+i270: !pet "A tetradrachm dated ",34,"42 B.C.",34,0
+i271: !pet "A voice booms out ",34,"Onward, kitten soldiers...",34,0
 i272: !pet "An eminently forgettable zahir.",0
 i273: !pet "Apparently, it's Edmund Burke.",0
 i274: !pet "For a moment, you feel something in your hands, but it disappears!",0
@@ -928,21 +928,21 @@ i285: !pet "Quidquid Latine dictum sit, kitten non est.",0
 i286: !pet "Sutro Tower is visible at some distance through the fog.",0
 i287: !pet "The Digital Millennium Copyright Act of 1998.",0
 i288: !pet "The United States Court of Appeals for the Federal Circuit.",0
-i289: !pet "The non-kitten item like this but with \"false\" and \"true\" switched is true.",0
-i290: !pet "The non-kitten item like this but with \"true\" and \"false\" switched is false.",0
-i291: !pet "This is the chapter called \"A Map of the Cat?\" from Feynman's autobiography.",0
+i289: !pet "The non-kitten item like this but with ",34,"false",34," and ",34,"true",34," switched is true.",0
+i290: !pet "The non-kitten item like this but with ",34,"true",34," and ",34,"false",34," switched is false.",0
+i291: !pet "This is the chapter called ",34,"A Map of the Cat?",34," from Feynman's autobiography.",0
 i292: !pet "This is the forest primeval.",0
-i293: !pet "Werner's \"Pocket Field Guide to Things That Are Not Kitten\".",0
+i293: !pet "Werner's ",34,"Pocket Field Guide to Things That Are Not Kitten",34,".",0
 i294: !pet "You found nettik, but that's backwards.",0
-i295: !pet "\"50 Years Among the Non-Kitten Items\", by Ann Droyd.",0
-i296: !pet "\"Robot may not injure kitten, or, through inaction, ...\"",0
-i297: !pet "\"Address Allocation for Private Internets\" by Yakov Rekhter et al.",0
-i298: !pet "\"Mail Routing and the Domain System\" by Craig Partridge.",0
-i299: !pet "\"The Theory and Practice of Oligarchical Collectivism\" by Emmanuel Goldstein.",0
-i300: !pet "\"201 Kitten Verbs, Fully Conjugated\".  You look for \"find\".",0
+i295: !pet 34,"50 Years Among the Non-Kitten Items",34,", by Ann Droyd.",0
+i296: !pet 34,"Robot may not injure kitten, or, through inaction, ...",34,0
+i297: !pet 34,"Address Allocation for Private Internets",34," by Yakov Rekhter et al.",0
+i298: !pet 34,"Mail Routing and the Domain System",34," by Craig Partridge.",0
+i299: !pet 34,"The Theory and Practice of Oligarchical Collectivism",34," by Emmanuel Goldstein.",0
+i300: !pet 34,"201 Kitten Verbs, Fully Conjugated",34,".  You look for ",34,"find",34,".",0
 i301: !pet "A card shark sits here, practicing his Faro shuffle.  He ignores you.",0
 i302: !pet "A copy of DeCSS.  They're a dime a dozen these days.",0
-i303: !pet "A demonic voice proclaims \"There is no kitten, only Zuul\".  You flee.",0
+i303: !pet "A demonic voice proclaims ",34,"There is no kitten, only Zuul",34,".  You flee.",0
 i304: !pet "A lotus.  You make an interesting pair.",0
 i305: !pet "A milk carton, with a black and white picture of kitten on the side.",0
 i306: !pet "Any ordinary robot could see from a mile away that this wasn't kitten.",0
@@ -957,13 +957,13 @@ i314: !pet "It's a blatant plug for Ogg Vorbis, http://www.vorbis.com/",0
 i315: !pet "It's a business plan for a new startup, kitten.net.",0
 i316: !pet "It's a revised business plan for a new startup, my.kitten.net.",0
 i317: !pet "It's a square.",0
-i318: !pet "It seems to be a copy of \"A Tail of Two Kitties\".",0
+i318: !pet "It seems to be a copy of ",34,"A Tail of Two Kitties",34,".",0
 i319: !pet "It's the Donation of Constantine!",0
 i320: !pet "It's this message, nothing more.",0
 i321: !pet "Lysine, an essential amino acid.  Well, maybe not for robots.",0
 i322: !pet "No kitten here.",0
-i323: !pet "The score for a Czech composer's \"Kitten-Finding Symphony in C\".",0
-i324: !pet "This looks like Bradley's \"Appearance and Reality\", but it's really not.",0
+i323: !pet "The score for a Czech composer's ",34,"Kitten-Finding Symphony in C",34,".",0
+i324: !pet "This looks like Bradley's ",34,"Appearance and Reality",34,", but it's really not.",0
 i325: !pet "This non-kitten item no verb.",0
 i326: !pet "You feel strangely unfulfilled.",0
 i327: !pet "You hit the non-kitten item.  The non-kitten item fails to yowl.",0
@@ -972,10 +972,10 @@ i329: !pet "You've found the snows of yesteryear!  So that's where they all went
 i330: !pet "Approaching.  One car.  J.  Followed by.  Two car.  M, M.  In five. Minutes.",0
 i331: !pet "Free Jon Johansen!",0
 i332: !pet "Free Dmitry Sklyarov!",0
-i333: !pet "One person shouts \"What do we want?\" The crowd answers \"Free Dmitry!\"",0
+i333: !pet "One person shouts ",34,"What do we want?",34," The crowd answers ",34,"Free Dmitry!",34,0
 i334: !pet "Judith Platt insults librarians.",0
 i335: !pet "This map is not the territory.",0
-i336: !pet "\"Go back to Libraria!\", says Pat Schroeder.",0
+i336: !pet 34,"Go back to Libraria!",34,", says Pat Schroeder.",0
 i337: !pet "This is a porcelain kitten-counter.  0, 0, 0, 0, 0...",0
 i338: !pet "An old bootable business card, unfortunately cracked down the middle.",0
 i339: !pet "A kitten sink, for washing kitten (if only kitten liked water).",0
@@ -995,17 +995,17 @@ i352: !pet "It's a free Dmitry Sklyarov!",0
 i353: !pet "The rothe hits!  The rothe hits!",0
 i354: !pet "It's an Internet chain letter about sodium laureth sulfate.",0
 i355: !pet "Ed Witten sits here, pondering string theory.",0
-i356: !pet "Something is written here in the dust.  You read: \"rJbotf ndQkttten\".",0
+i356: !pet "Something is written here in the dust.  You read: ",34,"rJbotf ndQkttten",34,".",0
 i357: !pet "We wish you a merry kitten, and a happy New Year!",0
 i358: !pet "Run away!  Run away!",0
-i359: !pet "You can see right through this copy of Brin\'s \"Transparent Society\".",0
-i360: !pet "This copy of \"Steal This Book\" has been stolen from a bookstore.",0
+i359: !pet "You can see right through this copy of Brin\'s ",34,"Transparent Society",34,".",0
+i360: !pet "This copy of ",34,"Steal This Book",34," has been stolen from a bookstore.",0
 i361: !pet "It's Roya Naini.",0
 i362: !pet "This kit is the fourteenth in a series of kits named with Roman letters.",0
 i363: !pet "This is the tenth key you've found so far.",0
 i364: !pet "You find a fraud scheme in which loans are used as security for other loans.",0
-i365: !pet "It's the phrase \"and her\", written in ancient Greek.",0
-i366: !pet "It's the author of \"Randomness and Mathematical Proof\".",0
+i365: !pet "It's the phrase ",34,"and her",34,", written in ancient Greek.",0
+i366: !pet "It's the author of ",34,"Randomness and Mathematical Proof",34,".",0
 i367: !pet "It's the crusty exoskeleton of an arthropod!",0
 i368: !pet "It's Emporer Shaddam the 4th's planet!",0
 i369: !pet "It's the triangle leg adjacent to an angle divided by the leg opposite it.",0
