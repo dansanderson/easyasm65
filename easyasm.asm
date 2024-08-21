@@ -2466,6 +2466,7 @@ load_line_to_strbuf:
 ; This populates tokbuf with tokens, null-terminated. Tokens are variable width.
 ; * String literal: tk_string_literal, line_pos, length
 ; * Number literal: tk_number_literal, line_pos, expr_result (4 bytes)
+; * Relative label: tk_pluses or tk_minuses, line_pos, length
 ; * Label or register: tk_label_or_reg, line_pos, length
 ; * Mnemonic, pseudoop, keyword, non-keyword token: token ID, line_pos
 ;
@@ -4995,7 +4996,7 @@ assemble_label:
     ; Only add to rellabel table during first pass.
     ; (If we go multi-pass, this needs to be reconsidered.)
     bit pass
-    bpl +++
+    bmi +++
 
     ; A=tk_pluses or tk_minuses, Y=length
     sta expr_a
@@ -6301,6 +6302,24 @@ assemble_line:
     rts
 +
 
+    ; DEBUG: print token buffer for line
+;     ldy #0
+;     ldx tok_pos
+; -   phy : phx
+;     lda #'<'
+;     +kcall bsout
+;     plx : ply : phy : phx
+;     lda tokbuf,y
+;     jsr print_hex8
+;     lda #'>'
+;     +kcall bsout
+;     plx : ply
+;     iny
+;     dex
+;     bne -
+;     lda #chr_cr
+;     +kcall bsout
+
     ldx #0
     stx tok_pos
 
@@ -6407,6 +6426,12 @@ assemble_source:
     ; Do two assembly passes ($00, $FF), aborting for errors.
     lda #0
 -   sta pass
+
+    ; +debug_print "[pass "
+    ; lda pass
+    ; jsr print_hex8
+    ; +debug_print "]"
+
     jsr init_pass
     jsr do_assemble_pass
     lda err_code
