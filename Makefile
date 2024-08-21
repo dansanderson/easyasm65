@@ -1,6 +1,7 @@
 ACME = acme
 PYTHON3 = python3
 TEST_SUITE ?= 0  # no tests by default
+DEBUG ?= 0
 
 DISK_FILES = easyasm.prg \
 	easyasm-e.prg \
@@ -27,7 +28,7 @@ TEST_SUITES = \
 NUM_OF_SUITES = 11
 
 %.prg: %.asm
-	${ACME} -DTEST_SUITE=${TEST_SUITE} -f cbm -o $@ -l $@.lst -r $@.rpt $<
+	${ACME} -DTEST_SUITE=${TEST_SUITE} -DDEBUG=${DEBUG} -f cbm -o $@ -l $@.lst -r $@.rpt $<
 
 .PHONY: all clean test all_tests
 
