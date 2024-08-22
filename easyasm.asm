@@ -577,8 +577,7 @@ assemble_to_memory_cmd:
     beq +  ; Edge case: no assembled instructions
     ldz #0
     ldq [current_segment]
-; DEBUG
-;    jsr execute_user_program  ; A/X = PC
+    jsr execute_user_program  ; A/X = PC
 +
 
     jsr restore_source
@@ -3301,6 +3300,7 @@ assemble_bytes:
     rts
 +
 
+; DEBUG: move this below lbpl @increment_pc once I'm done comparing passes.
     ; Write source line to view buffer, if requested.
     lda asm_flags
     and #F_ASM_SRC_TO_BUF
@@ -4226,9 +4226,6 @@ expect_pseudoop:
 ;   C=0 ok, tok_pos advanced; expr_result, expr_flags
 ;   C=1 not found, tok_pos preserved
 expect_literal:
-    lda #0
-    sta expr_flags
-
     ldx tok_pos
     lda tokbuf+1,x
     taz
@@ -4362,6 +4359,10 @@ is_expr_byte:
 
 ; primary   ::= * | <label> | <literal> | "(" expr ")" | "[" expr "]"
 expect_primary:
+    lda expr_flags
+    and #!F_EXPR_BRACKET_MASK
+    sta expr_flags
+
     ldx tok_pos
     phx
 
@@ -4450,7 +4451,6 @@ expect_primary:
     lda #0
     sta expr_result+2
     sta expr_result+3
-    sta expr_flags
     lbra @succeed
 
     ; <label>
@@ -4461,17 +4461,20 @@ expect_primary:
     bcs @undefined_label
     stq expr_result
     ldz #3
-    lda #0
+    lda expr_flags
+    and #!F_EXPR_FORCE16
     sta expr_flags
     lda [attic_ptr],z  ; flags
     and #F_SYMTBL_LEADZERO
     beq +
-    lda #F_EXPR_FORCE16
+    lda expr_flags
+    ora #F_EXPR_FORCE16
     sta expr_flags
 +   bra @succeed
 
 @undefined_label
-++  lda #F_EXPR_UNDEFINED
+++  lda expr_flags
+    ora #F_EXPR_UNDEFINED
     sta expr_flags
     bit pass           ; undefined label is an error in final pass
     bpl @succeed
@@ -5034,6 +5037,8 @@ assemble_pc_assign:
     ldx tok_pos
     lda tokbuf+1,x  ; expr line_pos
     pha
+    lda #0
+    sta expr_flags
     jsr expect_expr
     plz             ; Z = expr line_pos
     lbcs statement_err_exit
@@ -5201,6 +5206,8 @@ assemble_label:
     lda #tk_equal
     jsr expect_token
     lbcs @label_without_equal
+    lda #0
+    sta expr_flags
     jsr expect_expr
     lbcc @label_with_equal
     lda err_code
@@ -5859,10 +5866,10 @@ assemble_instruction:
     iny
     lda instr_addr_mode+1
     and (instr_mode_rec_addr),y
-    sta instr_addr_mode+1  ; instr_addr_mode = selected addressing mode, or 0 if not supported
     ora instr_addr_mode
     bne +
     ; Mode not supported.
+    ; (detected mode = A/X)
     lda instr_line_pos
     sta line_pos
     lda #err_unsupported_addr_mode
@@ -6084,7 +6091,9 @@ arg_type_expr = 2
     lda #arg_type_string
     jsr .handler
     bra ++
-+   jsr expect_expr
++   lda #0
+    sta expr_flags
+    jsr expect_expr
     bcs +
     lda #arg_type_expr
     jsr .handler
@@ -6228,6 +6237,8 @@ assemble_dir_warn:
 
 ; !fill <count> [, <val>]
 assemble_dir_fill:
+    lda #0
+    sta expr_flags
     jsr expect_expr
     bcc ++
     lda err_code
@@ -6245,6 +6256,8 @@ assemble_dir_fill:
     lda #tk_comma
     jsr expect_token
     bcs @start_fill
+    lda #0
+    sta expr_flags
     jsr expect_expr
     bcc ++
     lda err_code
