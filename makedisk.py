@@ -93,9 +93,12 @@ _petscii_encode_table = dict(
 for c in range(65, 91):
     luc = c + 97-65  # lower upper case
     uuc = c + 193-65  # upper upper case
-    _petscii_encode_table[str(bytes([c]), encoding='iso-8859-1')] = bytes([uuc])
-    _petscii_encode_table[str(bytes([luc]), encoding='iso-8859-1')] = bytes([c])
-    _petscii_encode_table[str(bytes([uuc]), encoding='iso-8859-1')] = bytes([c])
+    _petscii_encode_table[str(bytes([c]), encoding='iso-8859-1')] = \
+        bytes([uuc])
+    _petscii_encode_table[str(bytes([luc]), encoding='iso-8859-1')] = \
+        bytes([c])
+    _petscii_encode_table[str(bytes([uuc]), encoding='iso-8859-1')] = \
+        bytes([c])
 # Swap LF with CR
 _petscii_encode_table[str(bytes([10]), encoding='iso-8859-1')] = bytes([13])
 _petscii_decode_table = dict(

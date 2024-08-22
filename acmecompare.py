@@ -67,8 +67,10 @@ def report_differences(acme_dat, ea_dat, rpt_triples):
             line_i < len(rpt_triples) and
             acme_pos < len(acme_dat) and
             ea_pos < len(ea_dat)):
+        src_byte = rpt_triples[line_i][2][line_dat_pos:line_dat_pos+2].lower()
         if show_line and rpt_triples[line_i][2].endswith('...'):
-            print(f'## source out of sync starting line {rpt_triples[line_i][0]}')
+            line_num = rpt_triples[line_i][0]
+            print(f'## source out of sync starting line {line_num}')
             show_line = False
         if acme_dat[acme_pos] != ea_dat[ea_pos]:
             print(
@@ -80,11 +82,11 @@ def report_differences(acme_dat, ea_dat, rpt_triples):
                     f'PC:{rpt_triples[line_i][1]} '
                     f'"{rpt_triples[line_i][2]}" '
                     f'{rpt_triples[line_i][3]}')
-                #print(f'## src byte: "{rpt_triples[line_i][2][line_dat_pos:line_dat_pos+2]}"')
+                # print(f'## src byte: "{src_byte}"')
             else:
                 print()
         elif show_line:
-            assert f'{acme_dat[acme_pos]:02x}' == rpt_triples[line_i][2][line_dat_pos:line_dat_pos+2].lower()
+            assert f'{acme_dat[acme_pos]:02x}' == src_byte
 
         acme_pos += 1
         ea_pos += 1
