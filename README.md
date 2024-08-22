@@ -15,30 +15,13 @@ Features:
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
-## Project status and roadmap
+## Project status
 
 This is EasyAsm version 0.1.
 
 **All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
-Release 0.1:
-* Initial release.
-
-1.0 roadmap:
-* Relative labels (`+`, `++`, `-`, `--`)
-* `!binary`
-* `!source`
-* Runnable with multiple segments or non-default starting address
-
-Future:
-* Improved Freezer support (optional EasyAsm in bank 5)
-* List symbol definitions
-* List assembled bytes alongside source code
-* Zones and real locals
-* Macros
-* Conditional assembly, conditional expressions
-* Output "plain" files (without the PRG starting address)
-* A nice text editor
+In v0.1, `!binary` and `!source` are not yet implemented.
 
 ## An important note
 
@@ -813,6 +796,8 @@ If a PETSCII control code appears in a string or character literal passed to `!s
 !source "..."
 ```
 
+***v0.1: Not yet implemented.***
+
 Loads a source file from disk to be assembled as code at the given location.
 
 EasyAsm directives that refer to files on disk use the current "default disk" unit. Use the `SET DEF` command to change the default disk.
@@ -822,6 +807,8 @@ EasyAsm directives that refer to files on disk use the current "default disk" un
 ```asm
 !binary "..." [, <size> [, <skip>]]
 ```
+
+***v0.1: Not yet implemented.***
 
 Loads a binary file from disk to be assembled as data at the given location. Without arguments, the entire file is included. `<size>` limits the number of bytes to include. `<skip>` starts assembling data that many bytes into the file.
 
@@ -873,6 +860,19 @@ Here is a quick summary of features available in EasyAsm that are not available 
 * The "megabyte" (`^^`) selector operator
 * Instruction synonyms: `cmpq` for `cpq`, `rts #...` for `rtn #...`
 
+## Roadmap
+
+Some things I hope to add someday, if there's enough interest in this project:
+
+* List symbol definitions
+* List assembled bytes alongside source code
+* Output "plain" files (without the PRG starting address)
+* Runnable with multiple segments or non-default starting address
+* Improved Freezer support (optionally host EasyAsm in chip RAM)
+* Zones and real locals
+* Macros
+* Conditional assembly, conditional expressions
+* A nice text editor
 
 ## Building EasyAsm
 
