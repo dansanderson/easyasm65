@@ -355,9 +355,9 @@ do_menu:
     !pet "https://github.com/dansanderson/easyasm65",13,13
     !pet " 1. assemble and test",13
     !pet " 2. assemble to disk",13
-    !pet " 3. view annotated source",13
-    !pet " 4. view symbol list",13,13
-    !pet " 9. restore source",13
+    ; !pet " 3. view annotated source",13
+    ; !pet " 4. view symbol list",13,13
+    !pet 13," 9. restore source",13,13
     !pet " run/stop: close menu",13,13
     !pet " your choice? ",15,166,143,157,0  ; 198 bytes
     +kprimm_end
@@ -371,7 +371,8 @@ do_menu:
     bcc -
     cmp #'9'
     beq +
-    cmp #'4'+1
+    ; cmp #'4'+1
+    cmp #'2'+1
     bcs -
 +
     +kcall bsout
@@ -3300,18 +3301,17 @@ assemble_bytes:
     rts
 +
 
-; DEBUG: move this below lbpl @increment_pc once I'm done comparing passes.
+    ; If this isn't the final pass, simply increment the PC and don't do
+    ; anything else.
+    bit pass
+    lbpl @increment_pc
+
     ; Write source line to view buffer, if requested.
     lda asm_flags
     and #F_ASM_SRC_TO_BUF
     beq +
     jsr bufprint_assembly_and_source_line
 +
-
-    ; If this isn't the final pass, simply increment the PC and don't do
-    ; anything else.
-    bit pass
-    lbpl @increment_pc
 
     ; If next_segment_byte_addr+len is beyond maximum segment table address, out
     ; of memory error.
@@ -3765,7 +3765,7 @@ add_forced16:
     ; Don't add an undefined PC
     lda asm_flags
     and #F_ASM_PC_DEFINED
-    bne +
+    beq +
 
     ldz #0
     lda program_counter
@@ -3907,19 +3907,6 @@ add_rellabel:
     sec  ; out of memory
     rts
 +   clc
-
-; +debug_print "[add rellabel pc="
-; lda program_counter+1
-; jsr print_hex8
-; lda program_counter
-; jsr print_hex8
-; +debug_print " line-addr="
-; lda line_addr+1
-; jsr print_hex8
-; lda line_addr
-; jsr print_hex8
-; +debug_print "]"
-
     rts
 
 ; Inputs:
@@ -4433,18 +4420,6 @@ expect_primary:
     ldx program_counter
     ldy program_counter+1
     jsr eval_rellabel
-; bcs +
-; +debug_print "[undef rellabel pc="
-; lda program_counter+1
-; jsr print_hex8
-; lda program_counter
-; jsr print_hex8
-; +debug_print " line-addr="
-; lda line_addr+1
-; jsr print_hex8
-; lda line_addr
-; jsr print_hex8
-; +debug_print "]"
     lbcc @undefined_label
 +   stx expr_result
     sty expr_result+1
@@ -6631,25 +6606,6 @@ assemble_line:
     sec
     rts
 +
-
-    ; DEBUG: print token buffer for line
-;     ldy #0
-;     ldx tok_pos
-; -   phy : phx
-;     lda #'<'
-;     +kcall bsout
-;     plx : ply : phy : phx
-;     lda tokbuf,y
-;     jsr print_hex8
-;     lda #'>'
-;     +kcall bsout
-;     plx : ply
-;     iny
-;     dex
-;     bne -
-;     lda #chr_cr
-;     +kcall bsout
-
     ldx #0
     stx tok_pos
 
@@ -6756,16 +6712,6 @@ assemble_source:
     ; Do two assembly passes ($00, $FF), aborting for errors.
     lda #0
 -   sta pass
-
-!if DEBUG {
-    +debug_print "[pass "
-    lda pass
-    jsr print_hex8
-    +debug_print "]"
-    lda #chr_cr
-    +kcall bsout
-}
-
     jsr init_pass
     jsr do_assemble_pass
     lda err_code

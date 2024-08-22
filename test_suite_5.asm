@@ -5,6 +5,9 @@
     sta program_counter
     lda #>.pc
     sta program_counter+1
+    lda asm_flags
+    ora #F_ASM_PC_DEFINED
+    sta asm_flags
     !if .do_add {
         jsr add_forced16
     }

@@ -116,6 +116,8 @@ test_expect_oppop_end:
 
     ldx #0
     stx tok_pos
+    lda #0
+    sta expr_flags
     jsr expect_literal
 
 !if .ec {
@@ -250,6 +252,7 @@ test_expect_pms_end
 
     sta err_code
     sta asm_flags
+    sta expr_flags
 
     lda #.pass
     sta pass
@@ -593,19 +596,21 @@ run_test_suite_cmd:
     +test_tokenize_pluses_and_minuses $04, test_tokenize_pluses_and_minuses_4, 0, 1, tk_minuses, 0, 3
     +test_tokenize_pluses_and_minuses $05, test_tokenize_pluses_and_minuses_5, 0, 1, tk_minuses, 0, 1
 
-    +print_chr chr_cr
-    +print_strlit_line "tokenize-other"
-    +test_tokenize_other $01, test_tokenize_other_1, 0, 1, tk_complement, 1
-    +test_tokenize_other $02, test_tokenize_other_2, 0, 1, tk_power, 1
-    +test_tokenize_other $03, test_tokenize_other_3, 0, 1, tk_lsr, 3
-    +test_tokenize_other $04, test_tokenize_other_4, 0, 1, tk_asr, 2
-    +test_tokenize_other $05, test_tokenize_other_5, 0, 1, tk_rbracket, 1
-    +test_tokenize_other $06, test_tokenize_other_6, 0, 0, 0, 0
+    ; TODO: resize suite 2
 
-    +print_chr chr_cr
-    +print_strlit_line "tokenize-load-line-to-strbuf"
-    +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
-    ;+test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
+    ; +print_chr chr_cr
+    ; +print_strlit_line "tokenize-other"
+    ; +test_tokenize_other $01, test_tokenize_other_1, 0, 1, tk_complement, 1
+    ; +test_tokenize_other $02, test_tokenize_other_2, 0, 1, tk_power, 1
+    ; +test_tokenize_other $03, test_tokenize_other_3, 0, 1, tk_lsr, 3
+    ; +test_tokenize_other $04, test_tokenize_other_4, 0, 1, tk_asr, 2
+    ; +test_tokenize_other $05, test_tokenize_other_5, 0, 1, tk_rbracket, 1
+    ; +test_tokenize_other $06, test_tokenize_other_6, 0, 0, 0, 0
+
+    ; +print_chr chr_cr
+    ; +print_strlit_line "tokenize-load-line-to-strbuf"
+    ; +test_load_line_to_strbuf $01, test_load_line_to_strbuf_1e, test_load_line_to_strbuf_1e
+    ; +test_load_line_to_strbuf $02, test_load_line_to_strbuf_1, test_load_line_to_strbuf_1e
 
 
     ; -----------------------------------
