@@ -33,6 +33,7 @@
 
     sta err_code
     sta asm_flags
+    sta expr_flags
 
     lda #.pass
     sta pass
