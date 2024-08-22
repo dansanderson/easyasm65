@@ -88,14 +88,16 @@ VALID_TEXT_STYLES = ('plain', 'topic', 'topic-single')
 #   125  PETSCII: graphic vert bar   ASCII: }
 #   126  PETSCII: pi                 ASCII: ~
 _petscii_encode_table = dict(
-    (str(bytes([c]), encoding='ascii'), bytes([c])) for c in range(128))
+    (str(bytes([c]), encoding='iso-8859-1'), bytes([c])) for c in range(128))
 # Flip letter casing
 for c in range(65, 91):
-    uc = c + 97-65
-    _petscii_encode_table[str(bytes([c]), encoding='ascii')] = bytes([uc])
-    _petscii_encode_table[str(bytes([uc]), encoding='ascii')] = bytes([c])
+    luc = c + 97-65  # lower upper case
+    uuc = c + 193-65  # upper upper case
+    _petscii_encode_table[str(bytes([c]), encoding='iso-8859-1')] = bytes([uuc])
+    _petscii_encode_table[str(bytes([luc]), encoding='iso-8859-1')] = bytes([c])
+    _petscii_encode_table[str(bytes([uuc]), encoding='iso-8859-1')] = bytes([c])
 # Swap LF with CR
-_petscii_encode_table[str(bytes([10]), encoding='ascii')] = bytes([13])
+_petscii_encode_table[str(bytes([10]), encoding='iso-8859-1')] = bytes([13])
 _petscii_decode_table = dict(
     (v, k) for (k, v) in _petscii_encode_table.items())
 

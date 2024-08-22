@@ -364,7 +364,7 @@ wait_cursor_key:
     cmp #145 ; up
     beq +
     cmp #157 ; left
-    beq *
+    beq +
     bra -
 +   tax
     pla
