@@ -17,7 +17,7 @@ EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
 ----
 
-**Please consider sponsoring my MEGA65 work: [ko-fi.com/dddaaannn](https://ko-fi.com/dddaaannn)**
+**I hope you enjoy EasyAsm! Please consider sponsoring my MEGA65 work: [ko-fi.com/dddaaannn](https://ko-fi.com/dddaaannn)**
 
 ----
 
