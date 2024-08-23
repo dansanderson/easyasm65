@@ -1,0 +1,214 @@
+!cpu m65
+!to "gol", runnable
+
+; kernal routines
+bsout = $ffd2
+
+; zero page pointers
+cell_ptr = $fe
+
+start
+    ; Clear the screen
+    lda #147
+    jsr bsout
+
+    ; Draw the starter pattern: the R-pentomino
+    lda #<($0800 + 80*10)
+    sta cell_ptr
+    lda #>($0800 + 80*10)
+    sta cell_ptr+1
+    lda #$51
+    ldy #40
+    sta (cell_ptr),y
+    iny
+    sta (cell_ptr),y
+    lda #<($0800 + 80*11)
+    sta cell_ptr
+    lda #>($0800 + 80*11)
+    sta cell_ptr+1
+    lda #$51
+    ldy #39
+    sta (cell_ptr),y
+    iny
+    sta (cell_ptr),y
+    lda #<($0800 + 80*12)
+    sta cell_ptr
+    lda #>($0800 + 80*12)
+    sta cell_ptr+1
+    lda #$51
+    ldy #40
+    sta (cell_ptr),y
+
+-   jsr iterate
+    bra -
+
+iterate
+    ; Reset the row buffer
+    jsr clrbuf
+
+    ; traverse playable region of screen
+    ; start at $0851
+    ; for 23 rows: add one 78 times; then add three
+    lda #$51
+    sta cell_ptr
+    lda #$08
+    sta cell_ptr+1
+    lda #23
+    sta row_ct
+    lda #78
+    sta col_ct
+
+next_col
+    ; set the current cell value in the current row buffer
+    ldy #0
+    lda (cell_ptr),y
+    cmp #$51
+    beq +
+    ldx #0
+    bra ++
++   ldx #1
+++  sec
+    lda #79     ; 79-(col_ct) = screen col number
+    sbc col_ct
+    tay    ; y = column
+    txa    ; a = 1 if set, 0 if not
+    jsr setcurbuf  ; uses y and a
+
+    ; count buffer neighbors
+    jsr countbufneighbors  ; y = column; sets a to count
+    sta neighbor_ct
+
+    ; count screen neighbors (east, southwest, south, southeast)
+    ldy #1
+    lda (cell_ptr),y
+    cmp #$51
+    bne +
+    inc neighbor_ct
++   ldy #79
+    lda (cell_ptr),y
+    cmp #$51
+    bne +
+    inc neighbor_ct
++   iny
+    lda (cell_ptr),y
+    cmp #$51
+    bne +
+    inc neighbor_ct
++   iny
+    lda (cell_ptr),y
+    cmp #$51
+    bne +
+    inc neighbor_ct
++   lda neighbor_ct
+
+    ; update cell according to neighbor rules
+    ldy #0
+    cmp #3
+    beq +
+    cmp #2
+    bne ++
+    lda (cell_ptr),y
+    cmp #$51
+    bne ++
++   lda #$51
+    bra +
+++  lda #$20
++   sta (cell_ptr),y
+
+    ; advance cell_ptr to next cell
+    dec col_ct
+    beq last_col
+    clc
+    lda #1
+    adc cell_ptr
+    sta cell_ptr
+    lda #0
+    adc cell_ptr+1
+    sta cell_ptr+1
+    bra next_col
+last_col
+    ; swap row buffers
+    jsr swapbuf
+
+    ; reset col_ct, advance to next row
+    lda #78
+    sta col_ct
+    dec row_ct
+    beq last_row
+    clc
+    lda #3
+    adc cell_ptr
+    sta cell_ptr
+    lda #0
+    adc cell_ptr+1
+    sta cell_ptr+1
+    jmp next_col
+last_row
+
+    rts
+
+
+swapbuf
+    lda bufsel
+    eor #1
+    sta bufsel
+    rts
+
+clrbuf
+    ; clears entire line buffer and resets buffer select
+    lda #0
+    ldy #160
+-   sta linebuf-1,y
+    dey
+    bne -
+    sta bufsel
+    rts
+
+setcurbuf
+    ; y=column, a=value
+    ldx bufsel
+    bne +
+    ; bufsel=0 -> curbuf = linebuf
+    sta linebuf,y
+    bra ++
++   ; bufsel=1 -> curbuf = linebuf+80
+    sta linebuf+80,y
+++  rts
+
+countbufneighbors
+    ; y=column of current cel, >=1
+    ; sets a to count of nw,n,ne,w neighbors
+    lda #0
+    clc
+    ldx bufsel
+    bne +
+    ; bufsel=0 -> curbuf = linebuf, prevbuf = linebuf+80
+    dey
+    adc linebuf+80,y
+    adc linebuf,y
+    iny
+    adc linebuf+80,y
+    iny
+    adc linebuf+80,y
+    bra ++
++   ; bufsel=1 -> curbuf = linebuf+80, prevbuf = linebuf
+    dey
+    adc linebuf,y
+    adc linebuf+80,y
+    iny
+    adc linebuf,y
+    iny
+    adc linebuf,y
+++  rts
+
+linebuf
+!fill 160,0
+bufsel
+!fill 1,0   ; if 0, cur=linebuf, prev=linebuf+80
+            ; if 1, cur=linebuf+80, prev=linebuf
+row_ct
+!fill 1,0
+col_ct
+!fill 1,0
+neighbor_ct
+!fill 1,0

@@ -11,8 +11,9 @@
         {"name": "--------------"},
         {"file_path": "examples/border.txt", "name": "border.s", "text_style": "plain"},
         {"file_path": "examples/bordercycle.txt", "name": "bordercycle.s", "text_style": "plain"},
+        {"file_path": "examples/gol.txt", "name": "gol.s", "text_style": "plain"},
+        {"file_path": "examples/rfk.txt", "name": "rfk.s", "text_style": "plain"},
         {"file_path": "examples/everyopcode.txt", "name": "everyopcode.s", "text_style": "plain"},
-        {"file_path": "examples/everyoperator.txt", "name": "everyoperator.s", "text_style": "plain"},
-        {"file_path": "examples/rfk.txt", "name": "rfk.s", "text_style": "plain"}
+        {"file_path": "examples/everyoperator.txt", "name": "everyoperator.s", "text_style": "plain"}
     ]
 }
