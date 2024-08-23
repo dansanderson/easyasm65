@@ -9,8 +9,7 @@ Features:
 * Uses the MEGA65 screen editor's Edit mode for editing assembly language source code.
 * Maintains your display settings: screen mode, upper/lowercase, colors.
 * Assembles to memory for testing, or to disk files for distribution.
-* Can produce a single-file bootstrap loader as part of your program.
-* Can store multiple memory segments on disk compactly in a single file, with bootstrap code that positions segments automatically.
+* Can produce a bootstrap loader as part of your program.
 * Preserves source code in memory while running your program, and exits cleanly from your program back to the screen editor with source code restored. Can restore source code after an abnormal exit.
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
