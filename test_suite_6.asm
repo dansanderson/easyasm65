@@ -539,9 +539,9 @@ test_expect_label_end:
 
 ; Input: X=segment count
 ; Output: Initialized segment table with X segments,
-;   with starting addresses of $ii00 and legnth of 3,
+;   with starting addresses of $0i00 and legnth of 3,
 ;   created in descending order i=X to 1,
-;   e.g. $3300, $2200, $1100. If X=0, no segments
+;   e.g. $0300, $0200, $0100. If X=0, no segments
 ;   are created.
 set_up_segtable_for_test:
     phx
@@ -566,6 +566,7 @@ set_up_segtable_for_test:
     sta program_counter
     lda asm_flags
     ora #F_ASM_PC_DEFINED
+    and #<(!F_ASM_SRC_TO_BUF)
     sta asm_flags
     phy
     ldx #3
@@ -585,6 +586,7 @@ set_up_overlapping_segment_for_test:
     sta program_counter
     lda asm_flags
     ora #F_ASM_PC_DEFINED
+    and #<(!F_ASM_SRC_TO_BUF)
     sta asm_flags
     ldx #3
     jsr assemble_bytes
