@@ -15,6 +15,8 @@ Features:
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
+**I hope you enjoy EasyAsm! Please consider sponsoring my MEGA65 work: [ko-fi.com/dddaaannn](https://ko-fi.com/dddaaannn)**
+
 ## Project status
 
 This is EasyAsm version 0.1.
@@ -33,7 +35,7 @@ By design, EasyAsm does *not* force you to save your work to disk before testing
 
 **Remember to enable Edit Mode.**
 
-EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. Type `EDIT ON` to enable it. When enabled, the "READY" prompt becomes the "OK" prompt. Loading, typing, or saving assembly language while in BASIC mode will produce incorrect results.
+EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. It switches to Edit mode when you first install it. When Edit mode is enabled, the "READY" prompt becomes the "OK" prompt. If you return to BASIC mode ("READY") while developing your program, be sure to remember to switch back to Edit mode before typing lines of assembly source code. Type `EDIT ON` to enable it. Loading, typing, or saving assembly language while in BASIC mode will produce incorrect results.
 
 ## Quick reference
 
@@ -55,15 +57,7 @@ MOUNT "EASYASM.D81"
 BOOT
 ```
 
-EasyAsm installs itself in the MEGA65's upper memory, clears program memory, configures the **Help** key, and returns to the `READY.` prompt.
-
-To create your assembly language source code, switch the MEGA65 to Edit mode:
-
-```basic
-EDIT ON
-```
-
-The prompt changes from `READY.` to `OK.` to indicate that you are in Edit mode. This mode lets you edit a file of text data as if it were a BASIC program, including line numbers. All BASIC commands are still available for direct entry, but now when you type a line with a line number, the MEGA65 understands it as text instead of a line of a BASIC program.
+EasyAsm installs itself in the MEGA65's upper memory, clears program memory, and configures the **Help** key. The prompt changes from `READY.` to `OK.` to indicate that you are in Edit mode. This mode lets you edit a file of text data as if it were a BASIC program, including line numbers. All BASIC commands are still available for direct entry, but now when you type a line with a line number, the MEGA65 understands it as text instead of a line of a BASIC program.
 
 Enter a simple assembly language program:
 
@@ -148,12 +142,14 @@ Now type `LIST`:
 LIST
 ```
 
-Uh oh, that's not the program source file! EasyAsm did not see the program exit with the `RTS` instruction, so it didn't get a chance to restore the source file.
+Uh oh, there's something wrong with the first line! EasyAsm did not see the program exit with the `RTS` instruction, so it didn't get a chance to restore the source file.
 
-When this happens—and it will happen often—use menu option #3 to tell EasyAsm to bring back the source file:
+When this happens—and it will happen often—use menu option #9 to tell EasyAsm to bring back the source file:
 
 1. Press **Help**.
-2. Select option **3**.
+2. Select option **9**.
+
+Type `LIST` again to see the restored source.
 
 ## Breaking to the Monitor
 
@@ -169,7 +165,9 @@ The Monitor accepts commands through the screen editor. A typical command is a s
 
 To exit the Monitor, enter the `X` command. This returns you to the `OK.` (or `READY.`) prompt.
 
-The Monitor can be especially useful for debugging an assembly language program thanks to a special feature of the MEGA65 operating system. When a program executes a `BRK` instruction, the operating system halts the program, and starts the Monitor. The Monitor displays the status of the CPU registers as they were at the exact point in the program where the `BRK` occurred. You can continue to enter Monitor commands to inspect the state of the system. When you're finished, use the `G` command without an argument to continue the program where it left off.
+The Monitor can be especially useful for debugging an assembly language program thanks to a special feature of the MEGA65 operating system. When a program executes a `BRK` instruction, the operating system halts the program, and starts the Monitor. The Monitor displays the status of the CPU registers as they were at the exact point in the program where the `BRK` occurred. You can continue to enter Monitor commands to inspect the state of the system.
+
+Type in then assemble and test this example:
 
 ```
 10 !TO "BRKDANCE", RUNNABLE
@@ -180,32 +178,31 @@ The Monitor can be especially useful for debugging an assembly language program 
 60   RTS
 ```
 
-The Monitor is powerful, but sometimes tricky to use. For example, it is not always possible to resume a paused program, and you may have to exit the Monitor with the `X` command. In this case, you must ask EasyAsm to restore the program source file, as we did after interrupting the program with Run/Stop-Restore.
+The border changes color, then the program breaks to the Monitor. In the Monitor, enter the `G` command without an argument to continue the program where it left off. The border returns to its previous color, and the program exits. EasyAsm restores the source to program memory.
 
-1. Press **Help**.
-2. Select option **3**.
+The Monitor is powerful, but sometimes tricky to use. For example, it is not always possible to resume a paused program, and you may have to exit the Monitor with the `X` command. In this case, you must ask EasyAsm to restore the program source file, as we did after interrupting the program with Run/Stop-Restore.
 
 ## Edit mode tips and tricks
 
-* Edit mode uses numbered line editing just like BASIC:
-  * To add a line, type a line number not already in use, followed by the line's text.
-  * To delete a line, type the line number, then press Return.
-  * To insert a line between two other lines, choose a line number between those line numbers.
-  * To display all lines in order, type `LIST`. To display ranges of lines: `LIST 100-200` To display lines, pausing for each page: `LIST P`
-  * Use the F9 and F11 keys to display the listing as a scrolling display.
-  * Use the built-in tools like `AUTO` and `RENUMBER` to manage line numbers.
+Edit mode uses numbered line editing just like BASIC:
+* To add a line, type a line number not already in use, followed by the line's text.
+* To delete a line, type the line number, then press Return.
+* To insert a line between two other lines, choose a line number between those line numbers.
+* To display all lines in order, type `LIST`. To display ranges of lines: `LIST 100-200` To display lines, pausing for each page: `LIST P`
+* Use the F9 and F11 keys to display the listing as a scrolling display.
+* Use the built-in tools like `AUTO` and `RENUMBER` to manage line numbers.
 
-* Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. To insert more possible line numbers at a given line, use the `RENUMBER` command. For example, to renumber all lines starting at line 450 onward to instead start at 1000: `RENUMBER 1000,10,450-`
+Unlike a BASIC program, Edit mode does *not* preserve line numbers when saving files to disk. When you load your source file again later, it may have different line numbers assigned automatically. To insert more possible line numbers at a given line, use the `RENUMBER` command. For example, to renumber all lines starting at line 450 onward to instead start at 1000, counting by 10: `RENUMBER 1000,10,450-`
 
-* Press **Mega+Shift** to toggle lowercase text mode, if you prefer lowercase for assembly language source files. In EasyAsm, labels and strings are case sensitive. Instructions, directives, register names, and hexadecimal literals are not case sensitive.
+Press **Mega+Shift** to toggle lowercase text mode, if you prefer lowercase for assembly language source files. In EasyAsm, labels and strings are case sensitive. Instructions, directives, register names, and hexadecimal literals are not case sensitive.
 
-* Edit mode supports entering PETSCII codes into strings similarly to BASIC. When you enter a double-quote (`"`), the editor goes into "quote mode," and PETSCII control codes can be typed as special characters. This works well for string literals in EasyAsm assembly language programs.
+Edit mode supports entering PETSCII codes into strings similarly to BASIC. When you enter a double-quote (`"`), the editor goes into "quote mode," and PETSCII control codes can be typed as special characters. This works well for string literals in EasyAsm assembly language programs.
 
-* To enter a blank line, type the line number, press Shift+Space, then press Return. (This is not normally possible in BASIC.)
+To enter a blank line, type the line number, press Shift+Space, then press Return. (This is not normally possible in BASIC.)
 
-* If you accidentally type some assembly language code while in BASIC mode (the "READY" prompt), the code will not be entered into memory correctly. To fix this, list the affected lines to the screen while in BASIC mode, type `EDIT ON` to enable Edit mode, then move the cursor up to the lines and press Return on each line. They will be re-entered correctly as assembly source.
+If you accidentally type some assembly language code while in BASIC mode (the "READY" prompt), the code will not be entered into memory correctly. To fix this, list the affected lines to the screen while in BASIC mode, type `EDIT ON` to enable Edit mode, then move the cursor up to the lines and press Return on each line. They will be re-entered correctly as assembly source.
 
-* The `EDIT ON` command cannot be run from a BASIC program. You can bind it to a function key macro with the `KEY` command to make it easier. (This is how EasyAsm binds to the **Help** key, using `KEY 15`.)
+The `EDIT ON` command cannot be run from a BASIC program. You can bind it to a function key macro with the `KEY` command to make it easier. (This is how EasyAsm binds to the **Help** key, using `KEY 15`.)
 
 A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 
@@ -221,9 +218,13 @@ A few ways the MEGA65 behaves differently in BASIC mode vs. Edit mode:
 
 ## Invoking EasyAsm
 
+### ... with the Help key
+
 When you install EasyAsm, it configures the **Help** key to open the EasyAsm launch menu. In most cases, you can use this to invoke EasyAsm.
 
 EasyAsm uses the function key macro feature of the MEGA65 to configure the **Help** key, using `KEY 15` in the `AUTOBOOT.C65` file on the EasyAsm disk. If you would rather use the Help key for something else, such as to use your own macro, you can edit `AUTOBOOT.C65` to disable this, or assign it to a different function key.
+
+### ... with a SYS command
 
 As an alternative to the **Help** macro, you can use the following command to open the EasyAsm interactive menu:
 
@@ -237,7 +238,7 @@ To invoke one of the menu options non-interactively without opening the menu, us
 SYS $1E04,A,0
 ```
 
-(The `0` is there to reserve space for an optional argument to pass to EasyAsm. If an argument is introduced in a future version, a script or tool that doesn't set this argument to 0 may accidentally set a random argument value.)
+(The `,0` is there to reserve space for an optional argument to pass to EasyAsm. If an argument is introduced in a future version, a script or tool that doesn't set this argument to 0 may accidentally set a random argument value.)
 
 A third-party tool that wishes to integrate with EasyAsm can perform the equivalent load and jump instructions to these addresses. Keep in mind that EasyAsm resets the memory map and base page to the KERNAL's setting when exiting.
 
@@ -337,11 +338,13 @@ Multiple instructions can appear on a single line, separated by colons. `lda #0 
 EasyAsm uses 32-bit signed integer values in expressions for arguments. When a value is assembled into an instruction or used by an assembler directive, it must be in the range expected by how it is used:
 
 * Address argument
-  * Must be a value in the range 0 ($0000) to 65,535 ($FFFF).
-  * Assembled to two bytes in little-endian order: $FFFC assembles to $FC $FF.
+  * 16-bit absolute addresses must be a value in the range 0 ($0000) to 65,535 ($FFFF).
+  * 16-bit addresses are assembled to two bytes in little-endian order: $FFFC assembles to $FC $FF.
+  * 8-bit base page (ZP) addresses must be a value in the range 0 ($00) to 255 ($FF).
 * Immediate mode argument
   * Expected to be either a signed value in the range -128 to 127, or an unsigned value in the range 0 to 255.
   * It is assembled to one byte, using two's complement for negative values: 255 and -1 both assemble to $FF.
+  * As the only exception, the `phw` instruction accepts a 16-bit value in Immediate mode.
 * Assembler directives that take numeric arguments have their own range requirements.
   * The `!32` directive will render a complete 32-bit value as two's complement little-endian: $FFFFFFFC and -4 both assemble to $FC $FF $FF $FF.
 
@@ -375,7 +378,7 @@ Double-quoted string arguments to `!pet` can contain PETSCII control codes enter
 
 Quote mode is also active temporarily for spaces inserted with the Shift + Inst key. This is convenient for inserting characters within quoted strings without having to type double-quotes just to activate quote mode.
 
-When you enter a line by pressing the Return key, only PETSCII codes inside of double-quotes are interpreted as PETSCII codes. (This is true when editing BASIC programs as well as in Edit mode.) A PETSCII code outside of double-quotes is interpreted by the editor as a symbol character.
+When you enter a line by pressing the Return key, only PETSCII codes inside of a pair of double-quotes are interpreted as PETSCII codes. (This is true when editing BASIC programs as well as in Edit mode.) A PETSCII code outside of double-quotes is interpreted by the editor as a symbol character.
 
 For EasyAsm, this means that it is not practical to enter PETSCII codes as single-quoted character literals. Instead, use number literals or named constants to refer to PETSCII control codes.
 
@@ -466,8 +469,6 @@ flash_background:
   bne -
   rts
 ```
-
-Relative labels can only be used directly as instruction address arguments, and cannot participate in expressions.
 
 ### Expressions
 
@@ -592,18 +593,16 @@ When program code assigns a new value to the program counter and this is followe
 
 In EasyAsm, it is an error if two segment overlap, ala Acme's "strict segments" mode. When assembling to memory, it is an error if a segment overlaps EasyAsm's variable memory region, $1E00-$1EFF.
 
-### "Pseudo-PC"
+### "Pseudo-PC" not yet supported
 
 EasyAsm currently does not support Acme's "pseudo-PC" feature, which allows for a section of code to be assembled as if the PC were a particular value, but the segment is stored in the PRG file consecutively with the surrounding code. (It would be the program's responsibility to copy the code to the correct location in order to run it.)
-
-As an alternative, EasyAsm has a way to assemble multiple segments to disk as a single compact file, with a generated bootstrap routine that relocates all segments to their final memory locations. See the explanation of `!to "...", runnable`, below.
 
 
 ## Assembling to disk
 
 When assembling to memory, EasyAsm writes each segment to the requested memory locations.
 
-When assembling to disk, EasyAsm offers several options: writing a contiguous file, writing segments to separate files, or bundling segments into a runnable program.
+When assembling to disk, EasyAsm offers several options: writing a contiguous file, writing segments to separate files, or saving a single segment as a runnable program.
 
 > **Tip:** The "runnable" file is the most convenient way to write a program that can be run with the `RUN` or `BOOT` command, which is how most users expect to invoke a program. EasyAsm generates the bootstrap code that you would normally have to include manually in an Acme program listing.
 
@@ -670,7 +669,7 @@ change_border:
 
 In EasyAsm, the `!to "...", runnable` directive creates a program file that starts with a bootstrap routine. A user can load and `RUN` this program from the `READY.` prompt. The program starts with the first instruction after the `!to "...", runnable` directive.
 
-`!to "...", runnable` sets the PC automatically. It is not necessary to set the PC explicitly in this case.
+`!to "...", runnable` sets the PC automatically. It is not necessary (and not allowed) to set the PC explicitly in this case.
 
 ```asm
 !to "myprog", runnable
@@ -679,32 +678,7 @@ In EasyAsm, the `!to "...", runnable` directive creates a program file that star
   rts
 ```
 
-If the program redefines the PC before the first instruction, the segment will be located as requested, and the bootstrap routine will start at that segment's start address.
-
-```asm
-!to "myprog", runnable
-
-* = $7000
-
-  inc $d020
-  rts
-```
-
-If `!to "...", runnable` is followed by more than one segment, EasyAsm generates additional code that relocates all of the segments to their starting addresses, as part of the bootstrap process. The first segment that follows the `!to` statement is assumed to be the start of the program. The generated program behaves similarly to assembling to memory, and only requires loading and running one file, with no disk space or load time spent on empty data regions between segments.
-
-```asm
-!to "program", runnable
-
-  jsr change_border
-  ; ...
-  rts
-
-* = $7000
-
-change_border:
-  inc $d020
-  rts
-```
+A runnable program is only allowed to have one segment, at the default memory location.
 
 
 ## Using disk drives
@@ -869,6 +843,7 @@ Some things I hope to add someday, if there's enough interest in this project:
 * Output "plain" files (without the PRG starting address)
 * Runnable with multiple segments or non-default starting address
 * Improved Freezer support (optionally host EasyAsm in chip RAM)
+* Pseudo-PC regions
 * Zones and real locals
 * Macros
 * Conditional assembly, conditional expressions
