@@ -15,7 +15,11 @@ Features:
 
 EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
-**I hope you enjoy EasyAsm! Please consider sponsoring my MEGA65 work: [ko-fi.com/dddaaannn](https://ko-fi.com/dddaaannn)**
+----
+
+**Please consider sponsoring my MEGA65 work: [ko-fi.com/dddaaannn](https://ko-fi.com/dddaaannn)**
+
+----
 
 ## Project status
 
@@ -23,7 +27,7 @@ This is EasyAsm version 0.1.
 
 **All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
-In v0.1, `!binary` and `!source` are not yet implemented.
+In v0.1, `!binary` and `!source` are not yet implemented. See also the "Roadmap," below.
 
 ## An important note
 
@@ -32,10 +36,6 @@ In v0.1, `!binary` and `!source` are not yet implemented.
 Writing a program for a microcomputer using the microcomputer itself comes with the inherent risk that a bug in your program will interfere with your programming environment. EasyAsm preserves your source code in memory while you are testing your program, but this cannot be guaranteed to work if the program does something unexpected.
 
 By design, EasyAsm does *not* force you to save your work to disk before testing your program. Please remember to do this yourself.
-
-**Remember to enable Edit Mode.**
-
-EasyAsm uses the MEGA65's built-in Edit Mode for editing source files. It switches to Edit mode when you first install it. When Edit mode is enabled, the "READY" prompt becomes the "OK" prompt. If you return to BASIC mode ("READY") while developing your program, be sure to remember to switch back to Edit mode before typing lines of assembly source code. Type `EDIT ON` to enable it. Loading, typing, or saving assembly language while in BASIC mode will produce incorrect results.
 
 ## Quick reference
 
@@ -836,10 +836,15 @@ Here is a quick summary of features available in EasyAsm that are not available 
 
 ## Roadmap
 
-Some things I hope to add someday, if there's enough interest in this project:
+Features I intend to add for version 1.0 of EasyAsm:
 
+* `!binary`
+* `!source`
 * List symbol definitions
 * List assembled bytes alongside source code
+
+Some things I hope to add someday, if there's enough interest in this project:
+
 * Output "plain" files (without the PRG starting address)
 * Runnable with multiple segments or non-default starting address
 * Improved Freezer support (optionally host EasyAsm in chip RAM)
