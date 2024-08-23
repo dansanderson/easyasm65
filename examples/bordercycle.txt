@@ -1,6 +1,6 @@
 ; change the border color continuously
 
-!to "border", runnable
+!to "bordercycle", runnable
 
 border = $d020
 
