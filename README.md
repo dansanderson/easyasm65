@@ -512,7 +512,8 @@ To type the power operator, type the up-arrow character (next to the Restore key
 > * Mega + back-arrow: backtick
 > * Mega + period: vertical bar (`|`)
 > * Mega + comma: tilde (`~`)
-> * Mega + forward-slash (or £): backslash (`\\`)
+> * Mega + forward-slash (or £): backslash (`\`)
+>
 > Remember that you must be in lowercase mode with this font setting to see the ASCII characters.
 
 ### Parentheses and brackets
