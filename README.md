@@ -22,7 +22,7 @@ EasyAsm is released under the GNU Public License v3. See [LICENSE](LICENSE).
 
 ## Project status
 
-This is EasyAsm version 0.1.
+This is EasyAsm version 0.1. It requires a recent ROM beta version, 920401 or newer, to assemble to disk.
 
 **All 0.x versions are public beta test releases. Syntax and features may change before the 1.0 release.** Please [file issues](https://github.com/dansanderson/easyasm65/issues) to report bugs, request features, or provide feedback. Thank you for trying EasyAsm!
 
