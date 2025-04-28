@@ -156,16 +156,20 @@ def petcat_to_prg(data, spec, fdata):
     petcat_pth = shutil.which('petcat')
     if not petcat_pth:
         fail('Could not find petcat, required to convert .bas files')
-    fh, baspath = tempfile.mkstemp(suffix='.bas')
-    with open(baspath, 'wb') as outfh:
-        outfh.write(data)
-    fh, prgpath = tempfile.mkstemp(suffix='.prg')
+    lock_in, baspath = tempfile.mkstemp(suffix='.bas')
+    with open(baspath, 'wb') as fh:
+        fh.write(data)
+    os.close(lock_in)    
+    lock_out, prgpath = tempfile.mkstemp(suffix='.prg')
     subprocess.run(
         [petcat_pth, '-w65', '-o', prgpath, '--', baspath], check=True)
     with open(prgpath, 'rb') as fh:
         prgdata = fh.read()
-    os.remove(baspath)
-    os.remove(prgpath)
+    os.close(lock_out)    
+    if os.path.exists(baspath):
+        os.remove(baspath)
+    if os.path.exists(prgpath):    
+        os.remove(prgpath)
     return prgdata
 
 
